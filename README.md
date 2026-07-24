@@ -29,9 +29,11 @@ PRoot and an interactive terminal are now bundled for the supported Android
 ABIs. The terminal session belongs to the foreground service rather than the
 Activity, so navigating away and returning reattaches to the same PTY and
 transcript. The pinned Termux:X11 server and renderer now build inside the APK,
-but are not exposed as a runnable desktop yet. The next core boundary is the
-supervised X11 process, private display socket, and attachable Android surface.
-No device-specific GPU driver is bundled.
+and the Desktop page attaches an Android surface to its supervised X11 process
+and private display socket. Its compact controls expose the keyboard and
+persistent output/input settings without tying the X server lifetime to the
+page. The generic presenter currently uses Android GLES; no device-specific GPU
+driver is bundled.
 
 ## Development releases
 

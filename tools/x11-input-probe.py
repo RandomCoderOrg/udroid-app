@@ -54,7 +54,9 @@ def read_exact(connection: socket.socket, size: int) -> bytes:
     return bytes(data)
 
 
-def connect_x11(socket_path: str) -> tuple[socket.socket, int, int, int]:
+def connect_x11(
+    socket_path: str,
+) -> tuple[socket.socket, int, int, int, int, int]:
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     connection.connect(socket_path)
     connection.sendall(struct.pack("<BBHHHHH", ord("l"), 0, 11, 0, 0, 0, 0))
@@ -78,8 +80,18 @@ def connect_x11(socket_path: str) -> tuple[socket.socket, int, int, int]:
     roots_offset = 32 + ((vendor_length + 3) & ~3) + format_count * 8
     root_window = struct.unpack_from("<I", payload, roots_offset)[0]
     background_pixel = struct.unpack_from("<I", payload, roots_offset + 8)[0]
+    screen_width, screen_height = struct.unpack_from(
+        "<HH", payload, roots_offset + 20
+    )
     window_id = resource_base | (1 & resource_mask)
-    return connection, root_window, background_pixel, window_id
+    return (
+        connection,
+        root_window,
+        background_pixel,
+        window_id,
+        screen_width,
+        screen_height,
+    )
 
 
 def create_window(
@@ -169,10 +181,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    connection, root_window, background_pixel, window_id = connect_x11(args.socket)
+    (
+        connection,
+        root_window,
+        background_pixel,
+        window_id,
+        screen_width,
+        screen_height,
+    ) = connect_x11(args.socket)
     create_window(connection, root_window, background_pixel, window_id, args.geometry)
     print(
-        f"ready window=0x{window_id:08x} geometry={args.geometry}",
+        f"ready screen={screen_width}x{screen_height} "
+        f"window=0x{window_id:08x} geometry={args.geometry}",
         flush=True,
     )
     try:

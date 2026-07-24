@@ -103,6 +103,33 @@ The Android side follows four rules:
 The cursor should eventually use an independent Android surface. That keeps
 pointer movement from damaging or presenting the complete desktop.
 
+## Desktop controls and settings
+
+The display status header is not part of the X11 surface. It can be collapsed
+to a 32 dp strip and expanded again without detaching the renderer, resizing
+the guest more than once, or restarting the supervised X server. Users may
+also persist a collapsed-by-default preference.
+
+The settings surface follows Termux:X11's output, pointer, keyboard, and
+session grouping, but only exposes controls backed by the embedded uDroid
+renderer:
+
+- native, scaled, or fixed 720p/900p/1080p guest geometry;
+- preserved aspect ratio or stretch-to-fill presentation;
+- nearest-neighbor or bilinear display filtering;
+- absolute direct touch or relative trackpad input with adjustable speed;
+- hardware-scancode preference and keep-screen-on behavior.
+
+Changes are persisted in app-private preferences and applied to the attached
+renderer immediately. Geometry changes update both the GLES viewport and X11
+RandR screen size. Direct-touch coordinates are transformed through the
+letterboxed viewport, while trackpad deltas remain relative.
+
+Clipboard synchronization, advanced multi-finger gestures, stylus pressure,
+and custom resolution entry remain hidden until their embedded backends exist.
+The supported settings are therefore a smaller contract than the standalone
+Termux:X11 application rather than inert compatibility switches.
+
 ## Deterministic gates
 
 Desktop environments are not the first health test. Each gate records latency,
@@ -139,13 +166,16 @@ visible application presentation, motion, and surface-cycle checks:
 | Total request to protocol-ready | 825 ms |
 | Guest bridge | same socket bind-mounted at `/tmp/.X11-unix`, `DISPLAY=:0` |
 | Renderer transport | one Binder-delivered renderer FD per Desktop attach |
-| Android display target | 1080×2142 below the persistent uDroid header |
+| Android display target | 1080×2142 below expanded controls; near-full height with the 32 dp strip |
+| Live X11 geometry | raw probe observed 1280×720 in Fixed mode and 1080×2142 after returning to Native |
+| Display filtering | nearest/bilinear switched live without restarting either process |
 | Visible clients | `glxgears` and `xlogo` both reached the Android display |
 | Motion probe | 49,254 pixels changed, 11.84% of the sampled gear region in one second |
 | Presenter cadence | stabilized at 299–300 frames per five seconds, approximately 60 FPS |
 | Surface cycle | X11 PID `31974` survived detach and reattach; the running gears returned |
 | Absolute pointer | `xeyes` tracked taps from the top-left to bottom-right of the Android surface |
 | Tap and drag | raw X11 probe received balanced button 1 press/release and held-button motion |
+| Relative trackpad | raw probe received relative motion and a balanced tap click |
 | Keyboard | `codex` produced five matching X11 key press/release pairs |
 | Android IME | persistent header button opens Gboard; composing text is diffed before UTF-8 injection |
 | Stop ownership | uDroid removed both its PRoot guest and `:x11` process |
@@ -178,10 +208,12 @@ window and logs pointer coordinates, button state, focus, and keycodes. This
 avoids installing `xev`, starting a desktop, or relying on the malformed
 widgets produced when a minimal rootfs has no X font packages.
 
-The current direct-touch contract is intentionally simple:
+The current touch contract is intentionally simple:
 
 - one finger maps to an absolute pointer and button 1;
 - movement while held maps to an X11 drag;
+- trackpad mode maps finger deltas to relative pointer motion and a tap to
+  button 1;
 - physical mouse primary, secondary, tertiary, and wheel events are forwarded;
 - Android key events use upstream Termux:X11 conversion;
 - IME composing text is incrementally replaced instead of duplicated.

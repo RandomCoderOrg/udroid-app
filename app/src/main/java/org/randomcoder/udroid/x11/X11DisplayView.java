@@ -4,7 +4,9 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.PointF;
 import android.graphics.drawable.ColorDrawable;
+import android.opengl.GLES20;
 import android.os.ParcelFileDescriptor;
 import android.text.Editable;
 import android.text.InputType;
@@ -45,6 +47,16 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
     private boolean imeHasCommittedText;
     private CharSequence composingText;
     private int pressedMouseButton = BUTTON_UNDEFINED;
+    private float trackpadLastX;
+    private float trackpadLastY;
+    private float trackpadDistance;
+    private int viewportLeft;
+    private int viewportTop;
+    private int viewportWidth;
+    private int viewportHeight;
+    private int guestWidth;
+    private int guestHeight;
+    private X11Settings settings = new X11Settings();
 
     public X11DisplayView(Context context) {
         super(context);
@@ -187,11 +199,55 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
         return rendererAttached && connected();
     }
 
+    public void applySettings(X11Settings updatedSettings) {
+        if (updatedSettings == null) return;
+        boolean geometryChanged =
+                updatedSettings.getResolutionMode() != settings.getResolutionMode() ||
+                        updatedSettings.getDisplayScalePercent() !=
+                                settings.getDisplayScalePercent() ||
+                        updatedSettings.getExactWidth() != settings.getExactWidth() ||
+                        updatedSettings.getExactHeight() != settings.getExactHeight() ||
+                        updatedSettings.getStretchDisplay() != settings.getStretchDisplay();
+        boolean filterChanged =
+                updatedSettings.getDisplayFilter() != settings.getDisplayFilter();
+        settings = updatedSettings;
+        inputSender.preferScancodes = settings.getPreferScancodes();
+        setKeepScreenOn(settings.getKeepScreenOn());
+        if (rendererAttached && geometryChanged) {
+            publishGeometry(getWidth(), getHeight());
+        } else if (rendererAttached && filterChanged) {
+            setFiltering(
+                    settings.getDisplayFilter() == X11DisplayFilter.NEAREST
+                            ? GLES20.GL_NEAREST
+                            : GLES20.GL_LINEAR
+            );
+        }
+    }
+
     private void publishGeometry(int width, int height) {
         if (!rendererAttached || width <= 0 || height <= 0) return;
+        X11Viewport viewport = X11GeometryCalculator.calculate(width, height, settings);
+        viewportLeft = viewport.getLeft();
+        viewportTop = viewport.getTop();
+        viewportWidth = viewport.getWidth();
+        viewportHeight = viewport.getHeight();
+        guestWidth = viewport.getGuestWidth();
+        guestHeight = viewport.getGuestHeight();
         int refreshRate = getDisplay() == null ? 60 : Math.round(getDisplay().getRefreshRate());
-        setViewport(0, 0, width, height, width, height);
-        sendWindowChange(width, height, refreshRate, "builtin");
+        setViewport(
+                viewportLeft,
+                viewportTop,
+                viewportWidth,
+                viewportHeight,
+                guestWidth,
+                guestHeight
+        );
+        setFiltering(
+                settings.getDisplayFilter() == X11DisplayFilter.NEAREST
+                        ? GLES20.GL_NEAREST
+                        : GLES20.GL_LINEAR
+        );
+        sendWindowChange(guestWidth, guestHeight, refreshRate, "builtin");
     }
 
     @Override
@@ -215,24 +271,71 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
         }
 
         int action = event.getActionMasked();
-        float x = event.getX(event.getActionIndex());
-        float y = event.getY(event.getActionIndex());
+        if (settings.getTouchMode() == X11TouchMode.TRACKPAD) {
+            return handleTrackpadTouch(event);
+        }
+
+        PointF point =
+                mapToGuest(
+                        event.getX(event.getActionIndex()),
+                        event.getY(event.getActionIndex())
+                );
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                sendMouseEvent(x, y, BUTTON_UNDEFINED, false, false);
+                sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
                 sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
                 touchButtonDown = true;
                 return true;
             case MotionEvent.ACTION_MOVE:
-                sendMouseEvent(event.getX(0), event.getY(0), BUTTON_UNDEFINED, false, false);
+                PointF move = mapToGuest(event.getX(0), event.getY(0));
+                sendMouseEvent(move.x, move.y, BUTTON_UNDEFINED, false, false);
                 return true;
             case MotionEvent.ACTION_UP:
-                sendMouseEvent(x, y, BUTTON_UNDEFINED, false, false);
+                sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
                 releaseTouchButton();
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 releaseTouchButton();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private boolean handleTrackpadTouch(MotionEvent event) {
+        int action = event.getActionMasked();
+        float x = event.getX(event.getActionIndex());
+        float y = event.getY(event.getActionIndex());
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+                trackpadLastX = x;
+                trackpadLastY = y;
+                trackpadDistance = 0;
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                float deltaX = x - trackpadLastX;
+                float deltaY = y - trackpadLastY;
+                trackpadLastX = x;
+                trackpadLastY = y;
+                trackpadDistance += Math.abs(deltaX) + Math.abs(deltaY);
+                float speed = settings.getTrackpadSpeedPercent() / 100f;
+                sendMouseEvent(
+                        deltaX * speed,
+                        deltaY * speed,
+                        BUTTON_UNDEFINED,
+                        false,
+                        true
+                );
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (trackpadDistance < getResources().getDisplayMetrics().density * 12f) {
+                    sendMouseEvent(0, 0, BUTTON_LEFT, true, true);
+                    sendMouseEvent(0, 0, BUTTON_LEFT, false, true);
+                    performClick();
+                }
+                return true;
+            case MotionEvent.ACTION_CANCEL:
                 return true;
             default:
                 return true;
@@ -277,7 +380,8 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
     }
 
     private boolean handleMouseEvent(MotionEvent event) {
-        sendMouseEvent(event.getX(), event.getY(), BUTTON_UNDEFINED, false, false);
+        PointF point = mapToGuest(event.getX(), event.getY());
+        sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_SCROLL:
                 sendMouseWheelEvent(
@@ -304,6 +408,21 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
             default:
                 return true;
         }
+    }
+
+    private PointF mapToGuest(float x, float y) {
+        if (viewportWidth <= 0 || viewportHeight <= 0 ||
+                guestWidth <= 0 || guestHeight <= 0) {
+            return new PointF(x, y);
+        }
+        float mappedX =
+                (x - viewportLeft) * guestWidth / (float) viewportWidth;
+        float mappedY =
+                (y - viewportTop) * guestHeight / (float) viewportHeight;
+        return new PointF(
+                Math.max(0, Math.min(guestWidth, mappedX)),
+                Math.max(0, Math.min(guestHeight, mappedY))
+        );
     }
 
     private static int mapButton(MotionEvent event) {
@@ -400,6 +519,7 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
             int expectedWidth,
             int expectedHeight
     );
+    private static native void setFiltering(int filtering);
     private static native void connect(int fd);
     private static native boolean connected();
     private static native void sendWindowChange(

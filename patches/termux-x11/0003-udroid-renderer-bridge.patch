@@ -40,7 +40,7 @@
      globalThiz = (*guienv)->NewGlobalRef(env, thiz);
      connect_(NULL, NULL, -1);
  }
-@@ -411,6 +411,21 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
+@@ -411,6 +411,22 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
      jclass cls = (*env)->FindClass(env, "com/termux/x11/LorieView");
      (*env)->RegisterNatives(env, cls, methods, sizeof(methods)/sizeof(methods[0]));
  
@@ -48,6 +48,7 @@
 +            {"nativeInit", "()V", (void *)&nativeInit},
 +            {"surfaceChanged", "(Landroid/view/Surface;)V", (void *)&rendererSetWindow},
 +            {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
++            {"setFiltering", "(I)V", (void *)&rendererSetFiltering},
 +            {"connect", "(I)V", (void *)&connect_},
 +            {"connected", "()Z", (void *)&connected},
 +            {"sendWindowChange", "(IIILjava/lang/String;)V", (void *)&sendWindowChange},
