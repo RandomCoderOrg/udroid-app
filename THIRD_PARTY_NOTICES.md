@@ -39,3 +39,19 @@ Only the reusable terminal emulator and view modules are included. Other
 Termux application code is not part of this checkpoint. The source is built
 inside this Gradle project so the APK and its native PTY bridge are
 reproducible from the checked-in tree.
+
+## Termux:X11
+
+- Project: <https://github.com/termux/termux-x11>
+- Version: `0cb0203c283bfafbad380b90444296aa42af058d`
+- Imported module: `lorie`, including its pinned native Xorg dependencies
+- License: GNU General Public License version 3
+- Upstream license record: `third_party/termux-x11/LICENSE`
+- Integration design: `docs/X11_RUNTIME_ARCHITECTURE.md`
+- Local patch set: `patches/termux-x11`
+
+The Termux:X11 module is linked into the uDroid APK. Consequently, distributed
+APKs containing this module are GPLv3 combined works. uDroid-authored files
+retain their existing MIT grants and may also be distributed under GPLv3 as
+part of the combined application. Complete corresponding source includes this
+repository and all recursively pinned Termux:X11 submodules.

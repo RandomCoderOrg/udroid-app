@@ -28,8 +28,10 @@ check and is atomically activated.
 PRoot and an interactive terminal are now bundled for the supported Android
 ABIs. The terminal session belongs to the foreground service rather than the
 Activity, so navigating away and returning reattaches to the same PTY and
-transcript. No X server or GPU driver is bundled yet. The next core boundary is
-multi-session lifecycle and a desktop-session contract.
+transcript. The pinned Termux:X11 server and renderer now build inside the APK,
+but are not exposed as a runnable desktop yet. The next core boundary is the
+supervised X11 process, private display socket, and attachable Android surface.
+No device-specific GPU driver is bundled.
 
 ## Development releases
 
@@ -76,11 +78,8 @@ The uDroid-owned Android shell is MIT-licensed, matching
 `fs-manager-udroid`. Packaged PRoot is GPL-2.0 and statically links talloc,
 whose library is LGPL-3.0-or-later. The vendored Termux terminal emulator and
 view are the Apache-2.0 components identified by Termux's upstream license
-exception. Exact source versions, checksums, local changes, and build commands
-are recorded in `tools/` and `third_party/`; binary releases must also provide
-the applicable corresponding source and license texts. See
-[Third-party notices](THIRD_PARTY_NOTICES.md).
-
-Future imports retain their own licenses. Importing other GPLv3 Termux or
-Termux:X11 code would change the combined work's distribution obligations and
-must be reviewed separately.
+exception. The embedded Termux:X11 module is GPLv3, so APKs containing it are
+distributed as GPLv3 combined works. Exact source versions, checksums, local
+changes, and build commands are recorded in `tools/` and `third_party/`;
+binary releases must also provide the applicable corresponding source and
+license texts. See [Third-party notices](THIRD_PARTY_NOTICES.md).

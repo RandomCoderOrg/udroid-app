@@ -72,6 +72,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(project(":terminal-view"))
+    implementation(project(":x11-lorie")) {
+        // Upstream currently declares Lifecycle 2.11 but does not reference it.
+        // That release requires compileSdk 37/AGP 9.1; keep the API 36 app free
+        // of the unused transitive dependency.
+        exclude(group = "androidx.lifecycle", module = "lifecycle-viewmodel-ktx")
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
 
     debugImplementation("androidx.compose.ui:ui-tooling:1.7.8")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.7.8")

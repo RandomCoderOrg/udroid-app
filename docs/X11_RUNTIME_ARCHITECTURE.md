@@ -22,6 +22,19 @@ Embedding GPLv3 Termux:X11 code changes the distribution obligations of the
 combined APK. The source import checkpoint must update the root license and
 third-party notices before a binary containing that code is published.
 
+## Source integration status
+
+The pinned `:lorie` library and its recursive native dependencies now build
+inside uDroid with NDK `28.2.13676358` for `arm64-v8a`, `armeabi-v7a`, and
+`x86_64`. The merged application manifest removes Termux:X11's standalone
+Activity, preferences Activity, receiver, and key-interceptor service, leaving
+uDroid as the sole application and lifecycle owner.
+
+The source import does not yet make X11 runnable. The next checkpoint adds the
+supervised server process and proves `server-start` and `socket-ready` without
+using the old shell loader, hidden Android APIs, broadcasts, or a separate
+Termux:X11 installation.
+
 ## Runtime ownership
 
 ```mermaid
