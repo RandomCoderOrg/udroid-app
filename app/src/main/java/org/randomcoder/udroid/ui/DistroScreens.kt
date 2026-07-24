@@ -270,7 +270,9 @@ fun InstallExperiencePage(
     showTerminal: Boolean,
     onToggleTerminal: () -> Unit,
     onBack: () -> Unit,
-    onRunAgain: () -> Unit,
+    onStartDownload: () -> Unit,
+    onPauseDownload: () -> Unit,
+    onRetryDownload: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -280,18 +282,22 @@ fun InstallExperiencePage(
                     .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "‹  Linux images",
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onBack)
-                            .padding(vertical = 8.dp, horizontal = 2.dp),
-                    color = UdroidForest,
-                    style = MaterialTheme.typography.labelLarge,
-                )
+            if (!progress.cancellable) {
+                item {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "‹  Linux images",
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onBack)
+                                .padding(vertical = 8.dp, horizontal = 2.dp),
+                        color = UdroidForest,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            } else {
+                item { Spacer(Modifier.height(10.dp)) }
             }
 
             item {
@@ -333,6 +339,68 @@ fun InstallExperiencePage(
                             Text(
                                 "  No rootfs will be downloaded",
                                 color = UdroidInk,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                when {
+                    progress.stage == InstallStage.READY -> {
+                        Button(
+                            onClick = onStartDownload,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Download image")
+                        }
+                    }
+
+                    progress.cancellable -> {
+                        Text(
+                            "Pause download",
+                            modifier =
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onPauseDownload)
+                                    .padding(vertical = 9.dp, horizontal = 2.dp),
+                            color = UdroidForest,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+
+                    progress.stage == InstallStage.PAUSED -> {
+                        Button(
+                            onClick = onRetryDownload,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Resume download")
+                        }
+                    }
+
+                    progress.stage == InstallStage.FAILED -> {
+                        Button(
+                            onClick = onRetryDownload,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Try download again")
+                        }
+                    }
+
+                    progress.stage == InstallStage.ARCHIVE_READY -> {
+                        Surface(
+                            color = UdroidSoftGreen,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text(
+                                "Verified archive ready for the extraction checkpoint",
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 12.dp,
+                                        vertical = 9.dp,
+                                    ),
+                                color = UdroidForest,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -437,24 +505,20 @@ fun InstallExperiencePage(
                 }
             }
 
-            if (progress.stage == InstallStage.COMPLETE) {
-                item {
-                    Text(
-                        "Run preview again",
-                        modifier =
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onRunAgain)
-                                .padding(vertical = 8.dp, horizontal = 2.dp),
-                        color = UdroidForest,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-
             item {
                 Text(
-                    "You can leave this screen. Installation will continue in the background.",
+                    when {
+                        progress.stage == InstallStage.READY ->
+                            "Nothing downloads until you press Download image."
+                        progress.cancellable ->
+                            "You can leave this screen. The foreground service keeps downloading."
+                        progress.stage == InstallStage.PAUSED ->
+                            "The partial archive remains on your phone for the next resume."
+                        progress.stage == InstallStage.ARCHIVE_READY ->
+                            "The archive is cached safely; rootfs extraction is the next core checkpoint."
+                        else ->
+                            "Open the terminal for exact operation details."
+                    },
                     color = UdroidMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -548,14 +612,23 @@ private val InstallStage.stepLabel: String
     get() {
         val index =
             when (this) {
+                InstallStage.READY -> 0
                 InstallStage.CHECKING -> 1
                 InstallStage.DOWNLOADING -> 2
                 InstallStage.VERIFYING -> 3
+                InstallStage.ARCHIVE_READY -> 3
                 InstallStage.EXTRACTING -> 4
                 InstallStage.CONFIGURING, InstallStage.COMPLETE -> 5
                 InstallStage.FAILED -> 0
+                InstallStage.PAUSED -> 0
             }
-        return if (index == 0) "INSTALL PAUSED" else "STEP $index OF 5"
+        return when (this) {
+            InstallStage.READY -> "DOWNLOAD PLAN"
+            InstallStage.ARCHIVE_READY -> "STEP 3 OF 5"
+            InstallStage.PAUSED -> "DOWNLOAD PAUSED"
+            InstallStage.FAILED -> "DOWNLOAD STOPPED"
+            else -> "STEP $index OF 5"
+        }
     }
 
 @Composable
@@ -571,7 +644,16 @@ private fun InstallStageRail(progress: InstallProgress) {
     val currentIndex =
         when (progress.stage) {
             InstallStage.COMPLETE -> stages.lastIndex
-            InstallStage.FAILED -> -1
+            InstallStage.ARCHIVE_READY -> stages.indexOf(InstallStage.VERIFYING)
+            InstallStage.READY, InstallStage.FAILED -> -1
+            InstallStage.PAUSED ->
+                when {
+                    progress.overallProgress >= InstallStage.VERIFYING.startFraction ->
+                        stages.indexOf(InstallStage.VERIFYING)
+                    progress.overallProgress >= InstallStage.DOWNLOADING.startFraction ->
+                        stages.indexOf(InstallStage.DOWNLOADING)
+                    else -> stages.indexOf(InstallStage.CHECKING)
+                }
             else -> stages.indexOf(progress.stage)
         }
 

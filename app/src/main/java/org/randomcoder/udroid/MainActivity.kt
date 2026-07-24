@@ -43,8 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -52,7 +50,8 @@ import org.randomcoder.udroid.catalog.DistroCatalogRepository
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
-import org.randomcoder.udroid.install.InstallationUxPreview
+import org.randomcoder.udroid.install.InstallationSelection
+import org.randomcoder.udroid.install.InstallerService
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
@@ -82,7 +81,6 @@ class MainActivity : ComponentActivity() {
     private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
     private var installProgress by mutableStateOf<InstallProgress?>(null)
     private var showInstallTerminal by mutableStateOf(false)
-    private var installPreviewJob: Job? = null
 
     private val stateReceiver =
         object : BroadcastReceiver() {
@@ -111,18 +109,20 @@ class MainActivity : ComponentActivity() {
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
-                    onPreviewInstall = { startInstallationPreview(it) },
+                    onPreviewInstall = { selectDistro(it) },
+                    onStartDownload = { startSelectedDownload() },
+                    onPauseDownload = { InstallerService.pause(this) },
                     onToggleInstallTerminal = {
                         showInstallTerminal = !showInstallTerminal
                     },
                     onCloseInstall = {
-                        installPreviewJob?.cancel()
-                        installProgress = null
-                        showInstallTerminal = false
+                        if (installProgress?.cancellable != true) {
+                            app.installState.clear()
+                            installProgress = null
+                            showInstallTerminal = false
+                        }
                     },
-                    onRestartInstallPreview = {
-                        installProgress?.distro?.let { startInstallationPreview(it) }
-                    },
+                    onRetryDownload = { startSelectedDownload() },
                 )
             }
         }
@@ -135,7 +135,10 @@ class MainActivity : ComponentActivity() {
         ContextCompat.registerReceiver(
             this,
             stateReceiver,
-            IntentFilter(RuntimeSupervisorService.ACTION_STATE_CHANGED),
+            IntentFilter().apply {
+                addAction(RuntimeSupervisorService.ACTION_STATE_CHANGED)
+                addAction(InstallerService.ACTION_STATE_CHANGED)
+            },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         refreshFromDisk()
@@ -155,6 +158,7 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshFromDisk() {
         snapshot = app.runtimeState.current()
+        installProgress = app.installState.current()
         journalLines = app.journal.tail()
     }
 
@@ -177,28 +181,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startInstallationPreview(distro: DistroVariant) {
-        installPreviewJob?.cancel()
+    private fun selectDistro(distro: DistroVariant) {
         selectedPage = Page.DISTROS
         showInstallTerminal = false
-        installProgress = InstallationUxPreview.initial(distro)
-        installPreviewJob =
-            lifecycleScope.launch {
-                val terminalLines = installProgress?.terminalLines.orEmpty().toMutableList()
-                InstallationUxPreview.steps(distro).forEach { step ->
-                    delay(step.delayMs)
-                    terminalLines += step.terminalLine
-                    installProgress =
-                        InstallProgress(
-                            distro = distro,
-                            stage = step.stage,
-                            stageProgress = step.stageProgress,
-                            currentDetail = step.detail,
-                            terminalLines = terminalLines.toList(),
-                            previewOnly = true,
-                        )
-                }
-            }
+        installProgress = app.installState.save(InstallationSelection.initial(distro))
+    }
+
+    private fun startSelectedDownload() {
+        installProgress?.distro?.let { InstallerService.start(this, it) }
     }
 }
 
@@ -224,9 +214,11 @@ private fun UdroidApp(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onStartDownload: () -> Unit,
+    onPauseDownload: () -> Unit,
     onToggleInstallTerminal: () -> Unit,
     onCloseInstall: () -> Unit,
-    onRestartInstallPreview: () -> Unit,
+    onRetryDownload: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -292,7 +284,9 @@ private fun UdroidApp(
                                 showTerminal = showInstallTerminal,
                                 onToggleTerminal = onToggleInstallTerminal,
                                 onBack = onCloseInstall,
-                                onRunAgain = onRestartInstallPreview,
+                                onStartDownload = onStartDownload,
+                                onPauseDownload = onPauseDownload,
+                                onRetryDownload = onRetryDownload,
                             )
                         } ?: DistroCataloguePage(
                             state = catalogueState,

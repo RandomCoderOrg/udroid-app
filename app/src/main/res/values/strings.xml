@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">uDroid</string>
+    <string name="installer_description">Downloads and verifies Linux images.</string>
     <string name="supervisor_description">Keeps the Linux runtime and desktop process graph alive.</string>
 </resources>

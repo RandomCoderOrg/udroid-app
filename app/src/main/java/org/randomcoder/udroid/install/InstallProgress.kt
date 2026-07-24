@@ -8,6 +8,12 @@ enum class InstallStage(
     val startFraction: Float,
     val weight: Float,
 ) {
+    READY(
+        normalTitle = "Ready to download",
+        normalSubtitle = "The image will download only when you start it",
+        startFraction = 0.00f,
+        weight = 0.00f,
+    ),
     CHECKING(
         normalTitle = "Checking your device",
         normalSubtitle = "Making sure this Linux image fits and can run here",
@@ -25,6 +31,12 @@ enum class InstallStage(
         normalSubtitle = "Making sure every byte arrived unchanged",
         startFraction = 0.45f,
         weight = 0.10f,
+    ),
+    ARCHIVE_READY(
+        normalTitle = "Linux image downloaded",
+        normalSubtitle = "The archive passed its integrity check",
+        startFraction = 0.55f,
+        weight = 0.00f,
     ),
     EXTRACTING(
         normalTitle = "Building your Linux system",
@@ -50,6 +62,12 @@ enum class InstallStage(
         startFraction = 0.00f,
         weight = 0.00f,
     ),
+    PAUSED(
+        normalTitle = "Download paused",
+        normalSubtitle = "Your partial download is saved and can resume",
+        startFraction = 0.00f,
+        weight = 0.00f,
+    ),
 }
 
 data class InstallProgress(
@@ -59,17 +77,42 @@ data class InstallProgress(
     val currentDetail: String,
     val terminalLines: List<String>,
     val previewOnly: Boolean,
+    val operationId: String? = null,
+    val completedBytes: Long = 0L,
+    val totalBytes: Long = -1L,
+    val bytesPerSecond: Long = 0L,
+    val cancellable: Boolean = false,
 ) {
     val overallProgress: Float =
         when (stage) {
+            InstallStage.READY -> 0f
+            InstallStage.ARCHIVE_READY -> 0.55f
             InstallStage.COMPLETE -> 1f
             InstallStage.FAILED -> 0f
+            InstallStage.PAUSED -> stageProgress.coerceIn(0f, 1f)
             else ->
                 (stage.startFraction + (stage.weight * stageProgress.coerceIn(0f, 1f)))
                     .coerceIn(0f, 1f)
         }
 
     val percentage: Int = (overallProgress * 100).toInt().coerceIn(0, 100)
+}
+
+object InstallationSelection {
+    fun initial(distro: DistroVariant): InstallProgress =
+        InstallProgress(
+            distro = distro,
+            stage = InstallStage.READY,
+            stageProgress = 0f,
+            currentDetail = "SHA-256 metadata is available for ${distro.architecture}",
+            terminalLines =
+                listOf(
+                    "\$ udroid pull --plan ${distro.id}",
+                    "[ready] ${distro.downloadUrl.substringAfterLast('/')}",
+                    "[ready] sha256 ${distro.sha256.take(16)}…",
+                ),
+            previewOnly = false,
+        )
 }
 
 object InstallationUxPreview {

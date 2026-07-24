@@ -13,8 +13,9 @@ The Linux page:
 - hides the full compatible-image list behind **Show all images**;
 - falls back to a cached catalogue and then a built-in Jammy recovery entry.
 
-Selecting an image starts a clearly labelled UX preview. No rootfs archive is
-downloaded in this checkpoint.
+Selecting an image originally started a clearly labelled UX preview. Checkpoint
+3 replaces that application path with a persisted review screen and an explicit
+real-download action; the deterministic preview remains only as a UI-model test.
 
 ## Shared operation contract
 
@@ -77,14 +78,10 @@ Android ABIs map to catalogue architectures as follows:
 - The debug APK builds for all packaged ABIs.
 - The live catalogue and installation drawer are checked on the Pixel 6a.
 
-## Next checkpoint
+## Subsequent checkpoints
 
-Replace the deterministic preview with a foreground installer service that:
-
-1. preflights storage against content length plus extraction headroom;
-2. downloads to a staging file with HTTP range resume;
-3. streams byte progress and transfer speed into the shared event model;
-4. verifies the catalogue SHA-256;
-5. extracts into a staging rootfs with cancellation and recovery markers;
-6. atomically activates the completed distro;
-7. survives Activity recreation and exposes the same terminal drawer.
+Checkpoint 3 now owns storage preflight, resumable staging downloads, measured
+byte progress, SHA-256 verification, pause/recovery, and verified cache
+promotion. The next boundary starts at extraction: unpack into a staging
+rootfs, apply Android/PRoot fixes, validate a first command, and atomically
+activate the completed distro.

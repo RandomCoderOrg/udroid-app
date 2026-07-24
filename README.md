@@ -20,11 +20,14 @@ not a uDroid dependency or compatibility requirement.
 - Checkpoint 2.1: compact application shell and responsive visual foundation,
   with bottom navigation, a restrained type scale, flatter working surfaces,
   and an installation stage rail tested at enlarged Android font scale.
+- Checkpoint 3: foreground Linux-image service with explicit confirmation,
+  validated HTTP Range resume, throttled persisted progress, pause/resume,
+  streamed SHA-256 verification, and atomic cache promotion.
 
-Checkpoint 2 currently animates an explicit UX preview. It fetches only the
-small catalogue; it does not download or extract a rootfs yet. That boundary
-lets us validate the interaction contract before connecting it to a
-long-running, resumable installer service.
+Selecting an image does not start a download. The review screen persists across
+Activity and process recreation, and the archive transfer begins only after
+**Download image** is pressed. Checkpoint 3 stops after the compressed archive
+is verified; extraction and rootfs activation are the next core boundary.
 
 No rootfs, X server, interactive PTY, or GPU driver is bundled yet. The native
 child remains deliberately small: it proves process ownership and recovery
@@ -33,6 +36,8 @@ before the same supervisor is allowed to own PRoot and a graphical session.
 See [Checkpoint 2: distro and installation experience](docs/CHECKPOINT_2_INSTALL_EXPERIENCE.md).
 The visual rules are maintained in
 [Checkpoint 2.1: compact UI foundation](docs/CHECKPOINT_2_1_UI_FOUNDATION.md).
+The transfer and integrity contract is documented in
+[Checkpoint 3: resumable image core](docs/CHECKPOINT_3_DOWNLOAD_CORE.md).
 
 ## Build
 
