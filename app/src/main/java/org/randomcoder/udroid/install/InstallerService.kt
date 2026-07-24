@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.install
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -139,6 +141,15 @@ class InstallerService : Service() {
         distro: DistroVariant,
         operationId: String,
     ) {
+        val rootfsDirectory = File(filesDir, "rootfs")
+        val installedRootfs = File(rootfsDirectory, distro.internalName)
+        if (File(installedRootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
+            publishCompleted(distro, operationId, installedRootfs, reused = true)
+            activeTask.set(null)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         val cacheDirectory = File(filesDir, "artifacts").apply { mkdirs() }
         val suffix = artifactSuffix(distro.downloadUrl)
         val finalFile = File(cacheDirectory, "${distro.internalName}$suffix")
@@ -159,26 +170,26 @@ class InstallerService : Service() {
                     onVerifyProgress = progressPublisher::verify,
                 )
             val previous = app.installState.current()
-            val completed =
+            publish(
                 InstallProgress(
                     distro = distro,
                     stage = InstallStage.ARCHIVE_READY,
                     stageProgress = 1f,
-                    currentDetail = "${formatBytes(result.byteCount)} verified in the download cache",
+                    currentDetail = "${formatBytes(result.byteCount)} verified; preparing extraction",
                     terminalLines =
                         previous?.terminalLines.orEmpty() +
                             if (result.reusedVerifiedFile) {
-                                "[complete] reused verified ${result.file.name}"
+                                "[ok] reused verified ${result.file.name}"
                             } else {
-                                "[complete] sha256 verified · ${result.file.name}"
+                                "[ok] sha256 verified · ${result.file.name}"
                             },
                     previewOnly = false,
                     operationId = operationId,
                     completedBytes = result.byteCount,
                     totalBytes = result.byteCount,
-                    cancellable = false,
-                )
-            publish(completed)
+                    cancellable = true,
+                ),
+            )
             app.journal.append(
                 component = "installer",
                 severity = "info",
@@ -193,7 +204,7 @@ class InstallerService : Service() {
                         "reused" to result.reusedVerifiedFile,
                     ),
             )
-            updateNotification("Linux image verified", completed.percentage)
+            installRootfs(distro, operationId, result.file, rootfsDirectory, progressPublisher)
         } catch (error: Throwable) {
             val previous = app.installState.current()
             val interrupted =
@@ -206,11 +217,14 @@ class InstallerService : Service() {
                         distro = distro,
                         stage = InstallStage.PAUSED,
                         stageProgress = previous?.overallProgress ?: 0f,
-                        currentDetail =
-                            "${formatBytes(previous?.completedBytes ?: 0L)} saved for resume",
+                        currentDetail = pauseDetail(previous),
                         terminalLines =
                             previous?.terminalLines.orEmpty() +
-                                "[paused] partial archive retained",
+                                if (previous?.stage == InstallStage.EXTRACTING) {
+                                    "[paused] incomplete rootfs discarded · verified archive retained"
+                                } else {
+                                    "[paused] partial archive retained"
+                                },
                         previewOnly = false,
                         operationId = operationId,
                         completedBytes = previous?.completedBytes ?: 0L,
@@ -247,7 +261,7 @@ class InstallerService : Service() {
                     ),
             )
             updateNotification(
-                if (interrupted) "Download paused" else "Download needs attention",
+                if (interrupted) "Installation paused" else "Installation needs attention",
                 next.percentage,
             )
         } finally {
@@ -256,6 +270,119 @@ class InstallerService : Service() {
             stopSelf()
         }
     }
+
+    private fun installRootfs(
+        distro: DistroVariant,
+        operationId: String,
+        archive: File,
+        rootfsDirectory: File,
+        progressPublisher: ProgressPublisher,
+    ) {
+        RootfsStoragePreflight.requireSpace(archive, rootfsDirectory)
+        progressPublisher.configure(
+            fraction = 0.05f,
+            detail = "Preparing the packaged PRoot runtime",
+            terminalLine = "[configure] storage preflight passed",
+        )
+        val prootRuntime = ProotRuntimeInstaller.install(this)
+        val pipeline =
+            RootfsInstallationPipeline(
+                extractor =
+                    ProotTarExtractor(
+                        context = this,
+                        runtime = prootRuntime,
+                        onDiagnostic = { line ->
+                            app.journal.append(
+                                component = "installer",
+                                severity = "debug",
+                                event = "proot_extract",
+                                message = line,
+                                bootId = operationId,
+                            )
+                        },
+                    ),
+                configurator = AndroidRootfsConfigurator(),
+                healthCheck = ProotRootfsHealthCheck(this, prootRuntime),
+            )
+        val result =
+            pipeline.execute(
+                request =
+                    RootfsInstallRequest(
+                        archive = archive,
+                        rootfsDirectory = rootfsDirectory,
+                        installationName = distro.internalName,
+                        operationId = operationId,
+                    ),
+                onExtractionProgress = progressPublisher::extract,
+                onConfiguring = { detail ->
+                    val fraction =
+                        if (detail.contains("health", ignoreCase = true)) 0.80f else 0.35f
+                    progressPublisher.configure(
+                        fraction = fraction,
+                        detail = detail,
+                        terminalLine =
+                            if (fraction > 0.5f) {
+                                "[probe] proot /usr/bin/env"
+                            } else {
+                                "[configure] resolver, profile, proc and Android groups"
+                            },
+                    )
+                },
+            )
+        publishCompleted(distro, operationId, result.rootfs, result.reusedInstallation)
+    }
+
+    private fun publishCompleted(
+        distro: DistroVariant,
+        operationId: String,
+        rootfs: File,
+        reused: Boolean,
+    ) {
+        val previous = app.installState.current()
+        val completed =
+            InstallProgress(
+                distro = distro,
+                stage = InstallStage.COMPLETE,
+                stageProgress = 1f,
+                currentDetail = "Installed at ${rootfs.name}",
+                terminalLines =
+                    previous?.terminalLines.orEmpty() +
+                        if (reused) {
+                            "[complete] reused healthy ${rootfs.name}"
+                        } else {
+                            "[complete] health check passed · atomically activated ${rootfs.name}"
+                        },
+                previewOnly = false,
+                operationId = operationId,
+                completedBytes = previous?.totalBytes ?: 0L,
+                totalBytes = previous?.totalBytes ?: -1L,
+                cancellable = false,
+            )
+        publish(completed)
+        app.journal.append(
+            component = "installer",
+            severity = "info",
+            event = "rootfs_ready",
+            message = "Rootfs installation is ready",
+            bootId = operationId,
+            fields =
+                mapOf(
+                    "distro" to distro.id,
+                    "path" to rootfs.absolutePath,
+                    "reused" to reused,
+                ),
+        )
+        updateNotification("Linux system is ready", 100)
+    }
+
+    private fun pauseDetail(previous: InstallProgress?): String =
+        if (previous?.stage == InstallStage.EXTRACTING ||
+            previous?.stage == InstallStage.CONFIGURING
+        ) {
+            "Verified archive saved; incomplete setup can restart"
+        } else {
+            "${formatBytes(previous?.completedBytes ?: 0L)} saved for resume"
+        }
 
     private fun pauseArtifactOperation() {
         val current = app.installState.current()
@@ -295,7 +422,7 @@ class InstallerService : Service() {
                     "uDroid installation",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = "Linux image download and verification"
+                    description = "Linux image download, verification, and installation"
                 },
             )
     }
@@ -341,8 +468,14 @@ class InstallerService : Service() {
         text: String,
         progress: Int,
     ) {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, notification(text, progress))
+        if (
+            android.os.Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, notification(text, progress))
+        }
     }
 
     private inner class ProgressPublisher(
@@ -353,6 +486,7 @@ class InstallerService : Service() {
         private var lastSpeedAt = System.currentTimeMillis()
         private var lastSpeedBytes = app.installState.current()?.completedBytes ?: 0L
         private var lastTerminalBucket = -1
+        private var lastExtractionBucket = -1
         private var lastNotificationAt = 0L
 
         fun download(progress: ByteProgress) {
@@ -451,6 +585,74 @@ class InstallerService : Service() {
                 lastNotificationAt = now
                 updateNotification("Verifying Linux image · ${next.percentage}%", next.percentage)
             }
+        }
+
+        fun extract(
+            completedBytes: Long,
+            totalBytes: Long,
+        ) {
+            val now = System.currentTimeMillis()
+            val finished = totalBytes > 0L && completedBytes >= totalBytes
+            if (!finished && now - lastPublishedAt < PROGRESS_PERSIST_INTERVAL_MS) return
+            lastPublishedAt = now
+            val fraction =
+                if (totalBytes > 0L) completedBytes.toFloat() / totalBytes.toFloat() else 0f
+            val previous = app.installState.current()
+            val bucket = (fraction * 10f).roundToInt()
+            val line =
+                if (bucket > lastExtractionBucket) {
+                    lastExtractionBucket = bucket
+                    "[extract] ${formatBytes(completedBytes)} / ${formatBytes(totalBytes)} streamed"
+                } else {
+                    null
+                }
+            val next =
+                InstallProgress(
+                    distro = distro,
+                    stage = InstallStage.EXTRACTING,
+                    stageProgress = fraction.coerceIn(0f, 1f),
+                    currentDetail =
+                        "Unpacked ${formatBytes(completedBytes)} of ${formatBytes(totalBytes)}",
+                    terminalLines = previous?.terminalLines.orEmpty() + listOfNotNull(line),
+                    previewOnly = false,
+                    operationId = operationId,
+                    completedBytes = completedBytes,
+                    totalBytes = totalBytes,
+                    cancellable = true,
+                )
+            publish(next)
+            if (now - lastNotificationAt >= NOTIFICATION_INTERVAL_MS || finished) {
+                lastNotificationAt = now
+                updateNotification("Building Linux system · ${next.percentage}%", next.percentage)
+            }
+        }
+
+        fun configure(
+            fraction: Float,
+            detail: String,
+            terminalLine: String,
+        ) {
+            val previous = app.installState.current()
+            val next =
+                InstallProgress(
+                    distro = distro,
+                    stage = InstallStage.CONFIGURING,
+                    stageProgress = fraction,
+                    currentDetail = detail,
+                    terminalLines =
+                        if (previous?.terminalLines?.lastOrNull() == terminalLine) {
+                            previous.terminalLines
+                        } else {
+                            previous?.terminalLines.orEmpty() + terminalLine
+                        },
+                    previewOnly = false,
+                    operationId = operationId,
+                    completedBytes = previous?.completedBytes ?: 0L,
+                    totalBytes = previous?.totalBytes ?: -1L,
+                    cancellable = true,
+                )
+            publish(next)
+            updateNotification("Finishing Linux setup · ${next.percentage}%", next.percentage)
         }
     }
 

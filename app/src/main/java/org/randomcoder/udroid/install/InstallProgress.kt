@@ -52,7 +52,7 @@ enum class InstallStage(
     ),
     COMPLETE(
         normalTitle = "Your Linux system is ready",
-        normalSubtitle = "You can boot it now",
+        normalSubtitle = "Installation and first checks passed",
         startFraction = 1.00f,
         weight = 0.00f,
     ),
@@ -63,8 +63,8 @@ enum class InstallStage(
         weight = 0.00f,
     ),
     PAUSED(
-        normalTitle = "Download paused",
-        normalSubtitle = "Your partial download is saved and can resume",
+        normalTitle = "Installation paused",
+        normalSubtitle = "Verified or partial data is saved and can resume safely",
         startFraction = 0.00f,
         weight = 0.00f,
     ),

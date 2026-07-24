@@ -359,7 +359,7 @@ fun InstallExperiencePage(
 
                     progress.cancellable -> {
                         Text(
-                            "Pause download",
+                            "Pause installation",
                             modifier =
                                 Modifier
                                     .clip(RoundedCornerShape(8.dp))
@@ -375,7 +375,7 @@ fun InstallExperiencePage(
                             onClick = onRetryDownload,
                             shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text("Resume download")
+                            Text("Resume installation")
                         }
                     }
 
@@ -384,25 +384,16 @@ fun InstallExperiencePage(
                             onClick = onRetryDownload,
                             shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text("Try download again")
+                            Text("Try again")
                         }
                     }
 
                     progress.stage == InstallStage.ARCHIVE_READY -> {
-                        Surface(
-                            color = UdroidSoftGreen,
+                        Button(
+                            onClick = onRetryDownload,
                             shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text(
-                                "Verified archive ready for the extraction checkpoint",
-                                modifier =
-                                    Modifier.padding(
-                                        horizontal = 12.dp,
-                                        vertical = 9.dp,
-                                    ),
-                                color = UdroidForest,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+                            Text("Install verified image")
                         }
                     }
                 }
@@ -511,11 +502,13 @@ fun InstallExperiencePage(
                         progress.stage == InstallStage.READY ->
                             "Nothing downloads until you press Download image."
                         progress.cancellable ->
-                            "You can leave this screen. The foreground service keeps downloading."
+                            "You can leave this screen. The foreground service keeps installing."
                         progress.stage == InstallStage.PAUSED ->
-                            "The partial archive remains on your phone for the next resume."
+                            "Partial downloads or the verified archive remain available for retry."
                         progress.stage == InstallStage.ARCHIVE_READY ->
-                            "The archive is cached safely; rootfs extraction is the next core checkpoint."
+                            "The archive is cached safely while rootfs setup begins."
+                        progress.stage == InstallStage.COMPLETE ->
+                            "The verified archive was removed after atomic rootfs activation."
                         else ->
                             "Open the terminal for exact operation details."
                     },

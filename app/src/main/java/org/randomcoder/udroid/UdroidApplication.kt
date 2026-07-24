@@ -1,6 +1,7 @@
 package org.randomcoder.udroid
 
 import android.app.Application
+import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
@@ -21,6 +22,26 @@ class UdroidApplication : Application() {
         runtimeState = RuntimeStateStore(this)
         journal = EventJournal(this)
         installState = InstallStateStore(this)
+        installState.current()?.takeIf { it.cancellable }?.let { interrupted ->
+            installState.save(
+                interrupted.copy(
+                    stage = InstallStage.PAUSED,
+                    stageProgress = interrupted.overallProgress,
+                    currentDetail =
+                        if (interrupted.stage == InstallStage.EXTRACTING ||
+                            interrupted.stage == InstallStage.CONFIGURING
+                        ) {
+                            "Verified archive saved; incomplete setup can restart"
+                        } else {
+                            "Previous operation stopped; saved data can resume"
+                        },
+                    terminalLines =
+                        interrupted.terminalLines +
+                            "[recover] previous installer process stopped cleanly",
+                    cancellable = false,
+                ),
+            )
+        }
         val persisted = runtimeState.current()
         val recovered = RuntimeStateMachine.recoverAfterApplicationCreate(persisted)
         if (recovered != persisted) {

@@ -96,9 +96,10 @@ That avoids consuming gigabytes or disrupting the shared mobile connection
 while the transport contract is still being validated with deterministic
 fixtures.
 
-## Next checkpoint
+## Completed by Checkpoint 4
 
-Consume the verified archive through a cancellable extraction pipeline:
+Checkpoint 4 consumes the verified archive through a cancellable extraction
+pipeline:
 
 1. preflight compressed archive plus rootfs expansion headroom;
 2. extract into a unique staging directory with PRoot-compatible hard-link

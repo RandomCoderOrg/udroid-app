@@ -1,10 +1,13 @@
 package org.randomcoder.udroid
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.os.Build
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -105,7 +108,10 @@ class MainActivity : ComponentActivity() {
                     installProgress = installProgress,
                     showInstallTerminal = showInstallTerminal,
                     onPageSelected = { selectedPage = it },
-                    onStart = { RuntimeSupervisorService.start(this) },
+                    onStart = {
+                        ensureNotificationPermission()
+                        RuntimeSupervisorService.start(this)
+                    },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
@@ -188,7 +194,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startSelectedDownload() {
+        ensureNotificationPermission()
         installProgress?.distro?.let { InstallerService.start(this, it) }
+    }
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                NOTIFICATION_PERMISSION_REQUEST,
+            )
+        }
+    }
+
+    private companion object {
+        const val NOTIFICATION_PERMISSION_REQUEST = 101
     }
 }
 

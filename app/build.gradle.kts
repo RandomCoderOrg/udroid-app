@@ -18,10 +18,9 @@ android {
         applicationId = "org.randomcoder.udroid"
         minSdk = 26
 
-        // Android 10 blocks execve() from writable app-private storage for
-        // apps targeting API 29+. Every uDroid rootfs requires that capability.
-        // Distribution is therefore GitHub/F-Droid first, not Play first.
-        targetSdk = 28
+        // App-private Android ELFs are launched through /system/bin/linker(64),
+        // following the execution bridge merged into official termux-exec.
+        targetSdk = 36
 
         versionCode = 1
         versionName = "0.1.0-dev"
@@ -56,13 +55,12 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libproot-loader.so"
+        }
     }
 
-    lint {
-        // Intentional uDroid architecture constraint: Android 10 blocks
-        // execve() from downloaded app-private rootfs files at target 29+.
-        disable += "ExpiredTargetSdkVersion"
-    }
 }
 
 dependencies {

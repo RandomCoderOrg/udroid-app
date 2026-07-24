@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.runtime
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -134,7 +136,7 @@ class RuntimeSupervisorService : Service() {
         workerPool.execute {
             runCatching {
                 val executable = NativeProbeInstaller.install(this)
-                ProcessBuilder(executable.absolutePath, bootId)
+                ProcessBuilder(AndroidExecutableCommand.create(executable, bootId))
                     .redirectErrorStream(true)
                     .start()
             }.onSuccess { process ->
@@ -409,8 +411,14 @@ class RuntimeSupervisorService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, notification(text))
+        if (
+            android.os.Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, notification(text))
+        }
     }
 
     companion object {
