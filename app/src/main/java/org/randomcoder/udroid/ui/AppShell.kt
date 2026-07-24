@@ -119,6 +119,7 @@ fun UdroidApp(
     onRetryDownload: () -> Unit,
     onRefreshLinuxApplications: () -> Unit,
     onLaunchLinuxApplication: (LinuxApplication) -> Unit,
+    onPinLinuxApplication: (LinuxApplication) -> Unit,
 ) {
     if (destination == UdroidDestination.DESKTOP) {
         DesktopPage(
@@ -200,6 +201,7 @@ fun UdroidApp(
                         onRetryDownload = onRetryDownload,
                         onRefreshLinuxApplications = onRefreshLinuxApplications,
                         onLaunchLinuxApplication = onLaunchLinuxApplication,
+                        onPinLinuxApplication = onPinLinuxApplication,
                     )
                 }
             } else {
@@ -229,6 +231,7 @@ fun UdroidApp(
                         onRetryDownload = onRetryDownload,
                         onRefreshLinuxApplications = onRefreshLinuxApplications,
                         onLaunchLinuxApplication = onLaunchLinuxApplication,
+                        onPinLinuxApplication = onPinLinuxApplication,
                     )
                     WorkspaceNavigationBar(
                         selected = destination,
@@ -265,6 +268,7 @@ private fun ManagementPane(
     onRetryDownload: () -> Unit,
     onRefreshLinuxApplications: () -> Unit,
     onLaunchLinuxApplication: (LinuxApplication) -> Unit,
+    onPinLinuxApplication: (LinuxApplication) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxHeight()) {
@@ -346,6 +350,7 @@ private fun ManagementPane(
                             launchMessage = linuxApplicationMessage,
                             onRefresh = onRefreshLinuxApplications,
                             onLaunch = onLaunchLinuxApplication,
+                            onPin = onPinLinuxApplication,
                             onOpenDesktop = {
                                 onDestinationSelected(UdroidDestination.DESKTOP)
                             },

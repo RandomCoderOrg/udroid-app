@@ -32,6 +32,8 @@ import org.randomcoder.udroid.install.InstallationSelection
 import org.randomcoder.udroid.install.InstallerService
 import org.randomcoder.udroid.linuxapps.DesktopApplicationScanner
 import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
+import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
@@ -59,6 +61,7 @@ class MainActivity : ComponentActivity() {
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
     private var pendingLinuxApplication: LinuxApplication? = null
+    private var pendingLinuxApplicationId: String? = null
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
@@ -136,12 +139,19 @@ class MainActivity : ComponentActivity() {
                     onRetryDownload = { startSelectedDownload() },
                     onRefreshLinuxApplications = { loadLinuxApplications() },
                     onLaunchLinuxApplication = { launchLinuxApplication(it) },
+                    onPinLinuxApplication = { pinLinuxApplication(it) },
                 )
             }
         }
         refreshAll()
         loadCatalogue()
-        loadLinuxApplications()
+        if (!handleShortcutIntent(intent)) loadLinuxApplications()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShortcutIntent(intent)
     }
 
     override fun onStart() {
@@ -251,7 +261,7 @@ class MainActivity : ComponentActivity() {
     private fun loadLinuxApplications() {
         linuxApplicationsState = LinuxApplicationsState.Loading
         lifecycleScope.launch {
-            linuxApplicationsState =
+            val loadedState =
                 runCatching {
                     withContext(Dispatchers.IO) {
                         val rootfs = InstalledRootfsResolver.resolve(this@MainActivity)
@@ -265,14 +275,17 @@ class MainActivity : ComponentActivity() {
                         it.message ?: "The installed Linux image could not be scanned",
                     )
                 }
+            linuxApplicationsState = loadedState
+            resolveShortcutApplication(loadedState)
         }
     }
 
     private fun launchLinuxApplication(application: LinuxApplication) {
+        pendingLinuxApplicationId = null
         linuxApplicationMessage = "Preparing ${application.name}…"
         if (
             snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            runtimeService == null
+            runtimeService?.currentTerminalSession()?.isRunning != true
         ) {
             pendingLinuxApplication = application
             ensureNotificationPermission()
@@ -283,10 +296,67 @@ class MainActivity : ComponentActivity() {
         launchWithRuntime(application)
     }
 
+    private fun pinLinuxApplication(application: LinuxApplication) {
+        linuxApplicationMessage = "Preparing ${application.name} shortcut…"
+        LinuxApplicationShortcutPublisher(this)
+            .publishAndRequestPin(application)
+            .fold(
+                onSuccess = { result ->
+                    linuxApplicationMessage =
+                        if (result.dynamicPublished) {
+                            "${application.name} is now a launcher shortcut. " +
+                                "Confirm Add to home screen."
+                        } else {
+                            "Confirm Add to home screen for ${application.name}."
+                        }
+                },
+                onFailure = {
+                    linuxApplicationMessage =
+                        it.message ?: "Could not create a shortcut for ${application.name}"
+                },
+            )
+    }
+
+    private fun handleShortcutIntent(intent: Intent?): Boolean {
+        if (intent?.action != LinuxApplicationShortcutContract.ACTION_LAUNCH) return false
+        val applicationId =
+            intent
+                .getStringExtra(LinuxApplicationShortcutContract.EXTRA_APPLICATION_ID)
+                ?.takeIf(String::isNotBlank)
+                ?: return false
+        intent.removeExtra(LinuxApplicationShortcutContract.EXTRA_APPLICATION_ID)
+        pendingLinuxApplicationId = applicationId
+        linuxApplicationMessage = "Finding the Linux application…"
+        selectDestination(UdroidDestination.APPS)
+        return true
+    }
+
+    private fun resolveShortcutApplication(state: LinuxApplicationsState) {
+        val applicationId = pendingLinuxApplicationId ?: return
+        when (state) {
+            LinuxApplicationsState.Loading -> Unit
+            is LinuxApplicationsState.Ready -> {
+                pendingLinuxApplicationId = null
+                val application =
+                    state.result.applications.firstOrNull { it.id == applicationId }
+                if (application == null) {
+                    linuxApplicationMessage =
+                        "This shortcut is no longer available in ${state.rootfsName}"
+                } else {
+                    launchLinuxApplication(application)
+                }
+            }
+            is LinuxApplicationsState.Failed -> {
+                pendingLinuxApplicationId = null
+                linuxApplicationMessage = state.message
+            }
+        }
+    }
+
     private fun launchPendingLinuxApplication() {
         if (
             snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            runtimeService == null
+            runtimeService?.currentTerminalSession()?.isRunning != true
         ) {
             return
         }

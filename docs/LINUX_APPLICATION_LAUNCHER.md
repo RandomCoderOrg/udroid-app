@@ -14,6 +14,9 @@ process, and attaches the Android display.
 flowchart LR
     Rootfs["Installed rootfs"] --> Scanner["Desktop entry scanner"]
     Scanner --> Catalog["Android Linux Apps page"]
+    Catalog --> Shortcut["Dynamic and pinned shortcut"]
+    Shortcut --> Launcher["Android launcher"]
+    Launcher --> Catalog
     Catalog --> Supervisor["Runtime supervisor"]
     Supervisor --> X11["Embedded display :0"]
     Supervisor --> App["Dedicated PRoot app process"]
@@ -64,13 +67,41 @@ Graphical applications receive an isolated environment containing:
 
 Each application is a separate PRoot process owned by
 `RuntimeSupervisorService`. Output is drained off the process pipe into the
-structured journal, exit status is recorded, replacement launches terminate a
-previous process with the same desktop ID, and stopping Linux terminates all
-owned app processes.
+structured journal, exit status is recorded, and stopping Linux terminates all
+owned app processes. Reopening a graphical application that is still alive
+reuses its existing PRoot process and returns to the desktop instead of
+creating a duplicate process tree.
 
 `Terminal=true` entries are safely shell-quoted and opened in the supervised
 interactive terminal. A later multi-session terminal checkpoint should give
 each terminal application its own PTY instead of sharing the main shell.
+
+## Android launcher shortcuts
+
+Each catalog card exposes **Add to home screen**. uDroid publishes the selected
+entry as a dynamic shortcut, making recent selections available from the
+launcher's uDroid long-press menu, and sends a pinned-shortcut request to the
+launcher. Android always owns the final confirmation prompt.
+
+Shortcut IDs use the stable desktop entry ID:
+`linux-application:<desktop-entry-id>`. The intent contains the entry ID rather
+than the executable command. When invoked, `MainActivity` scans the current
+rootfs, resolves that ID to its current argument vector, starts the runtime,
+waits for X11, and launches it through the same supervised path as the Apps
+page. A removed application therefore produces an unavailable message instead
+of executing stale shortcut metadata.
+
+Shortcut intents use `FLAG_ACTIVITY_CLEAR_TOP` and
+`FLAG_ACTIVITY_SINGLE_TOP`, so both a cold app and an existing single-activity
+task enter the same `onNewIntent` flow without destroying the running desktop.
+The implementation uses AndroidX Core but deliberately omits the optional
+Google Shortcuts Integration Library; these shortcuts stay in Android's
+launcher rather than being published to external Google surfaces.
+
+This follows Android's
+[dynamic and pinned shortcut guidance](https://developer.android.com/develop/ui/compose/system/shortcuts/creating-shortcuts).
+Pinned shortcuts are user-owned and remain until the user removes them, the app
+is uninstalled, or app data is cleared.
 
 ## Pixel 6a evidence
 
@@ -100,13 +131,25 @@ XClock rendered successfully on the embedded Android surface. The structured
 journal recorded `terminal_start_requested`, `session_started`,
 `server_ready`, `app_launched`, application output, and process exit.
 
+The Pixel launcher accepted XClock as both a dynamic and pinned shortcut. A
+cold shortcut invocation started the uDroid process, restored the supervised
+Linux runtime, attached display `:0`, and rendered XClock. Invoking the same
+shortcut while it was running delivered the intent to the existing
+`MainActivity`; the Android process and the single XClock process retained
+their PIDs, and no duplicate PRoot application was started.
+
+The cold-launch test also covered an Android process-death edge case: persisted
+state may still say `RUNNING` before a newly created supervisor has restored
+its terminal session. Shortcut launch now waits for both the running state and
+a live supervised session. Expected pipe closure and thread interruption while
+applications stop are contained inside the supervisor rather than escaping as
+an uncaught process-wide exception.
+
 ## Next boundaries
 
 - Render SVG and XPM icons instead of using category fallbacks.
 - Maintain a persistent D-Bus session and honor `DBusActivatable=true`.
 - Pass Android documents and URLs into `%f/%F/%u/%U`.
 - Add per-app logs and running-state controls.
-- Let users pin selected Linux applications to the Android launcher. Android
-  limits ordinary dynamic shortcuts, so the catalog remains in uDroid and
-  home-screen integration should use user-requested pinned shortcuts:
-  [Android shortcut guidance](https://developer.android.com/develop/ui/compose/system/shortcuts).
+- Refresh or disable launcher shortcuts when applications are removed from the
+  current rootfs.

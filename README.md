@@ -34,6 +34,8 @@ and private display socket. Its compact controls expose the keyboard and
 persistent output/input settings without tying the X server lifetime to the
 page. The Linux Apps page also discovers freedesktop entries from the installed
 rootfs and can boot the runtime and launch a graphical application directly.
+Selected Linux applications can also be published to the Android launcher's
+long-press menu and pinned to the home screen.
 The generic presenter currently uses Android GLES; no device-specific GPU
 driver is bundled. See the
 [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for the

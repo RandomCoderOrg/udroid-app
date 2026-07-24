@@ -271,6 +271,19 @@ class RuntimeSupervisorService : Service() {
             return
         }
 
+        if (applicationProcesses[application.id]?.isAlive == true) {
+            app.journal.append(
+                component = "linux-app",
+                severity = "info",
+                event = "app_reused",
+                message = "Returned to the running ${application.name} window",
+                bootId = snapshot.bootId,
+                fields = mapOf("desktop_id" to application.id),
+            )
+            callback(Result.success(Unit))
+            return
+        }
+
         x11Controller.whenReady { socketDirectory ->
             if (socketDirectory == null) {
                 callback(Result.failure(IllegalStateException("Embedded X11 failed to start")))
@@ -587,34 +600,58 @@ class RuntimeSupervisorService : Service() {
     ) {
         applicationExecutor.execute {
             var outputLines = 0
-            BufferedReader(InputStreamReader(process.inputStream)).useLines { lines ->
-                lines.forEach { line ->
-                    when {
-                        outputLines < MAX_APP_OUTPUT_LINES ->
-                            app.journal.append(
-                                component = "linux-app",
-                                severity = "debug",
-                                event = "app_output",
-                                message = line.take(MAX_APP_OUTPUT_CHARS),
-                                bootId = app.runtimeState.current().bootId,
-                                fields = mapOf("desktop_id" to application.id),
-                            )
-                        outputLines == MAX_APP_OUTPUT_LINES ->
-                            app.journal.append(
-                                component = "linux-app",
-                                severity = "warning",
-                                event = "app_output_suppressed",
-                                message = "Further ${application.name} output is suppressed",
-                                bootId = app.runtimeState.current().bootId,
-                                fields = mapOf("desktop_id" to application.id),
-                            )
+            runCatching {
+                BufferedReader(InputStreamReader(process.inputStream)).useLines { lines ->
+                    lines.forEach { line ->
+                        when {
+                            outputLines < MAX_APP_OUTPUT_LINES ->
+                                app.journal.append(
+                                    component = "linux-app",
+                                    severity = "debug",
+                                    event = "app_output",
+                                    message = line.take(MAX_APP_OUTPUT_CHARS),
+                                    bootId = app.runtimeState.current().bootId,
+                                    fields = mapOf("desktop_id" to application.id),
+                                )
+                            outputLines == MAX_APP_OUTPUT_LINES ->
+                                app.journal.append(
+                                    component = "linux-app",
+                                    severity = "warning",
+                                    event = "app_output_suppressed",
+                                    message = "Further ${application.name} output is suppressed",
+                                    bootId = app.runtimeState.current().bootId,
+                                    fields = mapOf("desktop_id" to application.id),
+                                )
+                        }
+                        outputLines++
                     }
-                    outputLines++
+                }
+            }.onFailure { error ->
+                val replaced = applicationProcesses[application.id] !== process
+                if (!replaced && process.isAlive) {
+                    runCatching {
+                        app.journal.append(
+                            component = "linux-app",
+                            severity = "warning",
+                            event = "app_output_failed",
+                            message =
+                                "Could not read ${application.name} output: " +
+                                    (error.message ?: error.javaClass.simpleName),
+                            bootId = app.runtimeState.current().bootId,
+                            fields = mapOf("desktop_id" to application.id),
+                        )
+                    }
                 }
             }
         }
-        applicationExecutor.execute {
-            val exitCode = process.waitFor()
+        applicationExecutor.execute processWait@{
+            val exitCode =
+                try {
+                    process.waitFor()
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return@processWait
+                }
             applicationProcesses.remove(application.id, process)
             app.journal.append(
                 component = "linux-app",

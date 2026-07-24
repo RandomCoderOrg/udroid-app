@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.AddToHomeScreen
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DesktopWindows
@@ -62,6 +63,7 @@ fun LinuxAppsPage(
     launchMessage: String?,
     onRefresh: () -> Unit,
     onLaunch: (LinuxApplication) -> Unit,
+    onPin: (LinuxApplication) -> Unit,
     onOpenDesktop: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -205,6 +207,7 @@ fun LinuxAppsPage(
                             LinuxApplicationCard(
                                 application = application,
                                 onLaunch = { onLaunch(application) },
+                                onPin = { onPin(application) },
                             )
                         }
                         item { Spacer(Modifier.height(20.dp)) }
@@ -219,6 +222,7 @@ fun LinuxAppsPage(
 private fun LinuxApplicationCard(
     application: LinuxApplication,
     onLaunch: () -> Unit,
+    onPin: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -274,6 +278,13 @@ private fun LinuxApplicationCard(
                 }
             }
             Spacer(Modifier.size(10.dp))
+            IconButton(onClick = onPin) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.AddToHomeScreen,
+                    contentDescription = "Add ${application.name} to home screen",
+                    tint = UdroidForest,
+                )
+            }
             Button(onClick = onLaunch) {
                 Text(if (application.terminal) "Open" else "Launch")
             }
