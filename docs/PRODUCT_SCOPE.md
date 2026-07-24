@@ -6,6 +6,20 @@ uDroid is a general Android application for installing, booting, stopping,
 repairing, and interacting with Linux distributions through PRoot. It replaces
 a terminal-first workflow with an Android-first lifecycle and UI.
 
+## One operation, two levels of detail
+
+Every long-running operation is designed for both ordinary and expert users:
+
+- The default surface answers what is happening, how far it has progressed,
+  and whether the user needs to act.
+- **Show terminal** opens a bottom drawer with the exact technical event
+  stream and eventually an interactive PTY when an operation supports one.
+- The friendly view and terminal are projections of one service-owned state
+  machine. They must never run separate commands or disagree about status.
+
+This progressive-disclosure pattern applies to installation, boot, repair,
+package updates, exports, and optional hardware-profile setup.
+
 The main journey is:
 
 1. Open uDroid.
@@ -25,6 +39,9 @@ flowchart TB
     Supervisor --> Proot["PRoot + distro session"]
     App --> Shell["Terminal session"]
     App --> X11["Optional graphical session"]
+    Installer --> Events["Shared operation events"]
+    Events --> Friendly["Friendly progress UI"]
+    Events --> Terminal["Terminal and logs drawer"]
     Supervisor --> Profiles["Optional device profiles"]
     Profiles --> Generic["Generic CPU presentation"]
     Profiles --> Tensor["Tensor G1 experimental acceleration"]

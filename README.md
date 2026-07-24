@@ -10,20 +10,24 @@ profiles may provide graphics, video, or audio acceleration on supported
 devices. The experimental Tensor G1 Panfrost work is one such future profile,
 not a uDroid dependency or compatibility requirement.
 
-## Current Phase 1 slice
+## Current checkpoints
 
-- Compose launcher and diagnostics screen.
-- Sticky foreground `RuntimeSupervisorService`.
-- Persisted desired runtime state and boot generation.
-- Append-only structured JSONL journal.
-- Android, ABI, storage, PRoot, and optional device-feature probes.
-- Packaged ARM64, ARMv7, and x86_64 native child probes with heartbeat and
-  parent-death handling.
-- Explicit start, stop, refresh, and Activity recreation behavior.
+- Checkpoint 1: supervised Android runtime shell, persisted lifecycle state,
+  structured journal, device probes, and ABI-specific native child probes.
+- Checkpoint 2: live uDroid distro catalogue with cache and built-in fallback,
+  recommended versus advanced image selection, weighted installation stages,
+  and a half-screen terminal drawer driven by the same event model.
 
-No rootfs, X server, terminal, or GPU driver is bundled yet. The native child
-is deliberately small: it proves process ownership and recovery before the
-same supervisor is allowed to own PRoot and Xorg.
+Checkpoint 2 currently animates an explicit UX preview. It fetches only the
+small catalogue; it does not download or extract a rootfs yet. That boundary
+lets us validate the interaction contract before connecting it to a
+long-running, resumable installer service.
+
+No rootfs, X server, interactive PTY, or GPU driver is bundled yet. The native
+child remains deliberately small: it proves process ownership and recovery
+before the same supervisor is allowed to own PRoot and a graphical session.
+
+See [Checkpoint 2: distro and installation experience](docs/CHECKPOINT_2_INSTALL_EXPERIENCE.md).
 
 ## Build
 

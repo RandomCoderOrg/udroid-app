@@ -20,10 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -41,15 +39,24 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.randomcoder.udroid.catalog.DistroCatalogRepository
+import org.randomcoder.udroid.catalog.DistroCatalogState
+import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.install.InstallProgress
+import org.randomcoder.udroid.install.InstallationUxPreview
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.ui.DistroCataloguePage
+import org.randomcoder.udroid.ui.InstallExperiencePage
 import java.time.Instant
 
 class MainActivity : ComponentActivity() {
@@ -60,6 +67,10 @@ class MainActivity : ComponentActivity() {
     private var capabilities by mutableStateOf<List<CapabilityResult>>(emptyList())
     private var journalLines by mutableStateOf<List<String>>(emptyList())
     private var selectedPage by mutableStateOf(Page.HOME)
+    private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
+    private var installProgress by mutableStateOf<InstallProgress?>(null)
+    private var showInstallTerminal by mutableStateOf(false)
+    private var installPreviewJob: Job? = null
 
     private val stateReceiver =
         object : BroadcastReceiver() {
@@ -80,14 +91,31 @@ class MainActivity : ComponentActivity() {
                     snapshot = snapshot,
                     capabilities = capabilities,
                     journalLines = journalLines,
+                    catalogueState = catalogueState,
+                    installProgress = installProgress,
+                    showInstallTerminal = showInstallTerminal,
                     onPageSelected = { selectedPage = it },
                     onStart = { RuntimeSupervisorService.start(this) },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
+                    onReloadCatalogue = { loadCatalogue() },
+                    onPreviewInstall = { startInstallationPreview(it) },
+                    onToggleInstallTerminal = {
+                        showInstallTerminal = !showInstallTerminal
+                    },
+                    onCloseInstall = {
+                        installPreviewJob?.cancel()
+                        installProgress = null
+                        showInstallTerminal = false
+                    },
+                    onRestartInstallPreview = {
+                        installProgress?.distro?.let { startInstallationPreview(it) }
+                    },
                 )
             }
         }
         refreshAll()
+        loadCatalogue()
     }
 
     override fun onStart() {
@@ -117,10 +145,54 @@ class MainActivity : ComponentActivity() {
         snapshot = app.runtimeState.current()
         journalLines = app.journal.tail()
     }
+
+    private fun loadCatalogue() {
+        catalogueState = DistroCatalogState.Loading
+        lifecycleScope.launch {
+            catalogueState =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        DistroCatalogRepository(this@MainActivity).load()
+                    }
+                }.fold(
+                    onSuccess = { DistroCatalogState.Ready(it) },
+                    onFailure = {
+                        DistroCatalogState.Failed(
+                            it.message ?: "The distro catalogue could not be read",
+                        )
+                    },
+                )
+        }
+    }
+
+    private fun startInstallationPreview(distro: DistroVariant) {
+        installPreviewJob?.cancel()
+        selectedPage = Page.DISTROS
+        showInstallTerminal = false
+        installProgress = InstallationUxPreview.initial(distro)
+        installPreviewJob =
+            lifecycleScope.launch {
+                val terminalLines = installProgress?.terminalLines.orEmpty().toMutableList()
+                InstallationUxPreview.steps(distro).forEach { step ->
+                    delay(step.delayMs)
+                    terminalLines += step.terminalLine
+                    installProgress =
+                        InstallProgress(
+                            distro = distro,
+                            stage = step.stage,
+                            stageProgress = step.stageProgress,
+                            currentDetail = step.detail,
+                            terminalLines = terminalLines.toList(),
+                            previewOnly = true,
+                        )
+                }
+            }
+    }
 }
 
 private enum class Page(val label: String) {
     HOME("Home"),
+    DISTROS("Linux"),
     DEVICE("Device"),
     LOGS("Logs"),
 }
@@ -147,10 +219,18 @@ private fun UdroidApp(
     snapshot: RuntimeSnapshot,
     capabilities: List<CapabilityResult>,
     journalLines: List<String>,
+    catalogueState: DistroCatalogState,
+    installProgress: InstallProgress?,
+    showInstallTerminal: Boolean,
     onPageSelected: (Page) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRefresh: () -> Unit,
+    onReloadCatalogue: () -> Unit,
+    onPreviewInstall: (DistroVariant) -> Unit,
+    onToggleInstallTerminal: () -> Unit,
+    onCloseInstall: () -> Unit,
+    onRestartInstallPreview: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -186,11 +266,23 @@ private fun UdroidApp(
             ) {
                 Page.entries.forEach { item ->
                     if (page == item) {
-                        Button(onClick = { onPageSelected(item) }) {
+                        Button(
+                            onClick = { onPageSelected(item) },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 3.dp),
+                        ) {
                             Text(item.label)
                         }
                     } else {
-                        OutlinedButton(onClick = { onPageSelected(item) }) {
+                        OutlinedButton(
+                            onClick = { onPageSelected(item) },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 3.dp),
+                        ) {
                             Text(item.label)
                         }
                     }
@@ -204,6 +296,20 @@ private fun UdroidApp(
                         onStart = onStart,
                         onStop = onStop,
                         onRefresh = onRefresh,
+                    )
+                Page.DISTROS ->
+                    installProgress?.let {
+                        InstallExperiencePage(
+                            progress = it,
+                            showTerminal = showInstallTerminal,
+                            onToggleTerminal = onToggleInstallTerminal,
+                            onBack = onCloseInstall,
+                            onRunAgain = onRestartInstallPreview,
+                        )
+                    } ?: DistroCataloguePage(
+                        state = catalogueState,
+                        onRetry = onReloadCatalogue,
+                        onPreviewInstall = onPreviewInstall,
                     )
                 Page.DEVICE -> DevicePage(capabilities, onRefresh)
                 Page.LOGS -> LogsPage(journalLines, onRefresh)

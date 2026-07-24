@@ -30,7 +30,10 @@ flowchart LR
 
 ## Next slice
 
-Import the typed distro catalogue and PRoot command model from `go-udroid`,
-then add a minimal installer/boot flow. The maintained Lorie surface follows
-as an optional graphical session backend; shell-only distributions remain
-valid uDroid configurations.
+Checkpoint 2 imports the distro-catalogue boundary and defines the shared
+friendly-progress/terminal event contract. The next runtime slice replaces the
+UX preview with a resumable download, SHA-256 verification, atomic extraction,
+and recovery journal owned by a foreground installer service.
+
+The maintained Lorie surface follows as an optional graphical session backend;
+shell-only distributions remain valid uDroid configurations.
