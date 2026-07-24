@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,15 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,11 +41,6 @@ import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
 
-private val UbuntuOrange = Color(0xFFE95420)
-private val TerminalBlack = Color(0xFF101713)
-private val TerminalGreen = Color(0xFFA7F3D0)
-private val QuietText = Color(0xFF56635C)
-
 @Composable
 fun DistroCataloguePage(
     state: DistroCatalogState,
@@ -64,7 +56,7 @@ fun DistroCataloguePage(
                     Text("Finding Linux images")
                     Text(
                         "Checking the uDroid catalogue",
-                        color = QuietText,
+                        color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -79,22 +71,25 @@ fun DistroCataloguePage(
                         .padding(20.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Card(
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
+                Surface(
+                    color = UdroidSurface,
+                    border = BorderStroke(1.dp, UdroidLine),
+                    shape = RoundedCornerShape(16.dp),
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Text(
                             "Couldn’t load Linux images",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text(state.message, color = QuietText)
+                        Text(state.message, color = UdroidMuted)
                         Spacer(Modifier.height(16.dp))
-                        Button(onClick = onRetry) { Text("Try again") }
+                        Button(
+                            onClick = onRetry,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Try again")
+                        }
                     }
                 }
             }
@@ -112,31 +107,30 @@ fun DistroCataloguePage(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 item {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         "Choose your Linux",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineMedium,
                     )
+                    Spacer(Modifier.height(3.dp))
                     Text(
-                        "Start with the tested choice, or open the full image catalogue.",
-                        color = QuietText,
+                        "A tested starting point, with the full catalogue when you need it.",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
 
                 item {
                     Text(
                         "RECOMMENDED",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
+                        color = UdroidForest,
                         style = MaterialTheme.typography.labelMedium,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(7.dp))
                     DistroCard(
                         distro = recommended,
                         emphasized = true,
@@ -151,36 +145,35 @@ fun DistroCataloguePage(
                             CatalogSource.CACHE -> "Saved catalogue · offline"
                             CatalogSource.BUILT_IN -> "Built-in recovery image"
                         }
-                    Card(
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor = Color(0xFFE8EEE9),
-                            ),
-                        shape = RoundedCornerShape(14.dp),
+                    Surface(
+                        color = Color.Transparent,
+                        border = BorderStroke(1.dp, UdroidLine),
+                        shape = RoundedCornerShape(12.dp),
                     ) {
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable { showAll = !showAll }
-                                    .padding(14.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     if (showAll) "Hide advanced images" else "Show all images",
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
                                     "${remaining.size} compatible variants · $sourceText",
-                                    color = QuietText,
+                                    color = UdroidMuted,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
                             Text(
                                 if (showAll) "−" else "+",
-                                style = MaterialTheme.typography.headlineSmall,
+                                color = UdroidForest,
+                                style = MaterialTheme.typography.titleLarge,
                             )
                         }
                     }
@@ -208,62 +201,66 @@ private fun DistroCard(
     emphasized: Boolean,
     onSelect: () -> Unit,
 ) {
-    Card(
+    Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onSelect),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (emphasized) {
-                        Color(0xFFFFF4EE)
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-            ),
-        shape = RoundedCornerShape(20.dp),
+        color = if (emphasized) UdroidWarm else UdroidSurface,
+        border = BorderStroke(1.dp, if (emphasized) Color(0xFFF5C8B3) else UdroidLine),
+        shape = RoundedCornerShape(16.dp),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(58.dp)
-                        .clip(CircleShape)
-                        .background(UbuntuOrange),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "U",
-                    color = Color.White,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            DistroMark(size = 46)
             Column(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 12.dp),
             ) {
                 Text(
                     distro.releaseName,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
                 )
-                Text(distro.experienceName, color = QuietText)
+                Text(
+                    distro.experienceName,
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Text(
                     "${distro.id} · ${distro.architecture}",
-                    color = Color(0xFF7A827E),
-                    fontFamily = FontFamily.Monospace,
+                    color = UdroidMuted,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Text("›", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "OPEN",
+                color = UdroidForest,
+                style = MaterialTheme.typography.labelMedium,
+            )
         }
+    }
+}
+
+@Composable
+private fun DistroMark(size: Int) {
+    Box(
+        modifier =
+            Modifier
+                .size(size.dp)
+                .clip(RoundedCornerShape((size / 3).dp))
+                .background(UdroidUbuntu),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "U",
+            color = Color.White,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -281,46 +278,35 @@ fun InstallExperiencePage(
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    "‹  Back to images",
+                    "‹  Linux images",
                     modifier =
                         Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable(onClick = onBack)
-                            .padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
+                            .padding(vertical = 8.dp, horizontal = 2.dp),
+                    color = UdroidForest,
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(UbuntuOrange),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "U",
-                            color = Color.White,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Column(modifier = Modifier.padding(start = 14.dp)) {
+                    DistroMark(size = 48)
+                    Column(modifier = Modifier.padding(start = 12.dp)) {
                         Text(
                             progress.distro.releaseName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.headlineSmall,
                         )
-                        Text(progress.distro.experienceName, color = QuietText)
+                        Text(
+                            "${progress.distro.experienceName} · ${progress.distro.architecture}",
+                            color = UdroidMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             }
@@ -328,87 +314,151 @@ fun InstallExperiencePage(
             if (progress.previewOnly) {
                 item {
                     Surface(
-                        color = Color(0xFFFFE6A6),
-                        shape = RoundedCornerShape(12.dp),
+                        color = UdroidWarm,
+                        shape = RoundedCornerShape(10.dp),
                     ) {
-                        Text(
-                            "UX preview · no rootfs archive is downloaded",
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                    shape = RoundedCornerShape(22.dp),
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            progress.stage.normalTitle,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            "${progress.percentage}% complete",
-                            modifier = Modifier.align(Alignment.End),
-                            color = MaterialTheme.colorScheme.primary,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        LinearProgressIndicator(
-                            progress = progress.overallProgress,
+                        Row(
                             modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
-                            color =
-                                if (progress.stage == InstallStage.COMPLETE) {
-                                    Color(0xFF2E7D52)
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(progress.stage.normalSubtitle, color = QuietText)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            progress.currentDetail,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onToggleTerminal) {
-                        Text(if (showTerminal) "Hide terminal" else "Show terminal")
-                    }
-                    if (progress.stage == InstallStage.COMPLETE) {
-                        OutlinedButton(onClick = onRunAgain) {
-                            Text("Run preview again")
+                                Modifier.padding(
+                                    horizontal = 12.dp,
+                                    vertical = 9.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "PREVIEW",
+                                color = UdroidUbuntu,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Text(
+                                "  No rootfs will be downloaded",
+                                color = UdroidInk,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                     }
                 }
             }
 
             item {
+                Surface(
+                    color = UdroidSurface,
+                    border = BorderStroke(1.dp, UdroidLine),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                progress.stage.stepLabel,
+                                color = UdroidMuted,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Text(
+                                "${progress.percentage}%",
+                                color = UdroidForest,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        Spacer(Modifier.height(9.dp))
+                        Text(
+                            progress.stage.normalTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        InstallStageRail(progress)
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = progress.overallProgress,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                            color =
+                                if (progress.stage == InstallStage.COMPLETE) {
+                                    UdroidForest
+                                } else {
+                                    UdroidForest
+                                },
+                            trackColor = UdroidLine,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            progress.stage.normalSubtitle,
+                            color = UdroidMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            "•  ${progress.currentDetail}",
+                            color = UdroidInk,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Surface(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onToggleTerminal),
+                    color = if (showTerminal) UdroidSoftGreen else Color.Transparent,
+                    border = BorderStroke(1.dp, UdroidLine),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                ">_",
+                                color = UdroidForest,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                if (showTerminal) "  Hide terminal" else "  Show terminal",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                        Text(
+                            if (showTerminal) "↓" else "↑",
+                            color = UdroidMuted,
+                        )
+                    }
+                }
+            }
+
+            if (progress.stage == InstallStage.COMPLETE) {
+                item {
+                    Text(
+                        "Run preview again",
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onRunAgain)
+                                .padding(vertical = 8.dp, horizontal = 2.dp),
+                        color = UdroidForest,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+
+            item {
                 Text(
-                    "The friendly progress and terminal are two views of the same " +
-                        "installer events. Closing this screen will not own or cancel " +
-                        "the eventual installer service.",
-                    color = QuietText,
+                    "You can leave this screen. Installation will continue in the background.",
+                    color = UdroidMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.height(24.dp))
             }
         }
 
@@ -418,10 +468,10 @@ fun InstallExperiencePage(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .fillMaxHeight(0.52f),
-                color = TerminalBlack,
-                shadowElevation = 24.dp,
-                shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                        .fillMaxHeight(0.50f),
+                color = UdroidTerminal,
+                shadowElevation = 18.dp,
+                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
             ) {
                 Column {
                     Row(
@@ -429,16 +479,16 @@ fun InstallExperiencePage(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable(onClick = onToggleTerminal)
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column {
                             Text(
-                                "INSTALL TERMINAL",
-                                color = TerminalGreen,
+                                "TERMINAL · INSTALL",
+                                color = UdroidTerminalGreen,
                                 fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge,
                             )
                             Text(
                                 progress.distro.id,
@@ -447,28 +497,32 @@ fun InstallExperiencePage(
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }
-                        Text("Close  ↓", color = Color.White)
+                        Text(
+                            "Close  ↓",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
                     }
                     Box(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
-                                .background(Color(0xFF29372F)),
+                                .background(Color(0xFF24342B)),
                     )
                     LazyColumn(
                         modifier =
                             Modifier
                                 .fillMaxSize()
-                                .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                                .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         items(progress.terminalLines) { line ->
                             Text(
                                 line,
                                 color =
                                     if (line.startsWith("[ok]") || line.startsWith("[complete]")) {
-                                        TerminalGreen
+                                        UdroidTerminalGreen
                                     } else {
                                         Color(0xFFD8E2DC)
                                     },
@@ -479,13 +533,62 @@ fun InstallExperiencePage(
                         item {
                             Text(
                                 "▌",
-                                color = TerminalGreen,
+                                color = UdroidTerminalGreen,
                                 fontFamily = FontFamily.Monospace,
                             )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+private val InstallStage.stepLabel: String
+    get() {
+        val index =
+            when (this) {
+                InstallStage.CHECKING -> 1
+                InstallStage.DOWNLOADING -> 2
+                InstallStage.VERIFYING -> 3
+                InstallStage.EXTRACTING -> 4
+                InstallStage.CONFIGURING, InstallStage.COMPLETE -> 5
+                InstallStage.FAILED -> 0
+            }
+        return if (index == 0) "INSTALL PAUSED" else "STEP $index OF 5"
+    }
+
+@Composable
+private fun InstallStageRail(progress: InstallProgress) {
+    val stages =
+        listOf(
+            InstallStage.CHECKING,
+            InstallStage.DOWNLOADING,
+            InstallStage.VERIFYING,
+            InstallStage.EXTRACTING,
+            InstallStage.CONFIGURING,
+        )
+    val currentIndex =
+        when (progress.stage) {
+            InstallStage.COMPLETE -> stages.lastIndex
+            InstallStage.FAILED -> -1
+            else -> stages.indexOf(progress.stage)
+        }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        stages.forEachIndexed { index, _ ->
+            val active = currentIndex >= index
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(if (active) UdroidForest else UdroidLine),
+            )
         }
     }
 }

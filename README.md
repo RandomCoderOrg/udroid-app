@@ -17,6 +17,9 @@ not a uDroid dependency or compatibility requirement.
 - Checkpoint 2: live uDroid distro catalogue with cache and built-in fallback,
   recommended versus advanced image selection, weighted installation stages,
   and a half-screen terminal drawer driven by the same event model.
+- Checkpoint 2.1: compact application shell and responsive visual foundation,
+  with bottom navigation, a restrained type scale, flatter working surfaces,
+  and an installation stage rail tested at enlarged Android font scale.
 
 Checkpoint 2 currently animates an explicit UX preview. It fetches only the
 small catalogue; it does not download or extract a rootfs yet. That boundary
@@ -28,6 +31,8 @@ child remains deliberately small: it proves process ownership and recovery
 before the same supervisor is allowed to own PRoot and a graphical session.
 
 See [Checkpoint 2: distro and installation experience](docs/CHECKPOINT_2_INSTALL_EXPERIENCE.md).
+The visual rules are maintained in
+[Checkpoint 2.1: compact UI foundation](docs/CHECKPOINT_2_1_UI_FOUNDATION.md).
 
 ## Build
 

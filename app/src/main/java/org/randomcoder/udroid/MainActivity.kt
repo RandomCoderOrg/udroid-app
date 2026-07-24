@@ -8,20 +8,23 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -32,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +61,14 @@ import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.ui.DistroCataloguePage
 import org.randomcoder.udroid.ui.InstallExperiencePage
+import org.randomcoder.udroid.ui.UdroidCanvas
+import org.randomcoder.udroid.ui.UdroidForest
+import org.randomcoder.udroid.ui.UdroidInk
+import org.randomcoder.udroid.ui.UdroidLine
+import org.randomcoder.udroid.ui.UdroidMuted
+import org.randomcoder.udroid.ui.UdroidSoftGreen
+import org.randomcoder.udroid.ui.UdroidSurface
+import org.randomcoder.udroid.ui.UdroidTheme
 import java.time.Instant
 
 class MainActivity : ComponentActivity() {
@@ -198,22 +210,6 @@ private enum class Page(val label: String) {
 }
 
 @Composable
-private fun UdroidTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme =
-            androidx.compose.material3.lightColorScheme(
-                primary = Color(0xFF315A47),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFD4E9DC),
-                surface = Color(0xFFF7F7F2),
-                background = Color(0xFFF0F2EC),
-                error = Color(0xFFB3261E),
-            ),
-        content = content,
-    )
-}
-
-@Composable
 private fun UdroidApp(
     page: Page,
     snapshot: RuntimeSnapshot,
@@ -234,85 +230,138 @@ private fun UdroidApp(
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+        color = UdroidCanvas,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-            ) {
-                Text(
-                    text = "uDroid",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "Linux on Android, without living in a terminal",
-                    color = Color(0xFF56635C),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                        .height(60.dp)
+                        .background(UdroidSurface)
+                        .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Page.entries.forEach { item ->
-                    if (page == item) {
-                        Button(
-                            onClick = { onPageSelected(item) },
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 3.dp),
-                        ) {
-                            Text(item.label)
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { onPageSelected(item) },
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 3.dp),
-                        ) {
-                            Text(item.label)
-                        }
-                    }
+                Box(
+                    modifier =
+                        Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(UdroidForest),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "u",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                Text(
+                    text = "uDroid",
+                    modifier = Modifier.padding(start = 9.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "LOCAL",
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+            ) {
+                when (page) {
+                    Page.HOME ->
+                        HomePage(
+                            snapshot = snapshot,
+                            onStart = onStart,
+                            onStop = onStop,
+                            onRefresh = onRefresh,
+                        )
+                    Page.DISTROS ->
+                        installProgress?.let {
+                            InstallExperiencePage(
+                                progress = it,
+                                showTerminal = showInstallTerminal,
+                                onToggleTerminal = onToggleInstallTerminal,
+                                onBack = onCloseInstall,
+                                onRunAgain = onRestartInstallPreview,
+                            )
+                        } ?: DistroCataloguePage(
+                            state = catalogueState,
+                            onRetry = onReloadCatalogue,
+                            onPreviewInstall = onPreviewInstall,
+                        )
+                    Page.DEVICE -> DevicePage(capabilities, onRefresh)
+                    Page.LOGS -> LogsPage(journalLines, onRefresh)
                 }
             }
 
-            when (page) {
-                Page.HOME ->
-                    HomePage(
-                        snapshot = snapshot,
-                        onStart = onStart,
-                        onStop = onStop,
-                        onRefresh = onRefresh,
+            BottomNavigation(
+                selected = page,
+                onSelected = onPageSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomNavigation(
+    selected: Page,
+    onSelected: (Page) -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(UdroidSurface),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(UdroidLine),
+        )
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+        ) {
+            Page.entries.forEach { item ->
+                val active = selected == item
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { onSelected(item) }
+                            .padding(top = 9.dp, bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 22.dp, height = 3.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if (active) UdroidForest else Color.Transparent),
                     )
-                Page.DISTROS ->
-                    installProgress?.let {
-                        InstallExperiencePage(
-                            progress = it,
-                            showTerminal = showInstallTerminal,
-                            onToggleTerminal = onToggleInstallTerminal,
-                            onBack = onCloseInstall,
-                            onRunAgain = onRestartInstallPreview,
-                        )
-                    } ?: DistroCataloguePage(
-                        state = catalogueState,
-                        onRetry = onReloadCatalogue,
-                        onPreviewInstall = onPreviewInstall,
+                    Text(
+                        item.label,
+                        color = if (active) UdroidForest else UdroidMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                     )
-                Page.DEVICE -> DevicePage(capabilities, onRefresh)
-                Page.LOGS -> LogsPage(journalLines, onRefresh)
+                }
             }
         }
     }
@@ -329,33 +378,43 @@ private fun HomePage(
         modifier =
             Modifier
                 .fillMaxSize()
-                .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item {
+            Column(modifier = Modifier.padding(top = 18.dp, bottom = 2.dp)) {
+                Text(
+                    "Your Linux workspace",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Install a system, start it, and open a shell or desktop.",
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
         item {
             StatusCard(snapshot)
         }
         item {
-            Card(
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                shape = RoundedCornerShape(18.dp),
+            Surface(
+                color = UdroidSurface,
+                shape = RoundedCornerShape(16.dp),
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Phase 1 development runtime",
+                        "Runtime probe",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "This button starts a tiny packaged Linux process under the same " +
-                            "supervisor that will later own PRoot, your distro, and its session.",
-                        color = Color(0xFF56635C),
+                        "Test the supervisor with a small packaged process before a distro is installed.",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(14.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -365,14 +424,16 @@ private fun HomePage(
                             enabled =
                                 snapshot.phase != RuntimePhase.RUNNING &&
                                     snapshot.phase != RuntimePhase.STARTING,
+                            shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text("Start test runtime")
+                            Text("Start probe")
                         }
                         OutlinedButton(
                             onClick = onStop,
                             enabled =
                                 snapshot.phase == RuntimePhase.RUNNING ||
                                     snapshot.phase == RuntimePhase.STARTING,
+                            shape = RoundedCornerShape(10.dp),
                         ) {
                             Text("Stop")
                         }
@@ -381,30 +442,17 @@ private fun HomePage(
             }
         }
         item {
-            Card(
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFF7D6),
-                    ),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        "What comes next",
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Distro catalogue → resumable install → boot profiles → graphical " +
-                            "desktop. Hardware acceleration stays an optional device profile.",
-                    )
-                }
-            }
-        }
-        item {
-            OutlinedButton(onClick = onRefresh) {
-                Text("Refresh status")
-            }
+            Text(
+                "Refresh device status  ↻",
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onRefresh)
+                        .padding(vertical = 10.dp, horizontal = 2.dp),
+                color = UdroidForest,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(Modifier.height(18.dp))
         }
     }
 }
@@ -418,39 +466,55 @@ private fun StatusCard(snapshot: RuntimeSnapshot) {
             RuntimePhase.STARTING, RuntimePhase.STOPPING -> Color(0xFF9A6700)
             RuntimePhase.STOPPED -> Color(0xFF5D6460)
         }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(18.dp),
+    Surface(
+        color = UdroidSurface,
+        shape = RoundedCornerShape(16.dp),
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text(
-                snapshot.phase.name.lowercase().replaceFirstChar { it.titlecase() },
-                color = accent,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(snapshot.message)
-            snapshot.childPid?.let {
-                Spacer(Modifier.height(10.dp))
-                Text("Process $it", fontFamily = FontFamily.Monospace)
-            }
-            snapshot.heartbeatSequence?.let {
-                Text("Heartbeat $it", fontFamily = FontFamily.Monospace)
-            }
-            snapshot.bootId?.let {
-                Spacer(Modifier.height(10.dp))
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(accent),
+                )
                 Text(
-                    "Boot ${it.take(8)}",
-                    color = Color(0xFF66716B),
-                    fontFamily = FontFamily.Monospace,
+                    snapshot.phase.name.lowercase().replaceFirstChar { it.titlecase() },
+                    modifier = Modifier.padding(start = 9.dp),
+                    color = UdroidInk,
+                    style = MaterialTheme.typography.titleLarge,
                 )
             }
+            Spacer(Modifier.height(5.dp))
             Text(
-                Instant.ofEpochMilli(snapshot.updatedAtEpochMs).toString(),
-                color = Color(0xFF7A827E),
-                style = MaterialTheme.typography.bodySmall,
+                snapshot.message,
+                color = UdroidMuted,
+                style = MaterialTheme.typography.bodyMedium,
             )
+            snapshot.childPid?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "pid $it",
+                    color = UdroidForest,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            snapshot.heartbeatSequence?.let {
+                Text(
+                    "heartbeat $it",
+                    color = UdroidForest,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            snapshot.bootId?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "boot ${it.take(8)}  ·  ${Instant.ofEpochMilli(snapshot.updatedAtEpochMs)}",
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
     }
 }
@@ -464,28 +528,37 @@ private fun DevicePage(
         modifier =
             Modifier
                 .fillMaxSize()
-                .padding(18.dp),
+                .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
+            Spacer(Modifier.height(16.dp))
             Text(
                 "Compatibility",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineMedium,
             )
+            Spacer(Modifier.height(3.dp))
             Text(
-                "Core uDroid requirements are separate from optional display and " +
-                    "acceleration features.",
-                color = Color(0xFF56635C),
+                "Core requirements and optional device features.",
+                color = UdroidMuted,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
         items(capabilities) { capability ->
             CapabilityCard(capability)
         }
         item {
-            OutlinedButton(onClick = onRefresh) {
-                Text("Run probes again")
-            }
+            Text(
+                "Run probes again  ↻",
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onRefresh)
+                        .padding(vertical = 10.dp, horizontal = 2.dp),
+                color = UdroidForest,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(Modifier.height(18.dp))
         }
     }
 }
@@ -505,9 +578,9 @@ private fun CapabilityCard(capability: CapabilityResult) {
                 if (capability.required) MaterialTheme.colorScheme.error else Color(0xFF8A6A17)
             CapabilityStatus.INFO -> Color(0xFF435E78)
         }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(14.dp),
+    Surface(
+        color = UdroidSurface,
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -520,7 +593,7 @@ private fun CapabilityCard(capability: CapabilityResult) {
             Spacer(Modifier.height(3.dp))
             Text(
                 capability.detail,
-                color = Color(0xFF66716B),
+                color = UdroidMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -536,10 +609,11 @@ private fun LogsPage(
         modifier =
             Modifier
                 .fillMaxSize()
-                .padding(14.dp),
+                .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
+            Spacer(Modifier.height(16.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -547,27 +621,31 @@ private fun LogsPage(
             ) {
                 Text(
                     "Supervisor journal",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium,
                 )
-                OutlinedButton(onClick = onRefresh) {
-                    Text("Refresh")
-                }
+                Text(
+                    "Refresh  ↻",
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onRefresh)
+                            .padding(8.dp),
+                    color = UdroidForest,
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
+            Spacer(Modifier.height(4.dp))
         }
         if (journalLines.isEmpty()) {
             item { Text("No events yet.") }
         } else {
             items(journalLines) { line ->
                 val payload = runCatching { JSONObject(line) }.getOrNull()
-                Card(
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                    shape = RoundedCornerShape(12.dp),
+                Surface(
+                    color = UdroidSurface,
+                    shape = RoundedCornerShape(10.dp),
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)) {
                         Text(
                             payload?.optString("event").orEmpty().ifBlank { "event" },
                             fontFamily = FontFamily.Monospace,
@@ -579,7 +657,7 @@ private fun LogsPage(
                         )
                         Text(
                             payload?.optString("timestamp").orEmpty(),
-                            color = Color(0xFF7A827E),
+                            color = UdroidMuted,
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
