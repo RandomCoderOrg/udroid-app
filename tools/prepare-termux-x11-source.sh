@@ -22,7 +22,7 @@ apply_once() {
         exit 1
     fi
 
-    patch -p1 -f -N -d "$source_dir" -i "$patch_file"
+    patch -p1 -f -N -V none -d "$source_dir" -i "$patch_file"
 }
 
 apply_once "$cpp_root/libxtrans" "$cpp_root/patches/Xtrans.patch"
@@ -35,5 +35,8 @@ apply_once \
     "$repo_root/patches/termux-x11/0001-android-xlocale-include-order.patch"
 apply_once "$cpp_root/xserver" "$cpp_root/patches/xserver.patch"
 apply_once "$cpp_root/libepoxy" "$cpp_root/patches/libepoxy.patch"
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0002-udroid-native-server-entrypoint.patch"
 
 echo "Termux:X11 native source patches are ready."

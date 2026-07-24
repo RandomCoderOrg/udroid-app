@@ -1,0 +1,31 @@
+--- a/cmdentrypoint.c
++++ b/cmdentrypoint.c
+@@ -69,8 +69,7 @@ static Bool detectTracer(void)
+     return pid != 0;
+ }
+ 
+-JNIEXPORT jboolean JNICALL
+-Java_com_termux_x11_CmdEntryPoint_start(JNIEnv *env, __unused jclass cls, jobjectArray args) {
++static jboolean startXServer(JNIEnv *env, jobjectArray args) {
+     pthread_t t;
+     JavaVM* vm = NULL;
+     // execv's argv array is a bit incompatible with Java's String[], so we do some converting here...
+@@ -203,6 +202,18 @@ Java_com_termux_x11_CmdEntryPoint_start(JNIEnv *env, __unused jclass cls, jobje
+     return JNI_TRUE;
+ }
+ 
++JNIEXPORT jboolean JNICALL
++Java_com_termux_x11_CmdEntryPoint_start(
++        JNIEnv *env, __unused jclass cls, jobjectArray args) {
++    return startXServer(env, args);
++}
++
++JNIEXPORT jboolean JNICALL
++Java_org_randomcoder_udroid_x11_X11NativeBridge_start(
++        JNIEnv *env, __unused jclass cls, jobjectArray args) {
++    return startXServer(env, args);
++}
++
+ static Bool sendConfigureNotify(__unused ClientPtr pClient, void *closure) {
+     // This must be done only on X server thread.
+     lorieEvent* e = closure;

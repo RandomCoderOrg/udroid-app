@@ -61,6 +61,32 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `embedded X11 socket is mounted and display is exported`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                x11SocketDirectory = "/data/user/0/udroid/files/runtime/x11/.X11-unix",
+            )
+
+        assertTrue(
+            arguments
+                .toList()
+                .windowed(2)
+                .contains(
+                    listOf(
+                        "-b",
+                        "/data/user/0/udroid/files/runtime/x11/.X11-unix:/tmp/.X11-unix",
+                    ),
+                ),
+        )
+        assertTrue("DISPLAY=:0" in arguments)
+    }
+
+    @Test
     fun `proot loader and temporary storage stay app private`() {
         val environment =
             ProotTerminalLaunchBuilder.buildEnvironment(

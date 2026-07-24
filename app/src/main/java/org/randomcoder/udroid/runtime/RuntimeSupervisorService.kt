@@ -28,6 +28,7 @@ import com.termux.view.TerminalView
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
+import org.randomcoder.udroid.x11.X11ServerController
 import java.util.UUID
 import java.util.Properties
 import java.util.concurrent.CopyOnWriteArraySet
@@ -38,6 +39,7 @@ class RuntimeSupervisorService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ownedSession = AtomicReference<TerminalSession?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
+    private val x11Controller by lazy { X11ServerController(this, app.journal) }
 
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -262,7 +264,14 @@ class RuntimeSupervisorService : Service() {
 
         runCatching {
             val runtime = ProotRuntimeInstaller.install(this)
-            ProotTerminalLaunchBuilder.create(this, runtime)
+            val rootfs = InstalledRootfsResolver.resolve(this)
+            val x11SocketDirectory = x11Controller.start(rootfs, bootId)
+            ProotTerminalLaunchBuilder.create(
+                context = this,
+                runtime = runtime,
+                rootfs = rootfs,
+                x11SocketDirectory = x11SocketDirectory,
+            )
         }.mapCatching { launch ->
             configureTerminalColors()
             val session =
@@ -366,6 +375,7 @@ class RuntimeSupervisorService : Service() {
         val expected = !beforeExit.desiredRunning || beforeExit.phase == RuntimePhase.STOPPING
         val next =
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
+        x11Controller.stop(beforeExit.bootId)
         publishState(next)
         app.journal.append(
             component = "terminal",
@@ -384,6 +394,7 @@ class RuntimeSupervisorService : Service() {
 
     private fun stopRuntime(userRequested: Boolean) {
         val current = app.runtimeState.current()
+        x11Controller.stop(current.bootId)
         val stopping =
             app.runtimeState.update {
                 it.copy(

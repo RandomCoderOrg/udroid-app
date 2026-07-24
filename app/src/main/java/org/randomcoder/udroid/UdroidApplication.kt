@@ -1,11 +1,13 @@
 package org.randomcoder.udroid
 
 import android.app.Application
+import android.os.Build
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
 import org.randomcoder.udroid.runtime.RuntimeStateStore
+import java.io.File
 
 class UdroidApplication : Application() {
     lateinit var runtimeState: RuntimeStateStore
@@ -22,6 +24,8 @@ class UdroidApplication : Application() {
         runtimeState = RuntimeStateStore(this)
         journal = EventJournal(this)
         installState = InstallStateStore(this)
+        if (!isMainProcess()) return
+
         installState.current()?.takeIf { it.cancellable }?.let { interrupted ->
             installState.save(
                 interrupted.copy(
@@ -54,5 +58,19 @@ class UdroidApplication : Application() {
             message = "Android application process created",
             bootId = runtimeState.current().bootId,
         )
+    }
+
+    private fun isMainProcess(): Boolean {
+        val processName =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                getProcessName()
+            } else {
+                runCatching {
+                    File("/proc/self/cmdline")
+                        .readText()
+                        .trimEnd('\u0000')
+                }.getOrNull()
+            }
+        return processName == packageName
     }
 }

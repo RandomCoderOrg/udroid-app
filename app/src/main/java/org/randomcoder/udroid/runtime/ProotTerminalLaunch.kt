@@ -43,6 +43,7 @@ object ProotTerminalLaunchBuilder {
         context: Context,
         runtime: ProotRuntime,
         rootfs: File = InstalledRootfsResolver.resolve(context),
+        x11SocketDirectory: File? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -72,6 +73,7 @@ object ProotTerminalLaunchBuilder {
                 rootfsPath = rootfs.absolutePath,
                 guestHome = guestHome,
                 guestShell = guestShell,
+                x11SocketDirectory = x11SocketDirectory?.absolutePath,
             )
         val environment =
             buildEnvironment(
@@ -95,6 +97,7 @@ object ProotTerminalLaunchBuilder {
         rootfsPath: String,
         guestHome: String,
         guestShell: String,
+        x11SocketDirectory: String? = null,
     ): Array<String> =
         buildList {
             // TerminalSession passes this complete vector to execvp(), including argv[0].
@@ -115,6 +118,10 @@ object ProotTerminalLaunchBuilder {
                 add("-b")
                 add(path)
             }
+            if (x11SocketDirectory != null) {
+                add("-b")
+                add("$x11SocketDirectory:/tmp/.X11-unix")
+            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
@@ -126,6 +133,7 @@ object ProotTerminalLaunchBuilder {
             add("COLORTERM=truecolor")
             add("LANG=C.UTF-8")
             add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            if (x11SocketDirectory != null) add("DISPLAY=:0")
             add(guestShell)
             if (guestShell.endsWith("bash")) add("--login")
         }.toTypedArray()

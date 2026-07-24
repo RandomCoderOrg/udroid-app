@@ -30,10 +30,11 @@ inside uDroid with NDK `28.2.13676358` for `arm64-v8a`, `armeabi-v7a`, and
 Activity, preferences Activity, receiver, and key-interceptor service, leaving
 uDroid as the sole application and lifecycle owner.
 
-The source import does not yet make X11 runnable. The next checkpoint adds the
-supervised server process and proves `server-start` and `socket-ready` without
-using the old shell loader, hidden Android APIs, broadcasts, or a separate
-Termux:X11 installation.
+The supervised server process now starts the native X server directly through
+a small uDroid JNI entrypoint. It does not use the old shell loader, hidden
+Android APIs, broadcasts, a TCP listener, or a separate Termux:X11
+installation. The next boundary is attaching the renderer channel and Android
+surface without tying server lifetime to the Activity.
 
 ## Runtime ownership
 
@@ -115,6 +116,38 @@ RSS/PSS, CPU time, frame/present counts, and failure reason.
 9. `lightweight-session`: first desktop, initially without composition.
 
 GNOME, KDE, browsers, and games remain later macro probes.
+
+## Pixel 6a runtime evidence
+
+The 2026-07-24 Tensor G1 device run passed the first two gates and an additional
+wire-protocol check:
+
+| Probe | Result |
+| --- | --- |
+| Process isolation | `org.randomcoder.udroid:x11` owned the X server |
+| Server socket | app-private `.X11-unix/X0`, mode `srwxrwxrwx` |
+| Protocol setup | X11 `11.0` connection setup completed |
+| Cold Binder/process setup | 708 ms |
+| Native Xorg to protocol-ready | 117 ms |
+| Total request to protocol-ready | 825 ms |
+| Guest bridge | same socket bind-mounted at `/tmp/.X11-unix`, `DISPLAY=:0` |
+| Stop ownership | uDroid removed both its PRoot guest and `:x11` process |
+
+```mermaid
+xychart-beta
+    title "Cold embedded X11 startup on Pixel 6a"
+    x-axis ["Binder + process", "Native Xorg", "End to end"]
+    y-axis "Milliseconds" 0 --> 900
+    bar [708, 117, 825]
+```
+
+The protocol probe deliberately sends the 12-byte X11 connection prefix and
+parses the eight-byte setup response. Merely connecting to the Unix socket is
+not considered ready; that weaker test initially hid a probe-side
+`LocalSocket` ordering bug.
+
+No pixels were presented in this checkpoint. `test-pattern`, surface cycling,
+input, Present, and desktop gates remain untested.
 
 ## AOSP TerminalApp assessment
 
