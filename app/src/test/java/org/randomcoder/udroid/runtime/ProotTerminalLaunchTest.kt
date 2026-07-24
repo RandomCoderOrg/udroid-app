@@ -1,0 +1,79 @@
+package org.randomcoder.udroid.runtime
+
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ProotTerminalLaunchTest {
+    @Test
+    fun `linker remains argv zero and starts proot`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "/system/bin/linker64",
+                prootPath = "/data/user/0/udroid/files/runtime/proot",
+                rootfsPath = "/data/user/0/udroid/files/rootfs/jammy",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+            )
+
+        assertEquals("/system/bin/linker64", arguments[0])
+        assertEquals("/data/user/0/udroid/files/runtime/proot", arguments[1])
+        assertTrue("--rootfs=/data/user/0/udroid/files/rootfs/jammy" in arguments)
+        assertTrue("--cwd=/root" in arguments)
+        assertTrue(arguments.toList().windowed(2).contains(listOf("/usr/bin/env", "-i")))
+        assertArrayEquals(
+            arrayOf("/bin/bash", "--login"),
+            arguments.takeLast(2).toTypedArray(),
+        )
+    }
+
+    @Test
+    fun `all Android and guest bridge mounts are explicit`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/",
+                guestShell = "/bin/sh",
+            )
+
+        val bindings =
+            arguments
+                .toList()
+                .windowed(2)
+                .filter { it[0] == "-b" }
+                .map { it[1] }
+
+        assertEquals(
+            listOf(
+                "/system",
+                "/apex",
+                "/dev",
+                "/proc",
+                "/sys",
+                "/linkerconfig/ld.config.txt",
+            ),
+            bindings,
+        )
+        assertEquals("/bin/sh", arguments.last())
+    }
+
+    @Test
+    fun `proot loader and temporary storage stay app private`() {
+        val environment =
+            ProotTerminalLaunchBuilder.buildEnvironment(
+                androidHome = "/data/user/0/udroid/files",
+                loaderPath = "/data/user/0/udroid/files/runtime/libproot-loader.so",
+                temporaryDirectory = "/data/user/0/udroid/cache/proot",
+            )
+
+        assertTrue("ANDROID_ROOT=/system" in environment)
+        assertTrue(
+            "PROOT_LOADER=/data/user/0/udroid/files/runtime/libproot-loader.so" in environment,
+        )
+        assertTrue("PROOT_TMP_DIR=/data/user/0/udroid/cache/proot" in environment)
+        assertTrue("TMPDIR=/data/user/0/udroid/cache/proot" in environment)
+    }
+}

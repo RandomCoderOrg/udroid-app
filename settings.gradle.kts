@@ -16,3 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "uDroid"
 include(":app")
+include(":terminal-emulator")
+include(":terminal-view")
+project(":terminal-emulator").projectDir = file("third_party/termux/terminal-emulator")
+project(":terminal-view").projectDir = file("third_party/termux/terminal-view")

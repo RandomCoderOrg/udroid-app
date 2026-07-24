@@ -26,6 +26,9 @@ not a uDroid dependency or compatibility requirement.
 - Checkpoint 4: cancellable PRoot extraction into disposable staging, Android
   compatibility files, a guest-command health gate, and atomic rootfs
   activation.
+- Checkpoint 5: a service-owned Termux PTY and terminal emulator, an
+  interactive Jammy login shell, clipboard/IME/extra-key input, live resize,
+  Activity reattachment, and bounded terminal history.
 
 Selecting an image does not start a download. The review screen persists across
 Activity and process recreation, and the archive transfer begins only after
@@ -33,9 +36,11 @@ Activity and process recreation, and the archive transfer begins only after
 failure, and is deleted only after the installed rootfs passes its health
 check and is atomically activated.
 
-PRoot is now bundled for the supported Android ABIs, and a selected rootfs can
-be installed. No X server, interactive PTY, or GPU driver is bundled yet. The
-next core boundary is a supervised interactive distro session.
+PRoot and an interactive terminal are now bundled for the supported Android
+ABIs. The terminal session belongs to the foreground service rather than the
+Activity, so navigating away and returning reattaches to the same PTY and
+transcript. No X server or GPU driver is bundled yet. The next core boundary is
+multi-session lifecycle and a desktop-session contract.
 
 See [Checkpoint 2: distro and installation experience](docs/CHECKPOINT_2_INSTALL_EXPERIENCE.md).
 The visual rules are maintained in
@@ -44,6 +49,8 @@ The transfer and integrity contract is documented in
 [Checkpoint 3: resumable image core](docs/CHECKPOINT_3_DOWNLOAD_CORE.md).
 Extraction, recovery, and activation are documented in
 [Checkpoint 4: recoverable rootfs activation](docs/CHECKPOINT_4_ROOTFS_ACTIVATION.md).
+The terminal ownership and PTY contract are documented in
+[Checkpoint 5: supervised interactive terminal](docs/CHECKPOINT_5_INTERACTIVE_TERMINAL.md).
 
 ## Build
 
@@ -77,11 +84,13 @@ Tensor-first product framing are superseded by this repository.
 
 The uDroid-owned Android shell is MIT-licensed, matching
 `fs-manager-udroid`. Packaged PRoot is GPL-2.0 and statically links talloc,
-whose library is LGPL-3.0-or-later. Their exact source versions, checksums,
-local patch, and build commands are recorded in `tools/`; binary releases must
-also make complete corresponding source and license texts available. See
+whose library is LGPL-3.0-or-later. The vendored Termux terminal emulator and
+view are the Apache-2.0 components identified by Termux's upstream license
+exception. Exact source versions, checksums, local changes, and build commands
+are recorded in `tools/` and `third_party/`; binary releases must also provide
+the applicable corresponding source and license texts. See
 [Third-party notices](THIRD_PARTY_NOTICES.md).
 
-Future imports retain their own licenses. Distributing a combined build
-containing GPLv3 Termux or Termux:X11 code must satisfy GPLv3 for that combined
-work and include corresponding source.
+Future imports retain their own licenses. Importing other GPLv3 Termux or
+Termux:X11 code would change the combined work's distribution obligations and
+must be reviewed separately.

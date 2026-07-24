@@ -2,12 +2,15 @@ package org.randomcoder.udroid
 
 import android.Manifest
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Bundle
-import android.os.Build
 import android.content.pm.PackageManager
+import android.content.ServiceConnection
+import android.os.Build
+import android.os.Bundle
+import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -17,12 +20,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +69,7 @@ import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.ui.DistroCataloguePage
 import org.randomcoder.udroid.ui.InstallExperiencePage
+import org.randomcoder.udroid.ui.InteractiveTerminalPage
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidForest
 import org.randomcoder.udroid.ui.UdroidInk
@@ -84,6 +91,28 @@ class MainActivity : ComponentActivity() {
     private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
     private var installProgress by mutableStateOf<InstallProgress?>(null)
     private var showInstallTerminal by mutableStateOf(false)
+    private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
+    private var runtimeServiceBound = false
+
+    private val runtimeServiceConnection =
+        object : ServiceConnection {
+            override fun onServiceConnected(
+                name: ComponentName?,
+                binder: IBinder?,
+            ) {
+                val connectedService =
+                    (binder as? RuntimeSupervisorService.RuntimeBinder)?.service()
+                runtimeService = connectedService
+                refreshFromDisk()
+                if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
+                    RuntimeSupervisorService.start(this@MainActivity)
+                }
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                runtimeService = null
+            }
+        }
 
     private val stateReceiver =
         object : BroadcastReceiver() {
@@ -107,10 +136,12 @@ class MainActivity : ComponentActivity() {
                     catalogueState = catalogueState,
                     installProgress = installProgress,
                     showInstallTerminal = showInstallTerminal,
+                    runtimeService = runtimeService,
                     onPageSelected = { selectedPage = it },
                     onStart = {
                         ensureNotificationPermission()
                         RuntimeSupervisorService.start(this)
+                        selectedPage = Page.TERMINAL
                     },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
@@ -147,10 +178,21 @@ class MainActivity : ComponentActivity() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        runtimeServiceBound =
+            bindService(
+                Intent(this, RuntimeSupervisorService::class.java),
+                runtimeServiceConnection,
+                Context.BIND_AUTO_CREATE,
+            )
         refreshFromDisk()
     }
 
     override fun onStop() {
+        if (runtimeServiceBound) {
+            unbindService(runtimeServiceConnection)
+            runtimeServiceBound = false
+            runtimeService = null
+        }
         unregisterReceiver(stateReceiver)
         super.onStop()
     }
@@ -218,6 +260,7 @@ class MainActivity : ComponentActivity() {
 private enum class Page(val label: String) {
     HOME("Home"),
     DISTROS("Linux"),
+    TERMINAL("Terminal"),
     DEVICE("Device"),
     LOGS("Logs"),
 }
@@ -231,6 +274,7 @@ private fun UdroidApp(
     catalogueState: DistroCatalogState,
     installProgress: InstallProgress?,
     showInstallTerminal: Boolean,
+    runtimeService: RuntimeSupervisorService?,
     onPageSelected: (Page) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -247,7 +291,12 @@ private fun UdroidApp(
         modifier = Modifier.fillMaxSize(),
         color = UdroidCanvas,
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+        ) {
             Row(
                 modifier =
                     Modifier
@@ -315,6 +364,13 @@ private fun UdroidApp(
                             state = catalogueState,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
+                        )
+                    Page.TERMINAL ->
+                        InteractiveTerminalPage(
+                            snapshot = snapshot,
+                            service = runtimeService,
+                            onStart = onStart,
+                            onStop = onStop,
                         )
                     Page.DEVICE -> DevicePage(capabilities, onRefresh)
                     Page.LOGS -> LogsPage(journalLines, onRefresh)
@@ -422,12 +478,12 @@ private fun HomePage(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Runtime probe",
+                        "Linux terminal",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Test the supervisor with a small packaged process before a distro is installed.",
+                        "Start the installed distro in a supervised interactive PTY.",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -443,7 +499,7 @@ private fun HomePage(
                                     snapshot.phase != RuntimePhase.STARTING,
                             shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text("Start probe")
+                            Text("Open terminal")
                         }
                         OutlinedButton(
                             onClick = onStop,

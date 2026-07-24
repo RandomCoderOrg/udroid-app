@@ -6,29 +6,127 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Binder
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
+import com.termux.terminal.TerminalSession
+import com.termux.terminal.TerminalSessionClient
+import com.termux.view.TerminalView
 import org.randomcoder.udroid.MainActivity
-import org.randomcoder.udroid.R
 import org.randomcoder.udroid.UdroidApplication
-import java.io.BufferedReader
-import java.io.IOException
-import java.io.InputStreamReader
+import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import java.util.UUID
-import java.util.concurrent.Executors
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicReference
 
 class RuntimeSupervisorService : Service() {
-    private val workerPool = Executors.newCachedThreadPool()
-    private val ownedProcess = AtomicReference<Process?>(null)
+    private val binder = RuntimeBinder()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val ownedSession = AtomicReference<TerminalSession?>(null)
+    private val attachedViews = CopyOnWriteArraySet<TerminalView>()
 
     private val app: UdroidApplication
         get() = application as UdroidApplication
+
+    private val terminalClient =
+        object : TerminalSessionClient {
+            override fun onTextChanged(changedSession: TerminalSession) {
+                attachedViews
+                    .filter { it.mTermSession === changedSession }
+                    .forEach(TerminalView::onScreenUpdated)
+            }
+
+            override fun onTitleChanged(changedSession: TerminalSession) {
+                onTextChanged(changedSession)
+            }
+
+            override fun onSessionFinished(finishedSession: TerminalSession) {
+                handleSessionFinished(finishedSession)
+            }
+
+            override fun onCopyTextToClipboard(
+                session: TerminalSession,
+                text: String,
+            ) {
+                getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("uDroid terminal", text))
+            }
+
+            override fun onPasteTextFromClipboard(session: TerminalSession) {
+                val clipboard = getSystemService(ClipboardManager::class.java)
+                val text =
+                    clipboard.primaryClip
+                        ?.getItemAt(0)
+                        ?.coerceToText(this@RuntimeSupervisorService)
+                        ?.toString()
+                        .orEmpty()
+                if (text.isNotEmpty()) session.write(text)
+            }
+
+            override fun onBell(session: TerminalSession) = Unit
+
+            override fun onColorsChanged(session: TerminalSession) {
+                onTextChanged(session)
+            }
+
+            override fun onTerminalCursorStateChange(state: Boolean) {
+                attachedViews.forEach(TerminalView::invalidate)
+            }
+
+            override fun getTerminalCursorStyle(): Int? = null
+
+            override fun logError(
+                tag: String,
+                message: String,
+            ) = logTerminal(Log.ERROR, tag, message)
+
+            override fun logWarn(
+                tag: String,
+                message: String,
+            ) = logTerminal(Log.WARN, tag, message)
+
+            override fun logInfo(
+                tag: String,
+                message: String,
+            ) = logTerminal(Log.INFO, tag, message)
+
+            override fun logDebug(
+                tag: String,
+                message: String,
+            ) = logTerminal(Log.DEBUG, tag, message)
+
+            override fun logVerbose(
+                tag: String,
+                message: String,
+            ) = logTerminal(Log.VERBOSE, tag, message)
+
+            override fun logStackTraceWithMessage(
+                tag: String,
+                message: String,
+                error: Exception,
+            ) {
+                Log.e(tag, message, error)
+            }
+
+            override fun logStackTrace(
+                tag: String,
+                error: Exception,
+            ) {
+                Log.e(tag, error.message, error)
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
@@ -52,7 +150,7 @@ class RuntimeSupervisorService : Service() {
 
         return when {
             action == ACTION_START_RUNTIME -> {
-                startForeground(NOTIFICATION_ID, notification("Starting uDroid runtime…"))
+                startForeground(NOTIFICATION_ID, notification("Starting Linux terminal…"))
                 startRuntime()
                 START_STICKY
             }
@@ -63,12 +161,12 @@ class RuntimeSupervisorService : Service() {
             }
 
             action == null && persisted.desiredRunning -> {
-                startForeground(NOTIFICATION_ID, notification("Recovering uDroid runtime…"))
+                startForeground(NOTIFICATION_ID, notification("Recovering Linux terminal…"))
                 app.journal.append(
                     component = "supervisor",
                     severity = "warning",
                     event = "sticky_restart",
-                    message = "Android recreated the supervisor for a desired running state",
+                    message = "Android recreated the desired Linux terminal session",
                     bootId = persisted.bootId,
                 )
                 startRuntime()
@@ -82,9 +180,11 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        attachedViews.clear()
+        mainHandler.removeCallbacksAndMessages(null)
         val snapshot = app.runtimeState.current()
         app.journal.append(
             component = "supervisor",
@@ -94,24 +194,49 @@ class RuntimeSupervisorService : Service() {
             bootId = snapshot.bootId,
             fields = mapOf("desired_running" to snapshot.desiredRunning),
         )
-        workerPool.shutdownNow()
         super.onDestroy()
     }
 
+    fun currentTerminalSession(): TerminalSession? = ownedSession.get()
+
+    fun attachTerminalView(view: TerminalView) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "Terminal views must attach on the main thread"
+        }
+        attachedViews += view
+        ownedSession.get()?.let { session ->
+            if (view.mTermSession !== session) {
+                view.attachSession(session)
+            }
+            view.onScreenUpdated()
+        }
+    }
+
+    fun detachTerminalView(view: TerminalView) {
+        attachedViews -= view
+    }
+
+    fun writeToTerminal(text: String) {
+        ownedSession.get()?.takeIf(TerminalSession::isRunning)?.write(text)
+    }
+
     private fun startRuntime() {
-        val existing = ownedProcess.get()
-        if (existing?.isAlive == true) {
+        val existing = ownedSession.get()
+        if (existing?.isRunning == true && existing.pid > 0) {
             publishState(
                 app.runtimeState.update {
                     it.copy(
                         phase = RuntimePhase.RUNNING,
                         desiredRunning = true,
-                        message = "Development runtime probe is already running",
-                        childPid = it.childPid,
+                        message = "Linux terminal is already running · PID ${existing.pid}",
+                        childPid = existing.pid.toLong(),
                     )
                 },
             )
             return
+        }
+        if (existing != null) {
+            ownedSession.compareAndSet(existing, null)
         }
 
         val bootId = UUID.randomUUID().toString()
@@ -121,173 +246,120 @@ class RuntimeSupervisorService : Service() {
                     phase = RuntimePhase.STARTING,
                     desiredRunning = true,
                     bootId = bootId,
-                    message = "Preparing packaged runtime probe",
+                    message = "Preparing the installed Linux terminal",
                 )
             },
         )
         app.journal.append(
             component = "supervisor",
             severity = "info",
-            event = "runtime_start_requested",
-            message = "Starting a new supervised runtime generation",
+            event = "terminal_start_requested",
+            message = "Starting a supervised PRoot terminal generation",
             bootId = bootId,
         )
 
-        workerPool.execute {
-            runCatching {
-                val executable = NativeProbeInstaller.install(this)
-                ProcessBuilder(AndroidExecutableCommand.create(executable, bootId))
-                    .redirectErrorStream(true)
-                    .start()
-            }.onSuccess { process ->
-                if (!ownedProcess.compareAndSet(null, process)) {
-                    process.destroy()
-                    app.journal.append(
-                        component = "supervisor",
-                        severity = "warning",
-                        event = "duplicate_process_rejected",
-                        message = "A second runtime process lost the ownership race",
-                        bootId = bootId,
-                    )
-                    return@onSuccess
-                }
-
-                val running =
-                    app.runtimeState.update {
-                        it.copy(
-                            phase = RuntimePhase.RUNNING,
-                            desiredRunning = true,
-                            message = "Supervised uDroid process started",
-                            childPid = null,
-                        )
-                    }
-                publishState(running)
-                updateNotification("uDroid runtime probe is running")
-                app.journal.append(
-                    component = "runtime-probe",
-                    severity = "info",
-                    event = "process_started",
-                    message = "Packaged native child process started",
-                    bootId = bootId,
+        runCatching {
+            val runtime = ProotRuntimeInstaller.install(this)
+            ProotTerminalLaunchBuilder.create(this, runtime)
+        }.mapCatching { launch ->
+            val session =
+                TerminalSession(
+                    launch.executable,
+                    launch.workingDirectory,
+                    launch.arguments,
+                    launch.environment,
+                    TRANSCRIPT_ROWS,
+                    terminalClient,
                 )
-                monitorProcess(process, bootId)
-            }.onFailure { error ->
-                val failed =
-                    app.runtimeState.update {
-                        it.copy(
-                            phase = RuntimePhase.CRASHED,
-                            desiredRunning = false,
-                            message = error.message ?: error.javaClass.simpleName,
-                            childPid = null,
-                        )
-                    }
-                publishState(failed)
-                app.journal.append(
-                    component = "supervisor",
-                    severity = "error",
-                    event = "runtime_start_failed",
-                    message = failed.message,
-                    bootId = bootId,
-                    fields = mapOf("exception" to error.javaClass.name),
-                )
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+            session.mSessionName = launch.rootfs.name
+            check(ownedSession.compareAndSet(null, session)) {
+                "Another terminal session won the ownership race"
             }
+            try {
+                session.updateSize(
+                    DEFAULT_COLUMNS,
+                    DEFAULT_ROWS,
+                    DEFAULT_CELL_WIDTH_PX,
+                    DEFAULT_CELL_HEIGHT_PX,
+                )
+            } catch (error: Throwable) {
+                ownedSession.compareAndSet(session, null)
+                if (session.pid > 0) session.finishIfRunning()
+                throw error
+            }
+            check(session.pid > 0) { "Termux did not return a terminal child PID" }
+            launch to session
+        }.onSuccess { (launch, session) ->
+            attachedViews.forEach { view ->
+                view.attachSession(session)
+                view.onScreenUpdated()
+            }
+            val running =
+                app.runtimeState.update {
+                    it.copy(
+                        phase = RuntimePhase.RUNNING,
+                        desiredRunning = true,
+                        message = "${launch.rootfs.name} terminal is running · PID ${session.pid}",
+                        childPid = session.pid.toLong(),
+                    )
+                }
+            publishState(running)
+            updateNotification("Linux terminal is running")
+            app.journal.append(
+                component = "terminal",
+                severity = "info",
+                event = "session_started",
+                message = "Interactive PRoot terminal started",
+                bootId = bootId,
+                fields =
+                    mapOf(
+                        "pid" to session.pid,
+                        "rootfs" to launch.rootfs.name,
+                        "terminal" to "termux-v0.118.3",
+                    ),
+            )
+        }.onFailure { error ->
+            val failed =
+                app.runtimeState.update {
+                    it.copy(
+                        phase = RuntimePhase.CRASHED,
+                        desiredRunning = false,
+                        message = error.message ?: error.javaClass.simpleName,
+                        childPid = null,
+                    )
+                }
+            publishState(failed)
+            app.journal.append(
+                component = "supervisor",
+                severity = "error",
+                event = "terminal_start_failed",
+                message = failed.message,
+                bootId = bootId,
+                fields = mapOf("exception" to error.javaClass.name),
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
-    private fun monitorProcess(
-        process: Process,
-        bootId: String,
-    ) {
-        var lastSequence: Long? = null
-        try {
-            BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-                while (true) {
-                    val line = reader.readLine() ?: break
-                    val payload = runCatching { JSONObject(line) }.getOrNull()
-                    val event = payload?.optString("event").orEmpty().ifBlank { "child_output" }
-                    if (event == "probe_started") {
-                        val childPid = payload?.optLong("pid")?.takeIf { it > 0 }
-                        val identified =
-                            app.runtimeState.update {
-                                it.copy(
-                                    message =
-                                        childPid?.let { pid ->
-                                            "Supervised uDroid process is healthy · PID $pid"
-                                        } ?: "Supervised uDroid process is healthy",
-                                    childPid = childPid,
-                                )
-                            }
-                        publishState(identified)
-                        updateNotification(identified.message)
-                    } else if (event == "heartbeat") {
-                        lastSequence = payload?.optLong("sequence")
-                        if (
-                            lastSequence != null &&
-                            lastSequence!! % HEARTBEAT_UI_INTERVAL == 0L
-                        ) {
-                            publishState(
-                                app.runtimeState.update {
-                                    it.copy(
-                                        message = "Runtime heartbeat $lastSequence",
-                                        heartbeatSequence = lastSequence,
-                                    )
-                                },
-                            )
-                        }
-                    }
-                    app.journal.append(
-                        component = "runtime-probe",
-                        severity = "debug",
-                        event = event,
-                        message = line,
-                        bootId = bootId,
-                        fields = mapOf("sequence" to lastSequence),
-                    )
-                }
-            }
-        } catch (error: IOException) {
-            app.journal.append(
-                component = "runtime-probe",
-                severity = if (app.runtimeState.current().desiredRunning) "warning" else "debug",
-                event = "output_stream_closed",
-                message = error.message ?: "Runtime output stream closed",
-                bootId = bootId,
-            )
-        }
-
-        val exitCode =
-            try {
-                process.waitFor()
-            } catch (_: InterruptedException) {
-                if (process.isAlive) process.destroyForcibly()
-                val interruptedExitCode =
-                    runCatching { process.exitValue() }.getOrDefault(-1)
-                Thread.currentThread().interrupt()
-                interruptedExitCode
-            }
-        val wasOwner = ownedProcess.compareAndSet(process, null)
-        if (!wasOwner) return
+    private fun handleSessionFinished(session: TerminalSession) {
+        if (!ownedSession.compareAndSet(session, null)) return
+        attachedViews.forEach(TerminalView::onScreenUpdated)
+        val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
         val expected = !beforeExit.desiredRunning || beforeExit.phase == RuntimePhase.STOPPING
         val next =
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
         publishState(next)
         app.journal.append(
-            component = "runtime-probe",
+            component = "terminal",
             severity = if (expected) "info" else "error",
-            event = if (expected) "process_stopped" else "process_crashed",
+            event = if (expected) "session_stopped" else "session_crashed",
             message = next.message,
-            bootId = bootId,
-            fields =
-                mapOf(
-                    "exit_code" to exitCode,
-                    "last_heartbeat" to lastSequence,
-                ),
+            bootId = beforeExit.bootId,
+            fields = mapOf("exit_code" to exitCode),
         )
         updateNotification(next.message)
-
         if (expected) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -303,7 +375,7 @@ class RuntimeSupervisorService : Service() {
                     desiredRunning = false,
                     message =
                         if (userRequested) {
-                            "Stopping the supervised runtime"
+                            "Stopping the Linux terminal"
                         } else {
                             "Supervisor is shutting down"
                         },
@@ -313,51 +385,62 @@ class RuntimeSupervisorService : Service() {
         app.journal.append(
             component = "supervisor",
             severity = "info",
-            event = "runtime_stop_requested",
+            event = "terminal_stop_requested",
             message = stopping.message,
             bootId = current.bootId,
             fields = mapOf("user_requested" to userRequested),
         )
 
-        val process = ownedProcess.get()
-        if (process == null || !process.isAlive) {
-            ownedProcess.compareAndSet(process, null)
-            val stopped =
-                app.runtimeState.update {
-                    it.copy(
-                        phase = RuntimePhase.STOPPED,
-                        desiredRunning = false,
-                        message = "uDroid runtime is stopped",
-                        childPid = null,
-                        heartbeatSequence = null,
-                    )
-                }
-            publishState(stopped)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        val session = ownedSession.get()
+        if (session == null || !session.isRunning || session.pid < 1) {
+            ownedSession.compareAndSet(session, null)
+            publishStoppedState()
             return
         }
 
-        process.destroy()
-        workerPool.execute {
-            try {
-                Thread.sleep(GRACEFUL_STOP_TIMEOUT_MS)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return@execute
-            }
-            if (process.isAlive && ownedProcess.get() === process) {
-                app.journal.append(
-                    component = "supervisor",
-                    severity = "warning",
-                    event = "runtime_force_stop",
-                    message = "Runtime ignored SIGTERM; forcing the owned process to stop",
-                    bootId = current.bootId,
-                    fields = mapOf("child_pid" to current.childPid),
-                )
-                process.destroyForcibly()
-            }
+        try {
+            Os.kill(session.pid, OsConstants.SIGTERM)
+        } catch (error: ErrnoException) {
+            app.journal.append(
+                component = "supervisor",
+                severity = "warning",
+                event = "terminal_sigterm_failed",
+                message = error.message ?: "Could not signal the terminal",
+                bootId = current.bootId,
+            )
         }
+        mainHandler.postDelayed(
+            {
+                if (ownedSession.get() === session && session.isRunning) {
+                    app.journal.append(
+                        component = "supervisor",
+                        severity = "warning",
+                        event = "terminal_force_stop",
+                        message = "Terminal ignored SIGTERM; forcing the owned session to stop",
+                        bootId = current.bootId,
+                        fields = mapOf("child_pid" to session.pid),
+                    )
+                    session.finishIfRunning()
+                }
+            },
+            GRACEFUL_STOP_TIMEOUT_MS,
+        )
+    }
+
+    private fun publishStoppedState() {
+        val stopped =
+            app.runtimeState.update {
+                it.copy(
+                    phase = RuntimePhase.STOPPED,
+                    desiredRunning = false,
+                    message = "uDroid terminal is stopped",
+                    childPid = null,
+                    heartbeatSequence = null,
+                )
+            }
+        publishState(stopped)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun publishState(snapshot: RuntimeSnapshot) {
@@ -369,17 +452,25 @@ class RuntimeSupervisorService : Service() {
         )
     }
 
+    private fun logTerminal(
+        priority: Int,
+        tag: String,
+        message: String,
+    ) {
+        Log.println(priority, tag, message)
+    }
+
     private fun createNotificationChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                NOTIFICATION_CHANNEL,
-                "uDroid runtime",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "Runtime lifecycle and recovery status"
-            },
-        )
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(
+                NotificationChannel(
+                    NOTIFICATION_CHANNEL,
+                    "uDroid runtime",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = "Interactive Linux terminal lifecycle"
+                },
+            )
     }
 
     private fun notification(text: String): Notification {
@@ -401,7 +492,7 @@ class RuntimeSupervisorService : Service() {
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("uDroid runtime")
+            .setContentTitle("uDroid terminal")
             .setContentText(text)
             .setContentIntent(openIntent)
             .setOngoing(true)
@@ -421,6 +512,10 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
+    inner class RuntimeBinder : Binder() {
+        fun service(): RuntimeSupervisorService = this@RuntimeSupervisorService
+    }
+
     companion object {
         const val ACTION_STATE_CHANGED = "org.randomcoder.udroid.action.STATE_CHANGED"
         const val EXTRA_PHASE = "phase"
@@ -433,7 +528,11 @@ class RuntimeSupervisorService : Service() {
         private const val NOTIFICATION_CHANNEL = "runtime-supervisor"
         private const val NOTIFICATION_ID = 1001
         private const val GRACEFUL_STOP_TIMEOUT_MS = 3_000L
-        private const val HEARTBEAT_UI_INTERVAL = 2L
+        private const val TRANSCRIPT_ROWS = 8_000
+        private const val DEFAULT_COLUMNS = 80
+        private const val DEFAULT_ROWS = 24
+        private const val DEFAULT_CELL_WIDTH_PX = 10
+        private const val DEFAULT_CELL_HEIGHT_PX = 20
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(

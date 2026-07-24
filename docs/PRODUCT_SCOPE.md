@@ -13,7 +13,8 @@ Every long-running operation is designed for both ordinary and expert users:
 - The default surface answers what is happening, how far it has progressed,
   and whether the user needs to act.
 - **Show terminal** opens a bottom drawer with the exact technical event
-  stream and eventually an interactive PTY when an operation supports one.
+  stream for an operation. The dedicated **Terminal** surface attaches to the
+  running distro's interactive PTY.
 - The friendly view and terminal are projections of one service-owned state
   machine. They must never run separate commands or disagree about status.
 
@@ -37,7 +38,8 @@ flowchart TB
     App --> Installer["Resumable rootfs installer"]
     App --> Supervisor["Runtime supervisor"]
     Supervisor --> Proot["PRoot + distro session"]
-    App --> Shell["Terminal session"]
+    Supervisor --> Shell["Termux PTY session"]
+    Shell --> App
     App --> X11["Optional graphical session"]
     Installer --> Events["Shared operation events"]
     Events --> Friendly["Friendly progress UI"]

@@ -143,12 +143,10 @@ Every checkpoint build must continue to pass:
 ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-## Next checkpoint
+## Completed by Checkpoint 5
 
-Use the activated rootfs as a real runtime:
-
-1. define the distro session command and bind contract;
-2. supervise PRoot as the owned child instead of the tiny probe;
-3. attach an interactive PTY and terminal surface;
-4. implement graceful stop and stale-session recovery;
-5. keep graphical sessions and hardware profiles optional.
+[Checkpoint 5](CHECKPOINT_5_INTERACTIVE_TERMINAL.md) now consumes the
+activated rootfs through an explicit bind contract, supervises PRoot as the
+owned terminal child, attaches Termux's PTY and terminal surface, and provides
+graceful stop plus stale-session recovery. Graphical sessions and hardware
+profiles remain optional future layers.

@@ -10,13 +10,13 @@ object AndroidExecutableCommand {
     ): List<String> {
         require(executable.isAbsolute) { "Executable path must be absolute" }
         return if (Build.VERSION.SDK_INT >= 29) {
-            listOf(systemLinker(), executable.absolutePath) + arguments
+            listOf(systemLinkerPath(), executable.absolutePath) + arguments
         } else {
             listOf(executable.absolutePath) + arguments
         }
     }
 
-    private fun systemLinker(): String =
+    fun systemLinkerPath(): String =
         if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) {
             "/system/bin/linker64"
         } else {
