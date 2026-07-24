@@ -30,6 +30,9 @@ import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallationSelection
 import org.randomcoder.udroid.install.InstallerService
+import org.randomcoder.udroid.linuxapps.DesktopApplicationScanner
+import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.InstalledRootfsResolver
@@ -52,6 +55,10 @@ class MainActivity : ComponentActivity() {
     private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
     private var installProgress by mutableStateOf<InstallProgress?>(null)
     private var installedRootfsName by mutableStateOf<String?>(null)
+    private var linuxApplicationsState by
+        mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
+    private var linuxApplicationMessage by mutableStateOf<String?>(null)
+    private var pendingLinuxApplication: LinuxApplication? = null
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
@@ -66,6 +73,7 @@ class MainActivity : ComponentActivity() {
                     (binder as? RuntimeSupervisorService.RuntimeBinder)?.service()
                 runtimeService = connectedService
                 refreshFromDisk()
+                launchPendingLinuxApplication()
                 if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
                     RuntimeSupervisorService.start(this@MainActivity)
                 }
@@ -99,6 +107,8 @@ class MainActivity : ComponentActivity() {
                     catalogueState = catalogueState,
                     installProgress = installProgress,
                     installedRootfsName = installedRootfsName,
+                    linuxApplicationsState = linuxApplicationsState,
+                    linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
                     runtimeService = runtimeService,
                     onDestinationSelected = ::selectDestination,
@@ -124,11 +134,14 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onRetryDownload = { startSelectedDownload() },
+                    onRefreshLinuxApplications = { loadLinuxApplications() },
+                    onLaunchLinuxApplication = { launchLinuxApplication(it) },
                 )
             }
         }
         refreshAll()
         loadCatalogue()
+        loadLinuxApplications()
     }
 
     override fun onStart() {
@@ -164,6 +177,7 @@ class MainActivity : ComponentActivity() {
     private fun selectDestination(destination: UdroidDestination) {
         selectedDestination = destination
         applySystemBars(destination)
+        if (destination == UdroidDestination.APPS) loadLinuxApplications()
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
@@ -201,6 +215,7 @@ class MainActivity : ComponentActivity() {
             runCatching { InstalledRootfsResolver.resolve(this).name }
                 .getOrNull()
         journalLines = app.journal.tail()
+        launchPendingLinuxApplication()
     }
 
     private fun loadCatalogue() {
@@ -231,6 +246,76 @@ class MainActivity : ComponentActivity() {
     private fun startSelectedDownload() {
         ensureNotificationPermission()
         installProgress?.distro?.let { InstallerService.start(this, it) }
+    }
+
+    private fun loadLinuxApplications() {
+        linuxApplicationsState = LinuxApplicationsState.Loading
+        lifecycleScope.launch {
+            linuxApplicationsState =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val rootfs = InstalledRootfsResolver.resolve(this@MainActivity)
+                        LinuxApplicationsState.Ready(
+                            rootfsName = rootfs.name,
+                            result = DesktopApplicationScanner().scan(rootfs),
+                        )
+                    }
+                }.getOrElse {
+                    LinuxApplicationsState.Failed(
+                        it.message ?: "The installed Linux image could not be scanned",
+                    )
+                }
+        }
+    }
+
+    private fun launchLinuxApplication(application: LinuxApplication) {
+        linuxApplicationMessage = "Preparing ${application.name}…"
+        if (
+            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
+            runtimeService == null
+        ) {
+            pendingLinuxApplication = application
+            ensureNotificationPermission()
+            RuntimeSupervisorService.start(this)
+            linuxApplicationMessage = "Starting Linux for ${application.name}…"
+            return
+        }
+        launchWithRuntime(application)
+    }
+
+    private fun launchPendingLinuxApplication() {
+        if (
+            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
+            runtimeService == null
+        ) {
+            return
+        }
+        pendingLinuxApplication?.let { application ->
+            pendingLinuxApplication = null
+            launchWithRuntime(application)
+        }
+    }
+
+    private fun launchWithRuntime(application: LinuxApplication) {
+        runtimeService?.launchLinuxApplication(application) { result ->
+            result.fold(
+                onSuccess = {
+                    linuxApplicationMessage = "${application.name} launched"
+                    selectDestination(
+                        if (application.terminal) {
+                            UdroidDestination.TERMINAL
+                        } else {
+                            UdroidDestination.DESKTOP
+                        },
+                    )
+                },
+                onFailure = {
+                    linuxApplicationMessage =
+                        it.message ?: "Could not launch ${application.name}"
+                    selectDestination(UdroidDestination.APPS)
+                },
+            )
+        }
     }
 
     private fun ensureNotificationPermission() {

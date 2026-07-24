@@ -29,11 +29,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.DesktopWindows
@@ -68,6 +70,8 @@ import org.json.JSONObject
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
+import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -83,6 +87,7 @@ enum class UdroidDestination(
     HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
     DISTROS("Linux", Icons.Outlined.Storage, Icons.Filled.Storage),
     TERMINAL("Terminal", Icons.Outlined.Terminal, Icons.Filled.Terminal),
+    APPS("Apps", Icons.Outlined.Apps, Icons.Filled.Apps),
     DESKTOP("Desktop", Icons.Outlined.DesktopWindows, Icons.Filled.DesktopWindows),
     DEVICE("Device", Icons.Outlined.Memory, Icons.Filled.Memory),
     LOGS("Logs", Icons.AutoMirrored.Outlined.Article, Icons.AutoMirrored.Filled.Article),
@@ -97,6 +102,8 @@ fun UdroidApp(
     catalogueState: DistroCatalogState,
     installProgress: InstallProgress?,
     installedRootfsName: String?,
+    linuxApplicationsState: LinuxApplicationsState,
+    linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
     runtimeService: RuntimeSupervisorService?,
     onDestinationSelected: (UdroidDestination) -> Unit,
@@ -110,12 +117,14 @@ fun UdroidApp(
     onToggleInstallTerminal: () -> Unit,
     onCloseInstall: () -> Unit,
     onRetryDownload: () -> Unit,
+    onRefreshLinuxApplications: () -> Unit,
+    onLaunchLinuxApplication: (LinuxApplication) -> Unit,
 ) {
     if (destination == UdroidDestination.DESKTOP) {
         DesktopPage(
             snapshot = snapshot,
             service = runtimeService,
-            onExit = { onDestinationSelected(UdroidDestination.HOME) },
+            onExit = { onDestinationSelected(UdroidDestination.APPS) },
         )
         return
     }
@@ -175,6 +184,8 @@ fun UdroidApp(
                         catalogueState = catalogueState,
                         installProgress = installProgress,
                         installedRootfsName = installedRootfsName,
+                        linuxApplicationsState = linuxApplicationsState,
+                        linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
                         onDestinationSelected = onDestinationSelected,
                         onStart = onStart,
@@ -187,6 +198,8 @@ fun UdroidApp(
                         onToggleInstallTerminal = onToggleInstallTerminal,
                         onCloseInstall = onCloseInstall,
                         onRetryDownload = onRetryDownload,
+                        onRefreshLinuxApplications = onRefreshLinuxApplications,
+                        onLaunchLinuxApplication = onLaunchLinuxApplication,
                     )
                 }
             } else {
@@ -200,6 +213,8 @@ fun UdroidApp(
                         catalogueState = catalogueState,
                         installProgress = installProgress,
                         installedRootfsName = installedRootfsName,
+                        linuxApplicationsState = linuxApplicationsState,
+                        linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
                         onDestinationSelected = onDestinationSelected,
                         onStart = onStart,
@@ -212,6 +227,8 @@ fun UdroidApp(
                         onToggleInstallTerminal = onToggleInstallTerminal,
                         onCloseInstall = onCloseInstall,
                         onRetryDownload = onRetryDownload,
+                        onRefreshLinuxApplications = onRefreshLinuxApplications,
+                        onLaunchLinuxApplication = onLaunchLinuxApplication,
                     )
                     WorkspaceNavigationBar(
                         selected = destination,
@@ -232,6 +249,8 @@ private fun ManagementPane(
     catalogueState: DistroCatalogState,
     installProgress: InstallProgress?,
     installedRootfsName: String?,
+    linuxApplicationsState: LinuxApplicationsState,
+    linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
     onDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
@@ -244,6 +263,8 @@ private fun ManagementPane(
     onToggleInstallTerminal: () -> Unit,
     onCloseInstall: () -> Unit,
     onRetryDownload: () -> Unit,
+    onRefreshLinuxApplications: () -> Unit,
+    onLaunchLinuxApplication: (LinuxApplication) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxHeight()) {
@@ -319,6 +340,16 @@ private fun ManagementPane(
                             journalLines = journalLines,
                             onRefresh = onRefresh,
                         )
+                    UdroidDestination.APPS ->
+                        LinuxAppsPage(
+                            state = linuxApplicationsState,
+                            launchMessage = linuxApplicationMessage,
+                            onRefresh = onRefreshLinuxApplications,
+                            onLaunch = onLaunchLinuxApplication,
+                            onOpenDesktop = {
+                                onDestinationSelected(UdroidDestination.DESKTOP)
+                            },
+                        )
                     UdroidDestination.TERMINAL -> Unit
                     UdroidDestination.DESKTOP -> Unit
                 }
@@ -384,7 +415,10 @@ private fun WorkspaceNavigationBar(
         windowInsets = WindowInsets(0, 0, 0, 0),
     ) {
         UdroidDestination.entries
-            .filterNot { it == UdroidDestination.DEVICE }
+            .filterNot {
+                it == UdroidDestination.DEVICE ||
+                    it == UdroidDestination.DESKTOP
+            }
             .forEach { destination ->
             val active = selected == destination
             NavigationBarItem(

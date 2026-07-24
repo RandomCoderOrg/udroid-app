@@ -32,8 +32,12 @@ transcript. The pinned Termux:X11 server and renderer now build inside the APK,
 and the Desktop page attaches an Android surface to its supervised X11 process
 and private display socket. Its compact controls expose the keyboard and
 persistent output/input settings without tying the X server lifetime to the
-page. The generic presenter currently uses Android GLES; no device-specific GPU
-driver is bundled.
+page. The Linux Apps page also discovers freedesktop entries from the installed
+rootfs and can boot the runtime and launch a graphical application directly.
+The generic presenter currently uses Android GLES; no device-specific GPU
+driver is bundled. See the
+[Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for the
+current contract and limitations.
 
 ## Development releases
 

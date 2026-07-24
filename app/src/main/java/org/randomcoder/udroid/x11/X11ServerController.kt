@@ -33,6 +33,7 @@ class X11ServerController(
     private var bound = false
     private var pendingStart: StartRequest? = null
     private var rendererCallback: ((ParcelFileDescriptor?) -> Unit)? = null
+    private val readyCallbacks = mutableListOf<(File?) -> Unit>()
     private var rendererRequestInFlight = false
     private var ready = false
 
@@ -132,11 +133,27 @@ class X11ServerController(
         rendererRequestInFlight = false
         rendererCallback?.invoke(null)
         rendererCallback = null
+        readyCallbacks.toList().also(readyCallbacks::removeAll).forEach { it(null) }
     }
 
     fun requestRendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
         rendererCallback = callback
         if (ready && !rendererRequestInFlight) sendRendererRequest()
+    }
+
+    fun activeSocketDirectory(): File? =
+        pendingStart
+            ?.takeIf { ready }
+            ?.let { X11RuntimePaths.socketDirectory(context) }
+            ?.takeIf(File::isDirectory)
+
+    fun whenReady(callback: (File?) -> Unit) {
+        val socketDirectory = activeSocketDirectory()
+        if (socketDirectory != null) {
+            callback(socketDirectory)
+        } else {
+            readyCallbacks += callback
+        }
     }
 
     private fun sendStart(request: StartRequest) {
@@ -200,6 +217,10 @@ class X11ServerController(
         )
         if (state == X11ServerProtocol.STATE_READY) {
             ready = true
+            val socketDirectory = activeSocketDirectory()
+            readyCallbacks.toList().also(readyCallbacks::removeAll).forEach {
+                it(socketDirectory)
+            }
             if (rendererCallback != null && !rendererRequestInFlight) {
                 sendRendererRequest()
             }
@@ -209,6 +230,7 @@ class X11ServerController(
             rendererRequestInFlight = false
             rendererCallback?.invoke(null)
             rendererCallback = null
+            readyCallbacks.toList().also(readyCallbacks::removeAll).forEach { it(null) }
             pendingStart = null
             if (bound) {
                 runCatching { context.unbindService(connection) }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=XClock
+GenericName=Analog Clock
+Comment=Deterministic lightweight X11 launcher probe
+TryExec=xclock
+Exec=xclock -update 1
+Icon=preferences-system-time
+Terminal=false
+Categories=Utility;
+StartupNotify=false

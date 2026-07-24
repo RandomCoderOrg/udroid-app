@@ -29,10 +29,15 @@ import com.termux.view.TerminalView
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
+import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.x11.X11ServerController
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.util.UUID
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
 class RuntimeSupervisorService : Service() {
@@ -40,6 +45,8 @@ class RuntimeSupervisorService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ownedSession = AtomicReference<TerminalSession?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
+    private val applicationProcesses = ConcurrentHashMap<String, Process>()
+    private val applicationExecutor = Executors.newCachedThreadPool()
     private val x11Controller by lazy { X11ServerController(this, app.journal) }
 
     private val app: UdroidApplication
@@ -190,6 +197,8 @@ class RuntimeSupervisorService : Service() {
     override fun onDestroy() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
+        stopApplicationProcesses()
+        applicationExecutor.shutdownNow()
         val snapshot = app.runtimeState.current()
         app.journal.append(
             component = "supervisor",
@@ -227,6 +236,84 @@ class RuntimeSupervisorService : Service() {
 
     fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
         x11Controller.requestRendererConnection(callback)
+    }
+
+    fun launchLinuxApplication(
+        application: LinuxApplication,
+        callback: (Result<Unit>) -> Unit,
+    ) {
+        val snapshot = app.runtimeState.current()
+        if (
+            snapshot.phase != RuntimePhase.RUNNING ||
+            ownedSession.get()?.isRunning != true
+        ) {
+            callback(Result.failure(IllegalStateException("Start Linux before launching an app")))
+            return
+        }
+        if (application.terminal) {
+            val command =
+                (listOf(application.executable) + application.arguments)
+                    .joinToString(" ", transform = ::shellQuote)
+            writeToTerminal("$command\n")
+            app.journal.append(
+                component = "linux-app",
+                severity = "info",
+                event = "terminal_app_launched",
+                message = "Opened ${application.name} in the supervised terminal",
+                bootId = snapshot.bootId,
+                fields =
+                    mapOf(
+                        "desktop_id" to application.id,
+                        "executable" to application.executable,
+                    ),
+            )
+            callback(Result.success(Unit))
+            return
+        }
+
+        x11Controller.whenReady { socketDirectory ->
+            if (socketDirectory == null) {
+                callback(Result.failure(IllegalStateException("Embedded X11 failed to start")))
+                return@whenReady
+            }
+            applicationExecutor.execute {
+                val result =
+                    runCatching {
+                        val rootfs = InstalledRootfsResolver.resolve(this)
+                        val launch =
+                            ProotApplicationLaunchBuilder.create(
+                                context = this,
+                                runtime = ProotRuntimeInstaller.install(this),
+                                rootfs = rootfs,
+                                x11SocketDirectory = socketDirectory,
+                                application = application,
+                            )
+                        val process =
+                            ProcessBuilder(launch.command)
+                                .directory(launch.workingDirectory)
+                                .redirectErrorStream(true)
+                                .apply {
+                                    environment().clear()
+                                    environment().putAll(launch.environment)
+                                }.start()
+                        applicationProcesses.put(application.id, process)?.destroy()
+                        drainApplicationOutput(application, process)
+                        app.journal.append(
+                            component = "linux-app",
+                            severity = "info",
+                            event = "app_launched",
+                            message = "Launched ${application.name} on display :0",
+                            bootId = snapshot.bootId,
+                            fields =
+                                mapOf(
+                                    "desktop_id" to application.id,
+                                    "executable" to application.executable,
+                                ),
+                        )
+                    }
+                mainHandler.post { callback(result) }
+            }
+        }
     }
 
     private fun startRuntime() {
@@ -380,6 +467,7 @@ class RuntimeSupervisorService : Service() {
         val expected = !beforeExit.desiredRunning || beforeExit.phase == RuntimePhase.STOPPING
         val next =
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
+        stopApplicationProcesses()
         x11Controller.stop(beforeExit.bootId)
         publishState(next)
         app.journal.append(
@@ -399,6 +487,7 @@ class RuntimeSupervisorService : Service() {
 
     private fun stopRuntime(userRequested: Boolean) {
         val current = app.runtimeState.current()
+        stopApplicationProcesses()
         x11Controller.stop(current.bootId)
         val stopping =
             app.runtimeState.update {
@@ -492,6 +581,66 @@ class RuntimeSupervisorService : Service() {
         Log.println(priority, tag, message)
     }
 
+    private fun drainApplicationOutput(
+        application: LinuxApplication,
+        process: Process,
+    ) {
+        applicationExecutor.execute {
+            var outputLines = 0
+            BufferedReader(InputStreamReader(process.inputStream)).useLines { lines ->
+                lines.forEach { line ->
+                    when {
+                        outputLines < MAX_APP_OUTPUT_LINES ->
+                            app.journal.append(
+                                component = "linux-app",
+                                severity = "debug",
+                                event = "app_output",
+                                message = line.take(MAX_APP_OUTPUT_CHARS),
+                                bootId = app.runtimeState.current().bootId,
+                                fields = mapOf("desktop_id" to application.id),
+                            )
+                        outputLines == MAX_APP_OUTPUT_LINES ->
+                            app.journal.append(
+                                component = "linux-app",
+                                severity = "warning",
+                                event = "app_output_suppressed",
+                                message = "Further ${application.name} output is suppressed",
+                                bootId = app.runtimeState.current().bootId,
+                                fields = mapOf("desktop_id" to application.id),
+                            )
+                    }
+                    outputLines++
+                }
+            }
+        }
+        applicationExecutor.execute {
+            val exitCode = process.waitFor()
+            applicationProcesses.remove(application.id, process)
+            app.journal.append(
+                component = "linux-app",
+                severity = if (exitCode == 0) "info" else "warning",
+                event = "app_exited",
+                message = "${application.name} exited with $exitCode",
+                bootId = app.runtimeState.current().bootId,
+                fields =
+                    mapOf(
+                        "desktop_id" to application.id,
+                        "exit_code" to exitCode,
+                    ),
+            )
+        }
+    }
+
+    private fun stopApplicationProcesses() {
+        applicationProcesses.values.forEach { process ->
+            if (process.isAlive) process.destroy()
+        }
+        applicationProcesses.clear()
+    }
+
+    private fun shellQuote(argument: String): String =
+        "'${argument.replace("'", "'\"'\"'")}'"
+
     private fun createNotificationChannel() {
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(
@@ -565,6 +714,8 @@ class RuntimeSupervisorService : Service() {
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_CELL_WIDTH_PX = 10
         private const val DEFAULT_CELL_HEIGHT_PX = 20
+        private const val MAX_APP_OUTPUT_CHARS = 2_000
+        private const val MAX_APP_OUTPUT_LINES = 200
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(
