@@ -45,7 +45,7 @@ supervised X server and PRoot guest continue running.
 
 ```mermaid
 flowchart LR
-    UI["uDroid desktop Activity"] -->|"attach or detach Surface"| View["Lorie display view"]
+    UI["uDroid desktop Activity"] -->|"attach Surface and IME"| View["Lorie display view"]
     Supervisor["Runtime supervisor"] -->|"versioned Binder contract"| Server["X11 server process"]
     Server --> Socket["Private X socket"]
     Supervisor --> PRoot["PRoot distro"]
@@ -53,6 +53,7 @@ flowchart LR
     PRoot -->|"DISPLAY=:0"| Apps["Linux X11 apps"]
     Server -->|"buffer and event FD transport"| View
     View -->|"EGL/GLES present"| Surface["Android Surface"]
+    View -->|"pointer, button, key, and UTF-8 text"| Server
 ```
 
 - `RuntimeSupervisorService` owns desired state, startup order, shutdown,
@@ -143,6 +144,10 @@ visible application presentation, motion, and surface-cycle checks:
 | Motion probe | 49,254 pixels changed, 11.84% of the sampled gear region in one second |
 | Presenter cadence | stabilized at 299–300 frames per five seconds, approximately 60 FPS |
 | Surface cycle | X11 PID `31974` survived detach and reattach; the running gears returned |
+| Absolute pointer | `xeyes` tracked taps from the top-left to bottom-right of the Android surface |
+| Tap and drag | raw X11 probe received balanced button 1 press/release and held-button motion |
+| Keyboard | `codex` produced five matching X11 key press/release pairs |
+| Android IME | persistent header button opens Gboard; composing text is diffed before UTF-8 injection |
 | Stop ownership | uDroid removed both its PRoot guest and `:x11` process |
 
 ```mermaid
@@ -166,6 +171,24 @@ opaque parent background had covered the correctly rendered child surface.
 An in-flight request gate also prevents two renderer FDs from racing for
 Lorie's single renderer socket.
 
+The `input-loop` gate uses
+[`tools/x11-input-probe.py`](../tools/x11-input-probe.py), a dependency-free
+Python client that speaks the minimal X11 core protocol directly. It creates a
+window and logs pointer coordinates, button state, focus, and keycodes. This
+avoids installing `xev`, starting a desktop, or relying on the malformed
+widgets produced when a minimal rootfs has no X font packages.
+
+The current direct-touch contract is intentionally simple:
+
+- one finger maps to an absolute pointer and button 1;
+- movement while held maps to an X11 drag;
+- physical mouse primary, secondary, tertiary, and wheel events are forwarded;
+- Android key events use upstream Termux:X11 conversion;
+- IME composing text is incrementally replaced instead of duplicated.
+
+Right-click touch gestures, multi-touch XI events, full stylus
+pressure/tilt, and clipboard synchronization are not part of this checkpoint.
+
 This checkpoint proves visible GLX plumbing but not hardware acceleration.
 Ubuntu Jammy's stock Mesa reports:
 
@@ -176,10 +199,12 @@ Ubuntu Jammy's stock Mesa reports:
 | Accelerated | no |
 | OpenGL | 4.5 compatibility profile, Mesa 23.2.1 |
 
-The strict deterministic checksum, input loop, Present soak, and hardware
-driver installation remain future gates. The next graphics checkpoint should
-package the uDroid GPU profile and require `glxinfo -B` to report the hardware
-renderer before performance conclusions are drawn.
+The strict deterministic checksum, Present soak, and hardware driver
+installation remain future gates. Hardware acceleration is intentionally the
+last graphics checkpoint: first the generic display, lifecycle, and input
+contract must remain stable. That later checkpoint should package the uDroid
+GPU profile and require `glxinfo -B` to report the hardware renderer before
+performance conclusions are drawn.
 
 ## AOSP TerminalApp assessment
 

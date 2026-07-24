@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -92,8 +93,18 @@ fun DesktopPage(
                 Text(
                     text = status,
                     color = Color.White,
-                    modifier = Modifier.padding(end = UdroidSpacing.content.dp),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .padding(end = UdroidSpacing.content.dp),
                 )
+                IconButton(onClick = { displayView?.showKeyboard() }) {
+                    Icon(
+                        imageVector = Icons.Outlined.Keyboard,
+                        contentDescription = "Show keyboard",
+                        tint = Color.White,
+                    )
+                }
             }
             AndroidView(
                 factory = { context ->
