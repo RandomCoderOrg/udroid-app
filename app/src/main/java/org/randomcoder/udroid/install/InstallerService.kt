@@ -278,6 +278,10 @@ class InstallerService : Service() {
         rootfsDirectory: File,
         progressPublisher: ProgressPublisher,
     ) {
+        RootfsInstallationPipeline.clearInterruptedInstallation(
+            rootfsDirectory = rootfsDirectory,
+            installationName = distro.internalName,
+        )
         RootfsStoragePreflight.requireSpace(archive, rootfsDirectory)
         progressPublisher.configure(
             fraction = 0.05f,
@@ -350,7 +354,7 @@ class InstallerService : Service() {
                         if (reused) {
                             "[complete] reused healthy ${rootfs.name}"
                         } else {
-                            "[complete] health check passed · atomically activated ${rootfs.name}"
+                            "[complete] health check passed · marked ${rootfs.name} ready"
                         },
                 previewOnly = false,
                 operationId = operationId,

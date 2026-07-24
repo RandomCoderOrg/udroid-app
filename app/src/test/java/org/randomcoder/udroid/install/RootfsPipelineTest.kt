@@ -10,13 +10,14 @@ import java.nio.file.Files
 
 class RootfsPipelineTest {
     @Test
-    fun `successful install configures checks and atomically activates staging`() {
+    fun `successful install extracts into stable final path and marks it ready`() {
         val fixture = fixture()
         val events = mutableListOf<String>()
         val pipeline =
             RootfsInstallationPipeline(
                 extractor =
                     RootfsExtractor { _, destination, progress ->
+                        assertEquals(File(fixture.rootfs, "jammy"), destination)
                         File(destination, "usr/bin").mkdirs()
                         File(destination, "usr/bin/env").writeText("fixture")
                         progress(7, 7)
@@ -35,12 +36,14 @@ class RootfsPipelineTest {
         assertEquals(listOf("extract", "configure", "health"), events)
         assertTrue(result.rootfs.isDirectory)
         assertTrue(File(result.rootfs, RootfsInstallationPipeline.READY_MARKER).isFile)
+        assertFalse(
+            File(result.rootfs, RootfsInstallationPipeline.INSTALLING_MARKER).exists(),
+        )
         assertFalse(fixture.archive.exists())
-        assertFalse(fixture.rootfs.listFiles().orEmpty().any { it.name.startsWith(".jammy.installing") })
     }
 
     @Test
-    fun `interrupted extraction removes staging but retains verified archive`() {
+    fun `interrupted extraction removes final path but retains verified archive`() {
         val fixture = fixture()
         val pipeline =
             RootfsInstallationPipeline(
@@ -57,7 +60,32 @@ class RootfsPipelineTest {
 
         assertTrue(fixture.archive.isFile)
         assertFalse(File(fixture.rootfs, "jammy").exists())
-        assertFalse(fixture.rootfs.listFiles().orEmpty().any { it.name.startsWith(".jammy.installing") })
+    }
+
+    @Test
+    fun `retry replaces an incomplete installer-owned final path`() {
+        val fixture = fixture()
+        val active = File(fixture.rootfs, "jammy").apply { mkdirs() }
+        File(active, RootfsInstallationPipeline.INSTALLING_MARKER).writeText("format=1\n")
+        File(active, "partial").writeText("incomplete")
+        val pipeline =
+            RootfsInstallationPipeline(
+                extractor =
+                    RootfsExtractor { _, destination, _ ->
+                        assertFalse(File(destination, "partial").exists())
+                        File(destination, "complete").writeText("ready")
+                    },
+                configurator = RootfsConfigurator {},
+                healthCheck = RootfsHealthCheck {},
+            )
+
+        val result = pipeline.execute(fixture.request)
+
+        assertTrue(File(result.rootfs, "complete").isFile)
+        assertTrue(File(result.rootfs, RootfsInstallationPipeline.READY_MARKER).isFile)
+        assertFalse(
+            File(result.rootfs, RootfsInstallationPipeline.INSTALLING_MARKER).exists(),
+        )
     }
 
     @Test

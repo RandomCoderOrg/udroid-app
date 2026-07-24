@@ -82,6 +82,6 @@ Android ABIs map to catalogue architectures as follows:
 
 Checkpoint 3 now owns storage preflight, resumable staging downloads, measured
 byte progress, SHA-256 verification, pause/recovery, and verified cache
-promotion. The next boundary starts at extraction: unpack into a staging
-rootfs, apply Android/PRoot fixes, validate a first command, and atomically
-activate the completed distro.
+promotion. The next boundary starts at extraction: unpack into the stable
+rootfs path, apply Android/PRoot fixes, validate a first command, and publish
+the readiness marker only after the completed distro passes its checks.

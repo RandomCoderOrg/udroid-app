@@ -513,7 +513,7 @@ fun InstallExperiencePage(
                         progress.stage == InstallStage.ARCHIVE_READY ->
                             "The archive is cached safely while rootfs setup begins."
                         progress.stage == InstallStage.COMPLETE ->
-                            "The verified archive was removed after atomic rootfs activation."
+                            "The verified archive was removed after the rootfs passed its checks."
                         else ->
                             "Open the terminal for exact operation details."
                     },

@@ -23,7 +23,7 @@ Selecting an image does not start a download. The review screen persists across
 Activity and process recreation, and the archive transfer begins only after
 **Download image** is pressed. A verified archive is retained across pause or
 failure, and is deleted only after the installed rootfs passes its health
-check and is atomically activated.
+check and receives its readiness marker.
 
 PRoot and an interactive terminal are now bundled for the supported Android
 ABIs. The terminal session belongs to the foreground service rather than the

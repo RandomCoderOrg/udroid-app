@@ -184,7 +184,7 @@ object InstallationUxPreview {
                 InstallStage.EXTRACTING,
                 1.00f,
                 "Linux files are in place",
-                "[ok] activated rootfs/${distro.internalName}",
+                "[ok] populated rootfs/${distro.internalName}",
             ),
             Step(
                 InstallStage.CONFIGURING,

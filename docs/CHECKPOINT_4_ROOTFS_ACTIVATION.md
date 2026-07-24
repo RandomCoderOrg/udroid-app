@@ -1,4 +1,4 @@
-# Checkpoint 4: recoverable rootfs activation
+# Checkpoint 4: recoverable rootfs readiness
 
 ## Outcome
 
@@ -8,37 +8,38 @@ without exposing a partial installation as ready.
 The same foreground installer that owns download and verification now owns:
 
 1. storage preflight;
-2. PRoot extraction into a unique staging directory;
+2. PRoot extraction into the stable final rootfs path;
 3. Android compatibility configuration;
-4. an actual command executed inside the staged guest;
-5. a ready marker and atomic activation.
+4. an actual command executed inside the guest;
+5. a synced ready marker published only after validation.
 
 ```mermaid
 flowchart LR
     Archive["Verified archive"] --> Preflight["Expansion and headroom preflight"]
-    Preflight --> Stage["Unique .installing staging rootfs"]
-    Stage --> Extract["PRoot plus Toybox tar"]
+    Preflight --> Marker1["Create .udroid-installing"]
+    Marker1 --> Extract["PRoot plus Toybox tar at final path"]
     Extract --> Configure["Resolver, profile, proc files, Android groups"]
     Configure --> Probe["Guest env and shell health probe"]
-    Probe --> Marker["Write .udroid-ready"]
-    Marker --> Rename["Atomic rename to installed rootfs"]
-    Rename --> Cleanup["Delete verified archive"]
-    Extract -. "pause or failure" .-> Recover["Delete staging; retain archive"]
+    Probe --> Marker2["Write .udroid-ready"]
+    Marker2 --> Cleanup["Remove installing marker and verified archive"]
+    Extract -. "pause or failure" .-> Recover["Delete incomplete rootfs; retain archive"]
     Configure -. "pause or failure" .-> Recover
     Probe -. "failure" .-> Recover
 ```
 
 ## Recovery contract
 
-- The installed path is never used as an extraction target.
-- Staging names contain the safe distro name and operation UUID.
-- Only uDroid's exact staging path is cleared after interruption.
+- The stable installed path is used from the first extracted byte so PRoot's
+  absolute hard-link translations remain valid.
+- `.udroid-installing` records ownership and the operation UUID.
+- Only an incomplete path carrying uDroid's installing marker is cleared after
+  interruption.
 - An existing unmarked destination is preserved and causes a visible failure.
 - A rootfs is reusable only when `.udroid-ready` exists.
-- Pause or failure removes the disposable staging tree and retains the verified
+- Pause or failure removes the incomplete rootfs and retains the verified
   archive, so retry never needs the network.
-- The archive is deleted only after the health probe, marker sync, and atomic
-  rename succeed.
+- The archive is deleted only after the health probe and ready-marker sync
+  succeed.
 
 The current pause granularity is the archive stream. Resume restarts extraction
 from the already verified archive because safely resuming an arbitrary tar
@@ -146,7 +147,7 @@ Every checkpoint build must continue to pass:
 ## Completed by Checkpoint 5
 
 [Checkpoint 5](CHECKPOINT_5_INTERACTIVE_TERMINAL.md) now consumes the
-activated rootfs through an explicit bind contract, supervises PRoot as the
+ready rootfs through an explicit bind contract, supervises PRoot as the
 owned terminal child, attaches Termux's PTY and terminal surface, and provides
 graceful stop plus stale-session recovery. Graphical sessions and hardware
 profiles remain optional future layers.

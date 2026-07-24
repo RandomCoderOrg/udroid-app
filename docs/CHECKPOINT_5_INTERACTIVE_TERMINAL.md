@@ -30,7 +30,7 @@ The native PTY bridge calls `execvp()` with a complete argument vector. uDroid
 therefore makes `/system/bin/linker64` both the executable and `argv[0]`,
 followed by the packaged PRoot binary. The PRoot invocation:
 
-- selects only an atomically activated rootfs containing `.udroid-ready`;
+- selects only a fully checked rootfs containing `.udroid-ready`;
 - binds Android `/system`, `/apex`, `/dev`, `/proc`, `/sys`, and the linker
   configuration into the guest;
 - passes the packaged static guest loader through `PROOT_LOADER`;

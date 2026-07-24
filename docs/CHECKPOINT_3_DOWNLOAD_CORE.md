@@ -102,9 +102,10 @@ Checkpoint 4 consumes the verified archive through a cancellable extraction
 pipeline:
 
 1. preflight compressed archive plus rootfs expansion headroom;
-2. extract into a unique staging directory with PRoot-compatible hard-link
+2. extract into the stable final rootfs path with PRoot-compatible hard-link
    handling;
 3. persist file/byte progress and recovery markers;
 4. apply resolver, passwd/group, Android AID, and profile fixes;
 5. run a minimal PRoot health command;
-6. atomically rename the staging rootfs into the installed catalogue.
+6. publish `.udroid-ready`; incomplete marked installations are ignored and
+   removed on retry.

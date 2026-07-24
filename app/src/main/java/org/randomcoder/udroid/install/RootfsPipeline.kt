@@ -61,58 +61,73 @@ class RootfsInstallationPipeline(
             request.archive.delete()
             return RootfsInstallResult(active, reusedInstallation = true)
         }
+
+        clearInterruptedInstallation(request.rootfsDirectory, request.installationName)
         check(!active.exists()) {
             "A non-uDroid directory already exists at ${active.name}; it was left untouched"
         }
-
-        val staging =
-            File(
-                request.rootfsDirectory,
-                ".${request.installationName}.installing-${request.operationId}",
-            )
-        if (staging.exists()) {
-            check(staging.deleteRecursively()) {
-                "Could not clear an interrupted staging rootfs"
-            }
-        }
-        check(staging.mkdirs()) { "Could not create staging rootfs" }
+        check(active.mkdirs()) { "Could not create ${request.installationName}" }
 
         try {
+            writeInstallingMarker(active, request)
             checkInterrupted()
-            extractor.extract(request.archive, staging, onExtractionProgress)
+            extractor.extract(request.archive, active, onExtractionProgress)
             checkInterrupted()
 
             onConfiguring("Applying Android and PRoot compatibility files")
-            configurator.configure(staging)
+            configurator.configure(active)
             checkInterrupted()
 
             onConfiguring("Running the first-boot health probe")
-            healthCheck.check(staging)
+            healthCheck.check(active)
             checkInterrupted()
 
-            writeReadyMarker(staging, request)
-            check(staging.renameTo(active)) {
-                "Could not atomically activate ${request.installationName}"
+            writeReadyMarker(active, request)
+            check(File(active, INSTALLING_MARKER).delete()) {
+                "Could not finish ${request.installationName}"
             }
             request.archive.delete()
             return RootfsInstallResult(active, reusedInstallation = false)
         } catch (error: Throwable) {
-            staging.deleteRecursively()
+            active.deleteRecursively()
             throw error
         }
     }
 
-    private fun writeReadyMarker(
-        staging: File,
+    private fun writeInstallingMarker(
+        rootfs: File,
         request: RootfsInstallRequest,
     ) {
-        val marker = File(staging, READY_MARKER)
-        val body =
-            buildString {
-                appendLine("format=1")
-                appendLine("name=${request.installationName}")
-                appendLine("operation=${request.operationId}")
-            }
+        writeMarker(
+            marker = File(rootfs, INSTALLING_MARKER),
+            body =
+                buildString {
+                    appendLine("format=1")
+                    appendLine("name=${request.installationName}")
+                    appendLine("operation=${request.operationId}")
+                },
+        )
+    }
+
+    private fun writeReadyMarker(
+        rootfs: File,
+        request: RootfsInstallRequest,
+    ) {
+        writeMarker(
+            marker = File(rootfs, READY_MARKER),
+            body =
+                buildString {
+                    appendLine("format=1")
+                    appendLine("name=${request.installationName}")
+                    appendLine("operation=${request.operationId}")
+                },
+        )
+    }
+
+    private fun writeMarker(
+        marker: File,
+        body: String,
+    ) {
         FileOutputStream(marker).use { output ->
             output.write(body.toByteArray(StandardCharsets.UTF_8))
             output.fd.sync()
@@ -127,7 +142,22 @@ class RootfsInstallationPipeline(
 
     companion object {
         const val READY_MARKER = ".udroid-ready"
+        internal const val INSTALLING_MARKER = ".udroid-installing"
         private val SAFE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
         private val SAFE_OPERATION_ID = Regex("[A-Za-z0-9-]{1,64}")
+
+        internal fun clearInterruptedInstallation(
+            rootfsDirectory: File,
+            installationName: String,
+        ) {
+            require(SAFE_NAME.matches(installationName)) {
+                "Unsafe rootfs name: $installationName"
+            }
+            val rootfs = File(rootfsDirectory, installationName)
+            if (!File(rootfs, INSTALLING_MARKER).isFile) return
+            check(rootfs.deleteRecursively()) {
+                "Could not clear the interrupted $installationName installation"
+            }
+        }
     }
 }

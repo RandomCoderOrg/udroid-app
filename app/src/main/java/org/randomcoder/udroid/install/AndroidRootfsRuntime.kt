@@ -296,7 +296,9 @@ class ProotRootfsHealthCheck(
                     "PATH=/usr/bin:/bin",
                     "/${shell.relativeTo(rootfs).path}",
                     "-c",
-                    "test -x /usr/bin/env && test -r /etc/os-release",
+                    "test -x /usr/bin/env && test -r /etc/os-release && " +
+                        "if test -e /usr/sbin/dpkg-preconfigure; then " +
+                        "test -x /usr/bin/perl && /usr/bin/perl -e 'exit 0'; fi",
                 ),
             ).apply {
                 directory(context.filesDir)
