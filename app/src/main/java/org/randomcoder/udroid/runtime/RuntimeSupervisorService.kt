@@ -21,6 +21,7 @@ import android.system.OsConstants
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.termux.terminal.TerminalColors
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -28,6 +29,7 @@ import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import java.util.UUID
+import java.util.Properties
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.atomic.AtomicReference
 
@@ -262,6 +264,7 @@ class RuntimeSupervisorService : Service() {
             val runtime = ProotRuntimeInstaller.install(this)
             ProotTerminalLaunchBuilder.create(this, runtime)
         }.mapCatching { launch ->
+            configureTerminalColors()
             val session =
                 TerminalSession(
                     launch.executable,
@@ -340,6 +343,19 @@ class RuntimeSupervisorService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
+    }
+
+    private fun configureTerminalColors() {
+        TerminalColors.COLOR_SCHEME.updateWith(
+            Properties().apply {
+                setProperty("foreground", "#E3E7EF")
+                setProperty("background", "#11131F")
+                setProperty("cursor", "#43D292")
+                setProperty("color2", "#43D292")
+                setProperty("color3", "#E8B86D")
+                setProperty("color4", "#65A7D8")
+            },
+        )
     }
 
     private fun handleSessionFinished(session: TerminalSession) {

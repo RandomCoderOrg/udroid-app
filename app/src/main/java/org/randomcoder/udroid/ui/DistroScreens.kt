@@ -17,8 +17,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -107,30 +112,25 @@ fun DistroCataloguePage(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                        .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 item {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Choose your Linux",
-                        style = MaterialTheme.typography.headlineMedium,
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "A tested starting point, with the full catalogue when you need it.",
-                        color = UdroidMuted,
-                        style = MaterialTheme.typography.bodyMedium,
+                    UdroidPageHeader(
+                        title = "Linux images",
+                        subtitle = "Install a compatible system",
+                        modifier = Modifier.padding(top = 18.dp, bottom = 7.dp),
                     )
                 }
 
                 item {
-                    Text(
-                        "RECOMMENDED",
-                        color = UdroidForest,
-                        style = MaterialTheme.typography.labelMedium,
+                    UdroidSectionLabel(
+                        text = "Recommended",
+                        modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
                     )
-                    Spacer(Modifier.height(7.dp))
+                }
+
+                item {
                     DistroCard(
                         distro = recommended,
                         emphasized = true,
@@ -146,16 +146,16 @@ fun DistroCataloguePage(
                             CatalogSource.BUILT_IN -> "Built-in recovery image"
                         }
                     Surface(
-                        color = Color.Transparent,
+                        color = UdroidRaised,
                         border = BorderStroke(1.dp, UdroidLine),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(11.dp),
                     ) {
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable { showAll = !showAll }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -170,10 +170,20 @@ fun DistroCataloguePage(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
-                            Text(
-                                if (showAll) "−" else "+",
-                                color = UdroidForest,
-                                style = MaterialTheme.typography.titleLarge,
+                            Icon(
+                                imageVector =
+                                    if (showAll) {
+                                        Icons.Outlined.ExpandLess
+                                    } else {
+                                        Icons.Outlined.ExpandMore
+                                    },
+                                contentDescription =
+                                    if (showAll) {
+                                        "Hide compatible images"
+                                    } else {
+                                        "Show compatible images"
+                                    },
+                                tint = UdroidMuted,
                             )
                         }
                     }
@@ -206,40 +216,49 @@ private fun DistroCard(
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onSelect),
-        color = if (emphasized) UdroidWarm else UdroidSurface,
+        color = UdroidRaised,
         border = BorderStroke(1.dp, if (emphasized) Color(0xFFF5C8B3) else UdroidLine),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(11.dp),
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DistroMark(size = 46)
+            UbuntuMark(size = 42)
             Column(
                 modifier =
                     Modifier
                         .weight(1f)
                         .padding(horizontal = 12.dp),
             ) {
-                Text(
-                    distro.releaseName,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    distro.experienceName,
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    "${distro.id} · ${distro.architecture}",
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.labelSmall,
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        distro.releaseName,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (emphasized) {
+                        Spacer(Modifier.size(8.dp))
+                        UdroidStatusBadge(
+                            label = "Recommended",
+                            color = UdroidUbuntu,
+                            background = UdroidWarm,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                UdroidMetadataRow(
+                    items =
+                        listOf(
+                            distro.experienceName,
+                            distro.architecture,
+                            distro.suite,
+                        ),
                 )
             }
-            Text(
-                "OPEN",
-                color = UdroidForest,
-                style = MaterialTheme.typography.labelMedium,
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = "Open ${distro.releaseName}",
+                tint = UdroidFaint,
             )
         }
     }
@@ -247,21 +266,7 @@ private fun DistroCard(
 
 @Composable
 private fun DistroMark(size: Int) {
-    Box(
-        modifier =
-            Modifier
-                .size(size.dp)
-                .clip(RoundedCornerShape((size / 3).dp))
-                .background(UdroidUbuntu),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            "U",
-            color = Color.White,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
-    }
+    UbuntuMark(size = size)
 }
 
 @Composable

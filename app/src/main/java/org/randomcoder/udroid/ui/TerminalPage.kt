@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -22,9 +23,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,50 +57,36 @@ import kotlin.math.roundToInt
 
 @Composable
 fun InteractiveTerminalPage(
+    modifier: Modifier = Modifier,
     snapshot: RuntimeSnapshot,
     service: RuntimeSupervisorService?,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onExit: () -> Unit,
 ) {
     val session = service?.currentTerminalSession()
     Column(
         modifier =
-            Modifier
+            modifier
                 .fillMaxSize()
-                .background(UdroidCanvas)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .background(UdroidTerminal),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Terminal",
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Text(
-                    snapshot.message,
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                )
-            }
-            if (session?.isRunning == true) {
-                OutlinedButton(onClick = onStop) {
-                    Text("Stop")
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
+        TerminalSessionBar(
+            snapshot = snapshot,
+            session = session,
+            onExit = onExit,
+            onStop = onStop,
+        )
 
         if (session == null || !session.isRunning) {
             EmptyTerminalState(
+                modifier = Modifier.weight(1f),
                 snapshot = snapshot,
                 onStart = onStart,
             )
         } else {
             LiveTerminal(
+                modifier = Modifier.weight(1f),
                 service = service,
                 session = session,
             )
@@ -103,38 +95,152 @@ fun InteractiveTerminalPage(
 }
 
 @Composable
+private fun TerminalSessionBar(
+    snapshot: RuntimeSnapshot,
+    session: TerminalSession?,
+    onExit: () -> Unit,
+    onStop: () -> Unit,
+) {
+    val running = session?.isRunning == true
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .background(UdroidTerminalSurface)
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onExit) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "Leave terminal",
+                tint = UdroidTerminalMuted,
+            )
+        }
+        Surface(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(46.dp),
+            color = UdroidTerminalRaised,
+            shape = RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp),
+            border = BorderStroke(1.dp, UdroidTerminalLine),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Terminal,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
+                    tint = if (running) UdroidTerminalGreen else UdroidTerminalMuted,
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        terminalSessionTitle(session?.mSessionName),
+                        color = UdroidTerminalText,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                    )
+                    Text(
+                        if (running) {
+                            "root  •  aarch64  •  PID ${session?.pid}"
+                        } else {
+                            snapshot.message
+                        },
+                        color = UdroidTerminalMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        if (running) {
+            IconButton(onClick = onStop) {
+                Icon(
+                    imageVector = Icons.Filled.StopCircle,
+                    contentDescription = "Stop Linux session",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+        } else {
+            Spacer(Modifier.width(48.dp))
+        }
+    }
+}
+
+private fun terminalSessionTitle(rawName: String?): String =
+    when {
+        rawName.isNullOrBlank() -> "Linux terminal"
+        rawName.contains("jammy", ignoreCase = true) -> "Ubuntu Jammy"
+        rawName.contains("noble", ignoreCase = true) -> "Ubuntu Noble"
+        rawName.contains("resolute", ignoreCase = true) -> "Ubuntu Resolute"
+        else ->
+            rawName
+                .removePrefix("udroid-")
+                .removeSuffix("-raw")
+                .split('-')
+                .joinToString(" ") { word -> word.replaceFirstChar(Char::titlecase) }
+    }
+
+@Composable
 private fun EmptyTerminalState(
+    modifier: Modifier = Modifier,
     snapshot: RuntimeSnapshot,
     onStart: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = UdroidSurface,
-        shape = RoundedCornerShape(16.dp),
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(UdroidTerminal),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                modifier = Modifier.size(52.dp),
+                color = UdroidTerminalRaised,
+                shape = RoundedCornerShape(13.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.Terminal,
+                        contentDescription = null,
+                        tint = UdroidTerminalGreen,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
             Text(
                 if (snapshot.phase == RuntimePhase.CRASHED) {
-                    "The terminal needs attention"
+                    "Session ended unexpectedly"
                 } else {
-                    "Open your installed Linux system"
+                    "Start a Linux session"
                 },
+                color = UdroidTerminalText,
                 style = MaterialTheme.typography.titleMedium,
             )
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(7.dp))
             Text(
                 if (snapshot.phase == RuntimePhase.CRASHED) {
                     snapshot.message
                 } else {
-                    "A real PTY session will continue in the foreground service when you leave this screen."
+                    "The supervised PTY keeps running when you move around uDroid."
                 },
-                color = UdroidMuted,
+                color = UdroidTerminalMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(18.dp))
             Button(
                 onClick = onStart,
                 enabled = snapshot.phase != RuntimePhase.STARTING,
+                shape = RoundedCornerShape(9.dp),
             ) {
                 Text(
                     if (snapshot.phase == RuntimePhase.CRASHED) {
@@ -150,6 +256,7 @@ private fun EmptyTerminalState(
 
 @Composable
 private fun LiveTerminal(
+    modifier: Modifier = Modifier,
     service: RuntimeSupervisorService,
     session: TerminalSession,
 ) {
@@ -170,7 +277,7 @@ private fun LiveTerminal(
     val terminalView =
         remember(session) {
             TerminalView(context, null).apply {
-                setBackgroundColor(android.graphics.Color.rgb(11, 20, 16))
+                setBackgroundColor(android.graphics.Color.rgb(17, 19, 31))
                 setTextSize(initialTextSize)
                 setTypeface(Typeface.MONOSPACE)
                 isFocusable = true
@@ -187,7 +294,7 @@ private fun LiveTerminal(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         AndroidView(
             factory = { terminalView },
             modifier =
@@ -211,29 +318,33 @@ private fun ExtraKeysRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .background(Color(0xFF101B16))
+                .height(58.dp)
+                .background(UdroidTerminalSurface)
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .padding(horizontal = 7.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TerminalKey(
-            label = "CTRL",
+            label = "Ctrl",
             active = modifiers.control,
             onClick = { modifiers.control = !modifiers.control },
         )
         TerminalKey(
-            label = "ALT",
+            label = "Alt",
             active = modifiers.alt,
             onClick = { modifiers.alt = !modifiers.alt },
         )
-        TerminalKey("ESC") { write("\u001B") }
-        TerminalKey("TAB") { write("\t") }
+        TerminalKey("Esc") { write("\u001B") }
+        TerminalKey("Tab") { write("\t") }
         TerminalKey("←") { write("\u001B[D") }
         TerminalKey("↑") { write("\u001B[A") }
         TerminalKey("↓") { write("\u001B[B") }
         TerminalKey("→") { write("\u001B[C") }
+        TerminalKey("Home") { write("\u001B[H") }
+        TerminalKey("PgUp") { write("\u001B[5~") }
+        TerminalKey("PgDn") { write("\u001B[6~") }
+        TerminalKey("End") { write("\u001B[F") }
     }
 }
 
@@ -246,18 +357,23 @@ private fun TerminalKey(
     Box(
         modifier =
             Modifier
-                .width(if (label.length > 2) 58.dp else 44.dp)
-                .height(36.dp)
+                .width(if (label.length > 2) 56.dp else 48.dp)
+                .height(48.dp)
                 .background(
-                    color = if (active) UdroidForest else Color(0xFF223029),
-                    shape = RoundedCornerShape(7.dp),
+                    color =
+                        if (active) {
+                            Color(0xFF164A39)
+                        } else {
+                            UdroidTerminalRaised
+                        },
+                    shape = RoundedCornerShape(8.dp),
                 )
                 .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = Color(0xFFE9F3ED),
+            color = if (active) UdroidTerminalGreen else UdroidTerminalText,
             style = MaterialTheme.typography.labelMedium,
         )
     }
