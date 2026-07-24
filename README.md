@@ -1,5 +1,14 @@
 # uDroid for Android
 
+[![Android CI](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml/badge.svg)](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml)
+
+> [!WARNING]
+> **uDroid is in extremely early development.** The current builds are for
+> testing and contributor feedback, not daily use. Expect incomplete features,
+> breaking changes, installation failures, and Linux environments that may need
+> to be reinstalled between versions. Back up anything important before using
+> the app.
+
 This is the standalone Android application for
 [uDroid](https://github.com/RandomCoderOrg/fs-manager-udroid): a friendly,
 supervised way to install, boot, manage, and use Linux distributions on
@@ -29,6 +38,9 @@ not a uDroid dependency or compatibility requirement.
 - Checkpoint 5: a service-owned Termux PTY and terminal emulator, an
   interactive Jammy login shell, clipboard/IME/extra-key input, live resize,
   Activity reattachment, and bounded terminal history.
+- Checkpoint 5.1: a Termius-inspired adaptive workspace, real icon navigation,
+  a wide-screen navigation rail, and a focused terminal surface tested in
+  portrait, landscape, and enlarged Android font modes.
 
 Selecting an image does not start a download. The review screen persists across
 Activity and process recreation, and the archive transfer begins only after
@@ -51,6 +63,26 @@ Extraction, recovery, and activation are documented in
 [Checkpoint 4: recoverable rootfs activation](docs/CHECKPOINT_4_ROOTFS_ACTIVATION.md).
 The terminal ownership and PTY contract are documented in
 [Checkpoint 5: supervised interactive terminal](docs/CHECKPOINT_5_INTERACTIVE_TERMINAL.md).
+The adaptive workspace and focused-terminal design are documented in
+[Checkpoint 5.1: adaptive workspace UI](docs/CHECKPOINT_5_1_ADAPTIVE_WORKSPACE_UI.md).
+
+## Development releases
+
+Git tags matching `v*` are built by GitHub Actions. Each resulting prerelease
+contains:
+
+- one universal debug-signed APK covering `arm64-v8a`, `armeabi-v7a`, and
+  `x86_64`;
+- `SHA256SUMS` for verifying the downloaded APK;
+- GitHub's source archives, including the vendored Termux terminal components
+  and the corresponding third-party notices.
+
+The `v0.0.1` APK is a development build, not a Play Store or production-signed
+release. It can be installed for testing with:
+
+```sh
+adb install -r udroid-v0.0.1-debug.apk
+```
 
 ## Build
 
