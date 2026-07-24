@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
+import android.os.ParcelFileDescriptor
 import org.randomcoder.udroid.runtime.EventJournal
 import java.io.File
 
@@ -20,16 +21,20 @@ class X11ServerController(
     private val replyMessenger =
         Messenger(
             Handler(Looper.getMainLooper()) { message ->
-                if (message.what != X11ServerProtocol.MESSAGE_STATUS) {
-                    return@Handler false
+                when (message.what) {
+                    X11ServerProtocol.MESSAGE_STATUS -> recordStatus(message.data)
+                    X11ServerProtocol.MESSAGE_RENDERER -> receiveRenderer(message.data)
+                    else -> return@Handler false
                 }
-                recordStatus(message.data)
                 true
             },
         )
     private var server: Messenger? = null
     private var bound = false
     private var pendingStart: StartRequest? = null
+    private var rendererCallback: ((ParcelFileDescriptor?) -> Unit)? = null
+    private var rendererRequestInFlight = false
+    private var ready = false
 
     private val connection =
         object : ServiceConnection {
@@ -43,6 +48,9 @@ class X11ServerController(
 
             override fun onServiceDisconnected(name: ComponentName) {
                 server = null
+                rendererRequestInFlight = false
+                rendererCallback?.invoke(null)
+                rendererCallback = null
                 pendingStart?.let { request ->
                     journal.append(
                         component = "x11",
@@ -120,6 +128,15 @@ class X11ServerController(
         }
         server = null
         pendingStart = null
+        ready = false
+        rendererRequestInFlight = false
+        rendererCallback?.invoke(null)
+        rendererCallback = null
+    }
+
+    fun requestRendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
+        rendererCallback = callback
+        if (ready && !rendererRequestInFlight) sendRendererRequest()
     }
 
     private fun sendStart(request: StartRequest) {
@@ -181,7 +198,17 @@ class X11ServerController(
             bootId = bootId,
             fields = fields,
         )
+        if (state == X11ServerProtocol.STATE_READY) {
+            ready = true
+            if (rendererCallback != null && !rendererRequestInFlight) {
+                sendRendererRequest()
+            }
+        }
         if (state == X11ServerProtocol.STATE_FAILED) {
+            ready = false
+            rendererRequestInFlight = false
+            rendererCallback?.invoke(null)
+            rendererCallback = null
             pendingStart = null
             if (bound) {
                 runCatching { context.unbindService(connection) }
@@ -189,6 +216,50 @@ class X11ServerController(
             }
             server = null
         }
+    }
+
+    private fun sendRendererRequest() {
+        if (rendererRequestInFlight) return
+        val target = server ?: return
+        val request = pendingStart ?: return
+        rendererRequestInFlight = true
+        runCatching {
+            target.send(
+                Message.obtain(null, X11ServerProtocol.MESSAGE_GET_RENDERER).apply {
+                    arg1 = X11ServerProtocol.VERSION
+                    replyTo = replyMessenger
+                    data =
+                        Bundle().apply {
+                            putString(X11ServerProtocol.KEY_BOOT_ID, request.bootId)
+                        }
+                },
+            )
+        }.onFailure {
+            rendererRequestInFlight = false
+            rendererCallback?.invoke(null)
+            rendererCallback = null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun receiveRenderer(data: Bundle) {
+        rendererRequestInFlight = false
+        val descriptor =
+            data.getParcelable<ParcelFileDescriptor>(
+                X11ServerProtocol.KEY_RENDERER_FD,
+            )
+        val callback = rendererCallback
+        rendererCallback = null
+        callback?.invoke(descriptor)
+        journal.append(
+            component = "x11",
+            severity = if (descriptor == null) "error" else "info",
+            event = if (descriptor == null) "renderer_connection_failed" else "renderer_connected",
+            message =
+                data.getString(X11ServerProtocol.KEY_DETAIL)
+                    ?: "Renderer connection FD delivered to the Android UI",
+            bootId = data.getString(X11ServerProtocol.KEY_BOOT_ID),
+        )
     }
 
     private data class StartRequest(

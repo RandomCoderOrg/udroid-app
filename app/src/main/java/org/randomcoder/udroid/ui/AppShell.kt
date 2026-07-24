@@ -29,12 +29,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Refresh
@@ -81,6 +83,7 @@ enum class UdroidDestination(
     HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
     DISTROS("Linux", Icons.Outlined.Storage, Icons.Filled.Storage),
     TERMINAL("Terminal", Icons.Outlined.Terminal, Icons.Filled.Terminal),
+    DESKTOP("Desktop", Icons.Outlined.DesktopWindows, Icons.Filled.DesktopWindows),
     DEVICE("Device", Icons.Outlined.Memory, Icons.Filled.Memory),
     LOGS("Logs", Icons.AutoMirrored.Outlined.Article, Icons.AutoMirrored.Filled.Article),
 }
@@ -108,6 +111,15 @@ fun UdroidApp(
     onCloseInstall: () -> Unit,
     onRetryDownload: () -> Unit,
 ) {
+    if (destination == UdroidDestination.DESKTOP) {
+        DesktopPage(
+            snapshot = snapshot,
+            service = runtimeService,
+            onExit = { onDestinationSelected(UdroidDestination.HOME) },
+        )
+        return
+    }
+
     if (destination == UdroidDestination.TERMINAL) {
         UdroidTerminalTheme {
             BackHandler {
@@ -308,6 +320,7 @@ private fun ManagementPane(
                             onRefresh = onRefresh,
                         )
                     UdroidDestination.TERMINAL -> Unit
+                    UdroidDestination.DESKTOP -> Unit
                 }
             }
         }

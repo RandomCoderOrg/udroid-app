@@ -38,5 +38,8 @@ apply_once "$cpp_root/libepoxy" "$cpp_root/patches/libepoxy.patch"
 apply_once \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0002-udroid-native-server-entrypoint.patch"
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0003-udroid-renderer-bridge.patch"
 
 echo "Termux:X11 native source patches are ready."

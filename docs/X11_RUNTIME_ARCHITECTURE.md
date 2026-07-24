@@ -33,8 +33,13 @@ uDroid as the sole application and lifecycle owner.
 The supervised server process now starts the native X server directly through
 a small uDroid JNI entrypoint. It does not use the old shell loader, hidden
 Android APIs, broadcasts, a TCP listener, or a separate Termux:X11
-installation. The next boundary is attaching the renderer channel and Android
-surface without tying server lifetime to the Activity.
+installation.
+
+The renderer channel is now transported as a `ParcelFileDescriptor` over the
+same private Binder contract. uDroid owns a minimal display `SurfaceView`
+instead of embedding Termux:X11's Activity, preferences, navigation, or
+broadcast lifecycle. Closing the Desktop page detaches that view while the
+supervised X server and PRoot guest continue running.
 
 ## Runtime ownership
 
@@ -86,8 +91,9 @@ The Android side follows four rules:
 
 1. A surface can appear, resize, disappear, and reappear without restarting
    the X server.
-2. Buffer stride and format come from the allocator; width is never assumed to
-   equal stride.
+2. The Android child surface uses the upstream HAL BGRA format contract and a
+   transparent parent drawable. Buffer stride comes from the allocator; width
+   is never assumed to equal stride.
 3. A buffer is not reused until its release fence or equivalent completion
    signal is observed.
 4. The stable generic path is retained whenever a zero-copy or
@@ -119,8 +125,8 @@ GNOME, KDE, browsers, and games remain later macro probes.
 
 ## Pixel 6a runtime evidence
 
-The 2026-07-24 Tensor G1 device run passed the first two gates and an additional
-wire-protocol check:
+The 2026-07-24 Tensor G1 device run passed server startup, protocol setup,
+visible application presentation, motion, and surface-cycle checks:
 
 | Probe | Result |
 | --- | --- |
@@ -131,6 +137,12 @@ wire-protocol check:
 | Native Xorg to protocol-ready | 117 ms |
 | Total request to protocol-ready | 825 ms |
 | Guest bridge | same socket bind-mounted at `/tmp/.X11-unix`, `DISPLAY=:0` |
+| Renderer transport | one Binder-delivered renderer FD per Desktop attach |
+| Android display target | 1080×2142 below the persistent uDroid header |
+| Visible clients | `glxgears` and `xlogo` both reached the Android display |
+| Motion probe | 49,254 pixels changed, 11.84% of the sampled gear region in one second |
+| Presenter cadence | stabilized at 299–300 frames per five seconds, approximately 60 FPS |
+| Surface cycle | X11 PID `31974` survived detach and reattach; the running gears returned |
 | Stop ownership | uDroid removed both its PRoot guest and `:x11` process |
 
 ```mermaid
@@ -146,8 +158,28 @@ parses the eight-byte setup response. Merely connecting to the Unix socket is
 not considered ready; that weaker test initially hid a probe-side
 `LocalSocket` ordering bug.
 
-No pixels were presented in this checkpoint. `test-pattern`, surface cycling,
-input, Present, and desktop gates remain untested.
+The presentation investigation used two independent observations. An XWD dump
+of the root window contained the expected gears while Android was still black,
+which isolated the failure to the Android surface rather than GLX or Xorg. The
+final fix matched upstream Lorie's transparent `SurfaceView` contract; an
+opaque parent background had covered the correctly rendered child surface.
+An in-flight request gate also prevents two renderer FDs from racing for
+Lorie's single renderer socket.
+
+This checkpoint proves visible GLX plumbing but not hardware acceleration.
+Ubuntu Jammy's stock Mesa reports:
+
+| GL query | Current result |
+| --- | --- |
+| Direct rendering | yes |
+| Renderer | `llvmpipe (LLVM 15.0.7, 128 bits)` |
+| Accelerated | no |
+| OpenGL | 4.5 compatibility profile, Mesa 23.2.1 |
+
+The strict deterministic checksum, input loop, Present soak, and hardware
+driver installation remain future gates. The next graphics checkpoint should
+package the uDroid GPU profile and require `glxinfo -B` to report the hardware
+renderer before performance conclusions are drawn.
 
 ## AOSP TerminalApp assessment
 

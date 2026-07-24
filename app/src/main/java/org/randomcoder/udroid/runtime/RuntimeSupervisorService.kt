@@ -15,6 +15,7 @@ import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
@@ -222,6 +223,10 @@ class RuntimeSupervisorService : Service() {
 
     fun writeToTerminal(text: String) {
         ownedSession.get()?.takeIf(TerminalSession::isRunning)?.write(text)
+    }
+
+    fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
+        x11Controller.requestRendererConnection(callback)
     }
 
     private fun startRuntime() {

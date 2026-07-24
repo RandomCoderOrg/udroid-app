@@ -1,0 +1,64 @@
+--- a/cmdentrypoint.c
++++ b/cmdentrypoint.c
+@@ -511,8 +511,7 @@ void DDXNotifyFocusChanged(void) {
+     }
+ }
+ 
+-JNIEXPORT jobject JNICALL
+-Java_com_termux_x11_CmdEntryPoint_getXConnection(JNIEnv *env, __unused jobject cls) {
++static jobject getXConnection(JNIEnv *env) {
+     int client[2];
+     jclass ParcelFileDescriptorClass = (*env)->FindClass(env, "android/os/ParcelFileDescriptor");
+     jmethodID adoptFd = (*env)->GetStaticMethodID(env, ParcelFileDescriptorClass, "adoptFd", "(I)Landroid/os/ParcelFileDescriptor;");
+@@ -523,6 +522,18 @@ Java_com_termux_x11_CmdEntryPoint_getXConnection(JNIEnv *env, __unused jobject
+     return (*env)->CallStaticObjectMethod(env, ParcelFileDescriptorClass, adoptFd, client[0]);
+ }
+ 
++JNIEXPORT jobject JNICALL
++Java_com_termux_x11_CmdEntryPoint_getXConnection(
++        JNIEnv *env, __unused jobject cls) {
++    return getXConnection(env);
++}
++
++JNIEXPORT jobject JNICALL
++Java_org_randomcoder_udroid_x11_X11NativeBridge_getXConnection(
++        JNIEnv *env, __unused jclass cls) {
++    return getXConnection(env);
++}
++
+ void* logcatThread(void *arg) {
+     char buffer[4096];
+     size_t len;
+--- a/activity.c
++++ b/activity.c
+@@ -127,6 +127,8 @@ static void nativeInit(JNIEnv *env, jobject thiz) {
+ 
+     (*env)->GetJavaVM(env, &vm);
+     (*vm)->AttachCurrentThread(vm, &guienv, NULL);
++    if (globalThiz)
++        (*guienv)->DeleteGlobalRef(guienv, globalThiz);
+     globalThiz = (*guienv)->NewGlobalRef(env, thiz);
+     connect_(NULL, NULL, -1);
+ }
+@@ -411,6 +411,21 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, __unused void *reserved) {
+     jclass cls = (*env)->FindClass(env, "com/termux/x11/LorieView");
+     (*env)->RegisterNatives(env, cls, methods, sizeof(methods)/sizeof(methods[0]));
+ 
++    static JNINativeMethod udroidMethods[] = {
++            {"nativeInit", "()V", (void *)&nativeInit},
++            {"surfaceChanged", "(Landroid/view/Surface;)V", (void *)&rendererSetWindow},
++            {"setViewport", "(IIIIII)V", (void *)&rendererSetViewport},
++            {"connect", "(I)V", (void *)&connect_},
++            {"connected", "()Z", (void *)&connected},
++            {"sendWindowChange", "(IIILjava/lang/String;)V", (void *)&sendWindowChange},
++            {"sendMouseEvent", "(FFIZZ)V", (void *)&sendMouseEvent},
++            {"sendTouchEvent", "(IIII)V", (void *)&sendTouchEvent},
++            {"sendKeyEvent", "(IIZI)Z", (void *)&sendKeyEvent},
++            {"sendTextEvent", "([B)V", (void *)&sendTextEvent},
++    };
++    jclass udroidClass = (*env)->FindClass(env, "org/randomcoder/udroid/x11/X11DisplayView");
++    (*env)->RegisterNatives(env, udroidClass, udroidMethods, sizeof(udroidMethods)/sizeof(udroidMethods[0]));
++
+     return JNI_VERSION_1_6;
+ }
+ 

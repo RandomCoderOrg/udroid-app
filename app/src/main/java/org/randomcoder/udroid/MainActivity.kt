@@ -167,7 +167,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
-        val terminal = destination == UdroidDestination.TERMINAL
+        val terminal =
+            destination == UdroidDestination.TERMINAL ||
+                destination == UdroidDestination.DESKTOP
         val scrim = if (terminal) UdroidTerminal.toArgb() else UdroidCanvas.toArgb()
         enableEdgeToEdge(
             statusBarStyle =

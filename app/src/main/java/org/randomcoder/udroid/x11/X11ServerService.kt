@@ -21,11 +21,13 @@ class X11ServerService : Service() {
             Thread(task, "udroid-x11-readiness").apply { isDaemon = true }
         }
     private val startAccepted = AtomicBoolean(false)
+    private val serverReady = AtomicBoolean(false)
     private val handler by lazy {
         Handler(mainLooper) { message ->
             when (message.what) {
                 X11ServerProtocol.MESSAGE_START -> handleStart(message)
                 X11ServerProtocol.MESSAGE_STOP -> handleStop(message)
+                X11ServerProtocol.MESSAGE_GET_RENDERER -> handleRendererRequest(message)
                 else -> return@Handler false
             }
             true
@@ -153,6 +155,7 @@ class X11ServerService : Service() {
         while (!Thread.currentThread().isInterrupted && SystemClock.elapsedRealtime() < deadline) {
             val probe = X11ProtocolProbe.query(socket)
             if (probe is X11ProtocolProbe.Result.Ready) {
+                serverReady.set(true)
                 reply(
                     client,
                     X11ServerProtocol.STATE_READY,
@@ -187,6 +190,52 @@ class X11ServerService : Service() {
             "Stopping embedded Termux:X11",
         )
         handler.postDelayed(::terminateProcess, STOP_REPLY_DELAY_MILLIS)
+    }
+
+    private fun handleRendererRequest(message: Message) {
+        val client = message.replyTo ?: return
+        val descriptor =
+            if (serverReady.get()) {
+                X11NativeBridge.getXConnection()
+            } else {
+                null
+            }
+        val response =
+            Message.obtain(null, X11ServerProtocol.MESSAGE_RENDERER).apply {
+                arg1 = X11ServerProtocol.VERSION
+                data =
+                    Bundle().apply {
+                        putString(
+                            X11ServerProtocol.KEY_BOOT_ID,
+                            message.data.getString(X11ServerProtocol.KEY_BOOT_ID),
+                        )
+                        if (descriptor != null) {
+                            putParcelable(
+                                X11ServerProtocol.KEY_RENDERER_FD,
+                                descriptor,
+                            )
+                        } else {
+                            putString(
+                                X11ServerProtocol.KEY_DETAIL,
+                                if (serverReady.get()) {
+                                    "X11 server could not allocate a renderer connection"
+                                } else {
+                                    "X11 server is not protocol-ready"
+                                },
+                            )
+                        }
+                    }
+            }
+        try {
+            client.send(response)
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not return the X11 renderer connection", error)
+        } finally {
+            runCatching { descriptor?.close() }
+                .onFailure { error ->
+                    Log.w(TAG, "Could not close the local renderer descriptor", error)
+                }
+        }
     }
 
     private fun reply(
