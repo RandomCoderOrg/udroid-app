@@ -20,9 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,7 +44,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.randomcoder.udroid.catalog.CatalogSource
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
@@ -62,7 +58,6 @@ fun DistroCataloguePage(
     activeRootfsName: String?,
     onRetry: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
-    onSetActive: (String) -> Unit,
     onOpenTerminal: (String) -> Unit,
 ) {
     when (state) {
@@ -119,19 +114,22 @@ fun DistroCataloguePage(
                 remember(installedRootfses) {
                     installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name)
                 }
-            val recommended =
-                remember(catalogue.variants) {
-                    catalogue.variants.firstOrNull { it.recommended }
-                        ?: catalogue.variants.first()
+            val orderedVariants =
+                remember(catalogue.variants, installedNames, activeRootfsName) {
+                    catalogue.variants.sortedWith(
+                        compareBy<DistroVariant> { distro ->
+                            when {
+                                distro.internalName == activeRootfsName -> 0
+                                distro.internalName in installedNames -> 1
+                                distro.recommended -> 2
+                                else -> 3
+                            }
+                        }.thenBy { it.releaseName.lowercase() },
+                    )
                 }
-            val remaining =
-                remember(catalogue.variants, recommended.id) {
-                    catalogue.variants.filterNot { it.id == recommended.id }
-                }
-            var showAll by remember(catalogue.architecture) { mutableStateOf(false) }
             var searchQuery by remember(catalogue.architecture) { mutableStateOf("") }
-            val searchResults by
-                remember(catalogue.variants, searchQuery) {
+            val visibleVariants by
+                remember(orderedVariants, searchQuery) {
                     derivedStateOf {
                         val terms =
                             searchQuery
@@ -140,9 +138,9 @@ fun DistroCataloguePage(
                                 .split(Regex("\\s+"))
                                 .filter(String::isNotBlank)
                         if (terms.isEmpty()) {
-                            emptyList()
+                            orderedVariants
                         } else {
-                            catalogue.variants.filter { distro ->
+                            orderedVariants.filter { distro ->
                                 terms.all(distro.searchableText::contains)
                             }
                         }
@@ -161,43 +159,13 @@ fun DistroCataloguePage(
                         title = "Linux systems",
                         subtitle =
                             if (installedRootfses.isEmpty()) {
-                                "Install a compatible system"
+                                "${catalogue.variants.size} compatible systems"
                             } else {
-                                "${installedRootfses.size} installed · choose what to run"
+                                "${installedRootfses.size} installed · " +
+                                    "${catalogue.variants.size} compatible"
                             },
                         modifier = Modifier.padding(top = 18.dp, bottom = 7.dp),
                     )
-                }
-
-                if (installedRootfses.isNotEmpty()) {
-                    item(key = "installed-label") {
-                        UdroidSectionLabel(
-                            text = "Installed",
-                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
-                        )
-                    }
-                    items(
-                        items = installedRootfses,
-                        key = { "installed:${it.name}" },
-                        contentType = { "installed-rootfs-card" },
-                    ) { rootfs ->
-                        InstalledRootfsCard(
-                            rootfs = rootfs,
-                            distro =
-                                catalogue.variants.firstOrNull {
-                                    it.internalName == rootfs.name
-                                },
-                            active = rootfs.name == activeRootfsName,
-                            onSetActive = { onSetActive(rootfs.name) },
-                            onOpenTerminal = { onOpenTerminal(rootfs.name) },
-                        )
-                    }
-                    item(key = "add-system-label") {
-                        UdroidSectionLabel(
-                            text = "Add a Linux system",
-                            modifier = Modifier.padding(top = 8.dp, bottom = 1.dp),
-                        )
-                    }
                 }
 
                 item(key = "distro-search") {
@@ -230,159 +198,58 @@ fun DistroCataloguePage(
                     )
                 }
 
-                if (searchQuery.isBlank()) {
-                    item {
-                        UdroidSectionLabel(
-                            text = "Recommended",
-                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
-                        )
-                    }
-
-                    item(contentType = "distro-card") {
-                        DistroCard(
-                            distro = recommended,
-                            emphasized = true,
-                            installed = recommended.internalName in installedNames,
-                            active = recommended.internalName == activeRootfsName,
-                            onSelect = {
-                                if (recommended.internalName in installedNames) {
-                                    onOpenTerminal(recommended.internalName)
-                                } else {
-                                    onPreviewInstall(recommended)
-                                }
+                item(key = "catalogue-count") {
+                    UdroidSectionLabel(
+                        text =
+                            when {
+                                searchQuery.isBlank() -> "All systems"
+                                visibleVariants.size == 1 -> "1 matching system"
+                                else -> "${visibleVariants.size} matching systems"
                             },
-                        )
-                    }
+                        modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
+                    )
+                }
 
-                    item {
-                        val sourceText =
-                            when (catalogue.source) {
-                                CatalogSource.NETWORK -> "Live uDroid + pinned archives"
-                                CatalogSource.CACHE -> "Saved uDroid + pinned archives"
-                                CatalogSource.BUILT_IN -> "Offline recovery + pinned archives"
-                            }
+                if (visibleVariants.isEmpty()) {
+                    item(key = "empty-search") {
                         Surface(
                             color = UdroidRaised,
                             border = BorderStroke(1.dp, UdroidLine),
                             shape = RoundedCornerShape(11.dp),
                         ) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showAll = !showAll }
-                                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        if (showAll) {
-                                            "Hide other images"
-                                        } else {
-                                            "Browse all images"
-                                        },
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    Text(
-                                        "${remaining.size} compatible images · $sourceText",
-                                        color = UdroidMuted,
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                                Icon(
-                                    imageVector =
-                                        if (showAll) {
-                                            Icons.Outlined.ExpandLess
-                                        } else {
-                                            Icons.Outlined.ExpandMore
-                                        },
-                                    contentDescription =
-                                        if (showAll) {
-                                            "Hide compatible images"
-                                        } else {
-                                            "Show compatible images"
-                                        },
-                                    tint = UdroidMuted,
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    "No matching Linux system",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Try a distro, release, desktop, or architecture.",
+                                    color = UdroidMuted,
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
                         }
                     }
-
-                    if (showAll) {
-                        items(
-                            items = remaining,
-                            key = { it.id },
-                            contentType = { "distro-card" },
-                        ) { distro ->
-                            DistroCard(
-                                distro = distro,
-                                emphasized = false,
-                                installed = distro.internalName in installedNames,
-                                active = distro.internalName == activeRootfsName,
-                                onSelect = {
-                                    if (distro.internalName in installedNames) {
-                                        onOpenTerminal(distro.internalName)
-                                    } else {
-                                        onPreviewInstall(distro)
-                                    }
-                                },
-                            )
-                        }
-                    }
                 } else {
-                    item(key = "search-result-count") {
-                        UdroidSectionLabel(
-                            text =
-                                if (searchResults.size == 1) {
-                                    "1 matching image"
+                    items(
+                        items = visibleVariants,
+                        key = { it.id },
+                        contentType = { "distro-card" },
+                    ) { distro ->
+                        val installed = distro.internalName in installedNames
+                        DistroCard(
+                            distro = distro,
+                            installed = installed,
+                            active = distro.internalName == activeRootfsName,
+                            onSelect = {
+                                if (installed) {
+                                    onOpenTerminal(distro.internalName)
                                 } else {
-                                    "${searchResults.size} matching images"
-                                },
-                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
-                        )
-                    }
-                    if (searchResults.isEmpty()) {
-                        item(key = "empty-search") {
-                            Surface(
-                                color = UdroidRaised,
-                                border = BorderStroke(1.dp, UdroidLine),
-                                shape = RoundedCornerShape(11.dp),
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(
-                                        "No matching Linux image",
-                                        style = MaterialTheme.typography.titleMedium,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "Try a distro, release, desktop, or architecture.",
-                                        color = UdroidMuted,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
+                                    onPreviewInstall(distro)
                                 }
-                            }
-                        }
-                    } else {
-                        items(
-                            items = searchResults,
-                            key = { it.id },
-                            contentType = { "distro-card" },
-                        ) { distro ->
-                            DistroCard(
-                                distro = distro,
-                                emphasized = distro.recommended,
-                                installed = distro.internalName in installedNames,
-                                active = distro.internalName == activeRootfsName,
-                                onSelect = {
-                                    if (distro.internalName in installedNames) {
-                                        onOpenTerminal(distro.internalName)
-                                    } else {
-                                        onPreviewInstall(distro)
-                                    }
-                                },
-                            )
-                        }
+                            },
+                        )
                     }
                 }
 
@@ -395,7 +262,6 @@ fun DistroCataloguePage(
 @Composable
 private fun DistroCard(
     distro: DistroVariant,
-    emphasized: Boolean,
     installed: Boolean,
     active: Boolean,
     onSelect: () -> Unit,
@@ -406,7 +272,15 @@ private fun DistroCard(
                 .fillMaxWidth()
                 .clickable(onClick = onSelect),
         color = UdroidRaised,
-        border = BorderStroke(1.dp, if (emphasized) Color(0xFFF5C8B3) else UdroidLine),
+        border =
+            BorderStroke(
+                1.dp,
+                when {
+                    active -> UdroidForest.copy(alpha = 0.45f)
+                    distro.recommended && !installed -> Color(0xFFF5C8B3)
+                    else -> UdroidLine
+                },
+            ),
         shape = RoundedCornerShape(11.dp),
     ) {
         Row(
@@ -425,20 +299,19 @@ private fun DistroCard(
                         distro.releaseName,
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    if (emphasized) {
-                        Spacer(Modifier.size(8.dp))
-                        UdroidStatusBadge(
-                            label = "Recommended",
-                            color = UdroidUbuntu,
-                            background = UdroidWarm,
-                        )
-                    }
                     if (installed) {
                         Spacer(Modifier.size(8.dp))
                         UdroidStatusBadge(
                             label = if (active) "Active" else "Installed",
                             color = UdroidForest,
                             background = UdroidSoftGreen,
+                        )
+                    } else if (distro.recommended) {
+                        Spacer(Modifier.size(8.dp))
+                        UdroidStatusBadge(
+                            label = "Recommended",
+                            color = UdroidUbuntu,
+                            background = UdroidWarm,
                         )
                     }
                 }
@@ -450,83 +323,25 @@ private fun DistroCard(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Icon(
-                imageVector = Icons.Outlined.ChevronRight,
-                contentDescription = "Open ${distro.releaseName}",
-                tint = UdroidFaint,
-            )
-        }
-    }
-}
-
-@Composable
-private fun InstalledRootfsCard(
-    rootfs: InstalledRootfs,
-    distro: DistroVariant?,
-    active: Boolean,
-    onSetActive: () -> Unit,
-    onOpenTerminal: () -> Unit,
-) {
-    Surface(
-        color = UdroidRaised,
-        border =
-            BorderStroke(
-                1.dp,
-                if (active) UdroidForest.copy(alpha = 0.45f) else UdroidLine,
-            ),
-        shape = RoundedCornerShape(11.dp),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                distro?.let {
-                    DistroMark(distribution = it.distribution, size = 42)
-                    Spacer(Modifier.size(12.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            distro?.releaseName ?: rootfs.name,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        if (active) {
-                            Spacer(Modifier.size(8.dp))
-                            UdroidStatusBadge(
-                                label = "Active",
-                                color = UdroidForest,
-                                background = UdroidSoftGreen,
-                            )
-                        }
-                    }
+                if (installed) {
                     Text(
-                        distro?.let { "${it.experienceName} · ${it.architecture}" }
-                            ?: rootfs.name,
-                        color = UdroidMuted,
-                        style = MaterialTheme.typography.labelSmall,
+                        "Open",
+                        color = UdroidForest,
+                        style = MaterialTheme.typography.labelLarge,
                     )
+                    Spacer(Modifier.size(2.dp))
                 }
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            ) {
-                if (!active) {
-                    androidx.compose.material3.TextButton(onClick = onSetActive) {
-                        Text("Set active")
-                    }
-                }
-                Button(
-                    onClick = onOpenTerminal,
-                    shape = RoundedCornerShape(9.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.size(6.dp))
-                    Text("Open terminal")
-                }
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription =
+                        if (installed) {
+                            "Open ${distro.releaseName}"
+                        } else {
+                            "Review ${distro.releaseName}"
+                        },
+                    tint = if (installed) UdroidForest else UdroidFaint,
+                )
             }
         }
     }

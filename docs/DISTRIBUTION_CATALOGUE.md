@@ -6,11 +6,13 @@ experience, and provider. Selecting a result opens a review page; it never
 starts a download by itself.
 
 Every healthy rootfs remains independently discoverable through its
-`.udroid-ready` marker. The Linux page lists all installed systems, persists
-one explicit active system separately from installer progress, and can open a
-terminal in any listed installation. Existing installations are migrated by
-scanning app-private rootfs storage; no archive download or rootfs move is
-required.
+`.udroid-ready` marker. The Linux page uses one searchable catalogue rather
+than duplicating installed systems into a second section. Installed entries
+sort first, show their active or installed state in the existing row, and open
+the matching terminal instead of returning to the download screen. One
+explicit active system is persisted separately from installer progress.
+Existing installations are migrated by scanning app-private rootfs storage;
+no archive download or rootfs move is required.
 
 The active selection is the default for Terminal, Desktop, and Linux Apps.
 Opening another installed system stops an incompatible running session before

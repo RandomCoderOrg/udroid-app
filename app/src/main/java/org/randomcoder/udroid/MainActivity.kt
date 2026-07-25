@@ -149,7 +149,6 @@ class MainActivity : ComponentActivity() {
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
-                    onSetActiveRootfs = { activateRootfs(it) },
                     onOpenRootfsTerminal = { openRootfsTerminal(it) },
                     onStartDownload = { startSelectedDownload() },
                     onPauseDownload = { InstallerService.pause(this) },
@@ -527,14 +526,6 @@ class MainActivity : ComponentActivity() {
         installedRootfses = app.rootfsRegistry.all()
         linuxApplicationsLoadGeneration++
         linuxApplicationsState = LinuxApplicationsState.Loading
-    }
-
-    private fun activateRootfs(rootfsName: String) {
-        setActiveRootfs(rootfsName)
-        val runningSession = runtimeService?.currentTerminalSession()
-        if (runningSession?.isRunning == true && runningSession.mSessionName != rootfsName) {
-            RuntimeSupervisorService.stop(this)
-        }
     }
 
     private fun openRootfsTerminal(rootfsName: String) {
