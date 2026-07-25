@@ -2,7 +2,7 @@
 
 Status: first working checkpoint, 2026-07-24
 
-## Product contract
+## How it works
 
 uDroid treats freedesktop `.desktop` files in the installed distro as its Linux
 application registry. The Android Apps page shows the entries that are valid
