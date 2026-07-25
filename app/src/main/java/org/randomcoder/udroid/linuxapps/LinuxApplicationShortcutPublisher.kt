@@ -18,13 +18,14 @@ class LinuxApplicationShortcutPublisher(
 ) {
     fun publishAndRequestPin(
         application: LinuxApplication,
+        rootfsName: String,
     ): Result<LinuxApplicationShortcutResult> =
         runCatching {
             check(ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
                 "This launcher does not support adding app shortcuts to the home screen"
             }
 
-            val shortcut = buildShortcut(application)
+            val shortcut = buildShortcut(application, rootfsName)
             val dynamicPublished =
                 ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
             check(ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)) {
@@ -37,11 +38,12 @@ class LinuxApplicationShortcutPublisher(
 
     private fun buildShortcut(
         application: LinuxApplication,
+        rootfsName: String,
     ): ShortcutInfoCompat =
         ShortcutInfoCompat
             .Builder(
                 context,
-                LinuxApplicationShortcutContract.shortcutId(application.id),
+                LinuxApplicationShortcutContract.shortcutId(rootfsName, application.id),
             ).setShortLabel(application.name)
             .setLongLabel("Open ${application.name} in uDroid")
             .setDisabledMessage(
@@ -53,6 +55,9 @@ class LinuxApplicationShortcutPublisher(
                     .putExtra(
                         LinuxApplicationShortcutContract.EXTRA_APPLICATION_ID,
                         application.id,
+                    ).putExtra(
+                        LinuxApplicationShortcutContract.EXTRA_ROOTFS_NAME,
+                        rootfsName,
                     ).addFlags(
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP,
@@ -74,11 +79,17 @@ object LinuxApplicationShortcutContract {
         "org.randomcoder.udroid.action.LAUNCH_LINUX_APPLICATION"
     const val EXTRA_APPLICATION_ID =
         "org.randomcoder.udroid.extra.LINUX_APPLICATION_ID"
+    const val EXTRA_ROOTFS_NAME =
+        "org.randomcoder.udroid.extra.ROOTFS_NAME"
 
     private const val SHORTCUT_ID_PREFIX = "linux-application:"
 
-    fun shortcutId(applicationId: String): String {
+    fun shortcutId(
+        rootfsName: String,
+        applicationId: String,
+    ): String {
+        require(rootfsName.isNotBlank()) { "Linux system name must not be blank" }
         require(applicationId.isNotBlank()) { "Linux application ID must not be blank" }
-        return "$SHORTCUT_ID_PREFIX$applicationId"
+        return "$SHORTCUT_ID_PREFIX$rootfsName:$applicationId"
     }
 }

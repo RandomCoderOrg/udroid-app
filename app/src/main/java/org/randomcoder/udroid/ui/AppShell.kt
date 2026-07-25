@@ -80,6 +80,7 @@ import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
+import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
@@ -111,6 +112,7 @@ fun UdroidApp(
     installProgress: InstallProgress?,
     updateState: AppUpdateState,
     installedRootfsName: String?,
+    installedRootfses: List<InstalledRootfs>,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -121,6 +123,8 @@ fun UdroidApp(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSetActiveRootfs: (String) -> Unit,
+    onOpenRootfsTerminal: (String) -> Unit,
     onStartDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onToggleInstallTerminal: () -> Unit,
@@ -211,6 +215,7 @@ fun UdroidApp(
                         installProgress = installProgress,
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
+                        installedRootfses = installedRootfses,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -220,6 +225,8 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onSetActiveRootfs = onSetActiveRootfs,
+                        onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onStartDownload = onStartDownload,
                         onPauseDownload = onPauseDownload,
                         onToggleInstallTerminal = onToggleInstallTerminal,
@@ -247,6 +254,7 @@ fun UdroidApp(
                         installProgress = installProgress,
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
+                        installedRootfses = installedRootfses,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -256,6 +264,8 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onSetActiveRootfs = onSetActiveRootfs,
+                        onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onStartDownload = onStartDownload,
                         onPauseDownload = onPauseDownload,
                         onToggleInstallTerminal = onToggleInstallTerminal,
@@ -297,6 +307,7 @@ private fun ManagementPane(
     installProgress: InstallProgress?,
     updateState: AppUpdateState,
     installedRootfsName: String?,
+    installedRootfses: List<InstalledRootfs>,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -306,6 +317,8 @@ private fun ManagementPane(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSetActiveRootfs: (String) -> Unit,
+    onOpenRootfsTerminal: (String) -> Unit,
     onStartDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onToggleInstallTerminal: () -> Unit,
@@ -350,6 +363,7 @@ private fun ManagementPane(
                             snapshot = snapshot,
                             distro = installedDistro,
                             rootfsName = installedRootfsName,
+                            installedCount = installedRootfses.size,
                             capabilities = capabilities,
                             onRefresh = onRefresh,
                             onOpenTerminal = {
@@ -379,14 +393,21 @@ private fun ManagementPane(
                                 showTerminal = showInstallTerminal,
                                 onToggleTerminal = onToggleInstallTerminal,
                                 onBack = onCloseInstall,
+                                onOpenTerminal = {
+                                    onOpenRootfsTerminal(it.distro.internalName)
+                                },
                                 onStartDownload = onStartDownload,
                                 onPauseDownload = onPauseDownload,
                                 onRetryDownload = onRetryDownload,
                             )
                         } ?: DistroCataloguePage(
                             state = catalogueState,
+                            installedRootfses = installedRootfses,
+                            activeRootfsName = installedRootfsName,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
+                            onSetActive = onSetActiveRootfs,
+                            onOpenTerminal = onOpenRootfsTerminal,
                         )
                     UdroidDestination.DEVICE ->
                         DevicePage(
@@ -543,6 +564,7 @@ private fun WorkspacePage(
     snapshot: RuntimeSnapshot,
     distro: DistroVariant?,
     rootfsName: String?,
+    installedCount: Int,
     capabilities: List<CapabilityResult>,
     onRefresh: () -> Unit,
     onOpenTerminal: () -> Unit,
@@ -590,7 +612,12 @@ private fun WorkspacePage(
                     distro?.releaseName
                         ?: rootfsName?.let(::installedSystemTitle)
                         ?: "Choose and install a distribution",
-                trailingText = if (hasInstalledLinux) "Installed" else "Set up",
+                trailingText =
+                    when {
+                        installedCount > 1 -> "$installedCount installed"
+                        hasInstalledLinux -> "Installed"
+                        else -> "Set up"
+                    },
                 onClick = onOpenLinux,
             )
         }

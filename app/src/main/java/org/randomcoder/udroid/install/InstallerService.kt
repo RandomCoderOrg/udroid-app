@@ -345,6 +345,7 @@ class InstallerService : Service() {
         rootfs: File,
         reused: Boolean,
     ) {
+        app.rootfsRegistry.setActiveIfNone(rootfs.name)
         val previous = app.installState.current()
         val completed =
             InstallProgress(

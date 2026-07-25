@@ -23,6 +23,8 @@ the app's **About** page.
 
 - Search and install Ubuntu, Debian, Arch Linux, Alpine Linux, or Void Linux
   from checksum-verified images.
+- Keep multiple Linux systems installed, choose the active system, and open a
+  terminal in a specific installation.
 - Use the bundled, persistent terminal without setting up Termux separately.
 - Start the bundled Termux:X11 display and launch graphical Linux applications.
 - Discover installed `.desktop` entries and pin selected Linux apps to the

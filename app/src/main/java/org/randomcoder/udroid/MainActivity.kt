@@ -29,6 +29,7 @@ import org.randomcoder.udroid.catalog.DistroCatalogRepository
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
+import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallationSelection
 import org.randomcoder.udroid.install.InstallerService
 import org.randomcoder.udroid.linuxapps.DesktopApplicationScanner
@@ -38,7 +39,7 @@ import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
-import org.randomcoder.udroid.runtime.InstalledRootfsResolver
+import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.ui.UdroidApp
@@ -55,6 +56,11 @@ import org.randomcoder.udroid.update.AppUpdateScheduler
 import org.randomcoder.udroid.update.AppUpdateState
 import org.randomcoder.udroid.update.UpdateInstallResult
 
+private data class PendingLinuxApplication(
+    val application: LinuxApplication,
+    val rootfsName: String,
+)
+
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -67,11 +73,15 @@ class MainActivity : ComponentActivity() {
     private var installProgress by mutableStateOf<InstallProgress?>(null)
     private var updateState by mutableStateOf(AppUpdateState())
     private var installedRootfsName by mutableStateOf<String?>(null)
+    private var installedRootfses by mutableStateOf<List<InstalledRootfs>>(emptyList())
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
-    private var pendingLinuxApplication: LinuxApplication? = null
+    private var pendingLinuxApplication: PendingLinuxApplication? = null
     private var pendingLinuxApplicationId: String? = null
+    private var pendingShortcutRootfsName: String? = null
+    private var pendingTerminalRootfsName: String? = null
+    private var linuxApplicationsLoadGeneration = 0L
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
@@ -88,7 +98,10 @@ class MainActivity : ComponentActivity() {
                 refreshFromDisk()
                 launchPendingLinuxApplication()
                 if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
-                    RuntimeSupervisorService.start(this@MainActivity)
+                    RuntimeSupervisorService.start(
+                        this@MainActivity,
+                        app.rootfsRegistry.active()?.name,
+                    )
                 }
             }
 
@@ -121,6 +134,7 @@ class MainActivity : ComponentActivity() {
                     installProgress = installProgress,
                     updateState = updateState,
                     installedRootfsName = installedRootfsName,
+                    installedRootfses = installedRootfses,
                     linuxApplicationsState = linuxApplicationsState,
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
@@ -128,13 +142,15 @@ class MainActivity : ComponentActivity() {
                     onDestinationSelected = ::selectDestination,
                     onStart = {
                         ensureNotificationPermission()
-                        RuntimeSupervisorService.start(this)
+                        RuntimeSupervisorService.start(this, installedRootfsName)
                         selectDestination(UdroidDestination.TERMINAL)
                     },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
+                    onSetActiveRootfs = { activateRootfs(it) },
+                    onOpenRootfsTerminal = { openRootfsTerminal(it) },
                     onStartDownload = { startSelectedDownload() },
                     onPauseDownload = { InstallerService.pause(this) },
                     onToggleInstallTerminal = {
@@ -254,9 +270,16 @@ class MainActivity : ComponentActivity() {
         snapshot = app.runtimeState.current()
         installProgress = app.installState.current()
         updateState = app.updateState.current()
-        installedRootfsName =
-            runCatching { InstalledRootfsResolver.resolve(this).name }
-                .getOrNull()
+        installedRootfses = app.rootfsRegistry.all()
+        installedRootfsName = app.rootfsRegistry.active()?.name
+        installProgress
+            ?.takeIf { progress ->
+                progress.stage == InstallStage.READY &&
+                    installedRootfses.any { it.name == progress.distro.internalName }
+            }?.let {
+                app.installState.clear()
+                installProgress = null
+            }
         val resolvedDestination =
             workspaceJourney(
                 requestedDestination = selectedDestination,
@@ -269,6 +292,17 @@ class MainActivity : ComponentActivity() {
             applySystemBars(resolvedDestination)
         }
         journalLines = app.journal.tail()
+        pendingTerminalRootfsName?.let { rootfsName ->
+            val session = runtimeService?.currentTerminalSession()
+            if (
+                session?.isRunning != true &&
+                snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.STARTING &&
+                snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.STOPPING
+            ) {
+                pendingTerminalRootfsName = null
+                RuntimeSupervisorService.start(this, rootfsName)
+            }
+        }
         launchPendingLinuxApplication()
     }
 
@@ -292,6 +326,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectDistro(distro: DistroVariant) {
+        if (installedRootfses.any { it.name == distro.internalName }) {
+            openRootfsTerminal(distro.internalName)
+            return
+        }
         selectDestination(UdroidDestination.DISTROS)
         showInstallTerminal = false
         installProgress = app.installState.save(InstallationSelection.initial(distro))
@@ -303,12 +341,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadLinuxApplications() {
+        val generation = ++linuxApplicationsLoadGeneration
         linuxApplicationsState = LinuxApplicationsState.Loading
         lifecycleScope.launch {
             val loadedState =
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        val rootfs = InstalledRootfsResolver.resolve(this@MainActivity)
+                        val rootfs = app.rootfsRegistry.resolve()
                         LinuxApplicationsState.Ready(
                             rootfsName = rootfs.name,
                             result = DesktopApplicationScanner().scan(rootfs),
@@ -319,31 +358,51 @@ class MainActivity : ComponentActivity() {
                         it.message ?: "The installed Linux image could not be scanned",
                     )
                 }
-            linuxApplicationsState = loadedState
-            resolveShortcutApplication(loadedState)
+            if (generation == linuxApplicationsLoadGeneration) {
+                linuxApplicationsState = loadedState
+                resolveShortcutApplication(loadedState)
+            }
         }
     }
 
     private fun launchLinuxApplication(application: LinuxApplication) {
         pendingLinuxApplicationId = null
         linuxApplicationMessage = "Preparing ${application.name}…"
+        val rootfsName =
+            (linuxApplicationsState as? LinuxApplicationsState.Ready)?.rootfsName
+                ?: installedRootfsName
+                ?: run {
+                    linuxApplicationMessage = "Install Linux before launching an app"
+                    return
+                }
+        setActiveRootfs(rootfsName)
+        val runningRootfs = runtimeService?.currentTerminalSession()?.mSessionName
         if (
             snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            runtimeService?.currentTerminalSession()?.isRunning != true
+            runtimeService?.currentTerminalSession()?.isRunning != true ||
+            runningRootfs != rootfsName
         ) {
-            pendingLinuxApplication = application
+            pendingLinuxApplication = PendingLinuxApplication(application, rootfsName)
             ensureNotificationPermission()
-            RuntimeSupervisorService.start(this)
+            if (runningRootfs != null && runningRootfs != rootfsName) {
+                pendingTerminalRootfsName = rootfsName
+                RuntimeSupervisorService.stop(this)
+            } else {
+                RuntimeSupervisorService.start(this, rootfsName)
+            }
             linuxApplicationMessage = "Starting Linux for ${application.name}…"
             return
         }
-        launchWithRuntime(application)
+        launchWithRuntime(application, rootfsName)
     }
 
     private fun pinLinuxApplication(application: LinuxApplication) {
+        val rootfsName =
+            (linuxApplicationsState as? LinuxApplicationsState.Ready)?.rootfsName
+                ?: return
         linuxApplicationMessage = "Preparing ${application.name} shortcut…"
         LinuxApplicationShortcutPublisher(this)
-            .publishAndRequestPin(application)
+            .publishAndRequestPin(application, rootfsName)
             .fold(
                 onSuccess = { result ->
                     linuxApplicationMessage =
@@ -369,6 +428,20 @@ class MainActivity : ComponentActivity() {
                 ?.takeIf(String::isNotBlank)
                 ?: return false
         intent.removeExtra(LinuxApplicationShortcutContract.EXTRA_APPLICATION_ID)
+        pendingShortcutRootfsName =
+            intent
+                .getStringExtra(LinuxApplicationShortcutContract.EXTRA_ROOTFS_NAME)
+                ?.takeIf(String::isNotBlank)
+        intent.removeExtra(LinuxApplicationShortcutContract.EXTRA_ROOTFS_NAME)
+        pendingShortcutRootfsName?.let { rootfsName ->
+            if (runCatching { app.rootfsRegistry.setActive(rootfsName) }.isFailure) {
+                pendingShortcutRootfsName = null
+                linuxApplicationMessage =
+                    "The Linux system for this shortcut is no longer installed"
+                selectDestination(UdroidDestination.APPS)
+                return true
+            }
+        }
         pendingLinuxApplicationId = applicationId
         linuxApplicationMessage = "Finding the Linux application…"
         selectDestination(UdroidDestination.APPS)
@@ -380,7 +453,15 @@ class MainActivity : ComponentActivity() {
         when (state) {
             LinuxApplicationsState.Loading -> Unit
             is LinuxApplicationsState.Ready -> {
+                if (
+                    pendingShortcutRootfsName != null &&
+                    state.rootfsName != pendingShortcutRootfsName
+                ) {
+                    loadLinuxApplications()
+                    return
+                }
                 pendingLinuxApplicationId = null
+                pendingShortcutRootfsName = null
                 val application =
                     state.result.applications.firstOrNull { it.id == applicationId }
                 if (application == null) {
@@ -392,6 +473,7 @@ class MainActivity : ComponentActivity() {
             }
             is LinuxApplicationsState.Failed -> {
                 pendingLinuxApplicationId = null
+                pendingShortcutRootfsName = null
                 linuxApplicationMessage = state.message
             }
         }
@@ -404,14 +486,21 @@ class MainActivity : ComponentActivity() {
         ) {
             return
         }
-        pendingLinuxApplication?.let { application ->
+        pendingLinuxApplication?.let { pending ->
+            if (runtimeService?.currentTerminalSession()?.mSessionName != pending.rootfsName) {
+                return
+            }
             pendingLinuxApplication = null
-            launchWithRuntime(application)
+            pendingTerminalRootfsName = null
+            launchWithRuntime(pending.application, pending.rootfsName)
         }
     }
 
-    private fun launchWithRuntime(application: LinuxApplication) {
-        runtimeService?.launchLinuxApplication(application) { result ->
+    private fun launchWithRuntime(
+        application: LinuxApplication,
+        rootfsName: String,
+    ) {
+        runtimeService?.launchLinuxApplication(application, rootfsName) { result ->
             result.fold(
                 onSuccess = {
                     linuxApplicationMessage = "${application.name} launched"
@@ -430,6 +519,36 @@ class MainActivity : ComponentActivity() {
                 },
             )
         }
+    }
+
+    private fun setActiveRootfs(rootfsName: String) {
+        val selected = app.rootfsRegistry.setActive(rootfsName)
+        installedRootfsName = selected.name
+        installedRootfses = app.rootfsRegistry.all()
+        linuxApplicationsLoadGeneration++
+        linuxApplicationsState = LinuxApplicationsState.Loading
+    }
+
+    private fun activateRootfs(rootfsName: String) {
+        setActiveRootfs(rootfsName)
+        val runningSession = runtimeService?.currentTerminalSession()
+        if (runningSession?.isRunning == true && runningSession.mSessionName != rootfsName) {
+            RuntimeSupervisorService.stop(this)
+        }
+    }
+
+    private fun openRootfsTerminal(rootfsName: String) {
+        setActiveRootfs(rootfsName)
+        ensureNotificationPermission()
+        val runningSession = runtimeService?.currentTerminalSession()
+        if (runningSession?.isRunning == true && runningSession.mSessionName != rootfsName) {
+            pendingTerminalRootfsName = rootfsName
+            RuntimeSupervisorService.stop(this)
+        } else {
+            pendingTerminalRootfsName = null
+            RuntimeSupervisorService.start(this, rootfsName)
+        }
+        selectDestination(UdroidDestination.TERMINAL)
     }
 
     private fun ensureNotificationPermission() {

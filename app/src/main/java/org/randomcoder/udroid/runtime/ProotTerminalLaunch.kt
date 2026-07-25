@@ -1,7 +1,6 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
-import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
@@ -16,27 +15,10 @@ data class ProotTerminalLaunch(
 )
 
 object InstalledRootfsResolver {
-    fun resolve(context: Context): File {
-        val rootfsDirectory = File(context.filesDir, "rootfs")
-        val preferredName =
-            (context.applicationContext as? UdroidApplication)
-                ?.installState
-                ?.current()
-                ?.distro
-                ?.internalName
-        val candidates =
-            rootfsDirectory
-                .listFiles()
-                .orEmpty()
-                .asSequence()
-                .filter(File::isDirectory)
-                .filter { File(it, RootfsInstallationPipeline.READY_MARKER).isFile }
-                .sortedByDescending { File(it, RootfsInstallationPipeline.READY_MARKER).lastModified() }
-                .toList()
-        return candidates.firstOrNull { it.name == preferredName }
-            ?: candidates.firstOrNull()
-            ?: error("Install a Linux image before opening the terminal")
-    }
+    fun resolve(
+        context: Context,
+        name: String? = null,
+    ): File = InstalledRootfsRegistry(context).resolve(name)
 }
 
 object ProotTerminalLaunchBuilder {

@@ -5,6 +5,18 @@ came from. Search matches distribution, release, suite, variant, architecture,
 experience, and provider. Selecting a result opens a review page; it never
 starts a download by itself.
 
+Every healthy rootfs remains independently discoverable through its
+`.udroid-ready` marker. The Linux page lists all installed systems, persists
+one explicit active system separately from installer progress, and can open a
+terminal in any listed installation. Existing installations are migrated by
+scanning app-private rootfs storage; no archive download or rootfs move is
+required.
+
+The active selection is the default for Terminal, Desktop, and Linux Apps.
+Opening another installed system stops an incompatible running session before
+starting the selected rootfs. uDroid currently supervises one active distro
+session at a time; this is distinct from limiting storage to one distro.
+
 ## Current sources
 
 | Distribution | Release | Source | Archive handling |

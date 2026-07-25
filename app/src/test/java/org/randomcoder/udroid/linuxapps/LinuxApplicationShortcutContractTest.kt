@@ -8,15 +8,21 @@ class LinuxApplicationShortcutContractTest {
     @Test
     fun derivesStableShortcutIdFromDesktopEntryId() {
         assertEquals(
-            "linux-application:org.blender.Blender",
-            LinuxApplicationShortcutContract.shortcutId("org.blender.Blender"),
+            "linux-application:udroid-jammy:org.blender.Blender",
+            LinuxApplicationShortcutContract.shortcutId(
+                "udroid-jammy",
+                "org.blender.Blender",
+            ),
         )
     }
 
     @Test
     fun rejectsBlankApplicationId() {
         assertThrows(IllegalArgumentException::class.java) {
-            LinuxApplicationShortcutContract.shortcutId(" ")
+            LinuxApplicationShortcutContract.shortcutId("udroid-jammy", " ")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            LinuxApplicationShortcutContract.shortcutId(" ", "org.blender.Blender")
         }
     }
 }

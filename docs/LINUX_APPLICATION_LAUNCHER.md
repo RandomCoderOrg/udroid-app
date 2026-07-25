@@ -83,13 +83,15 @@ entry as a dynamic shortcut, making recent selections available from the
 launcher's uDroid long-press menu, and sends a pinned-shortcut request to the
 launcher. Android always owns the final confirmation prompt.
 
-Shortcut IDs use the stable desktop entry ID:
-`linux-application:<desktop-entry-id>`. The intent contains the entry ID rather
-than the executable command. When invoked, `MainActivity` scans the current
-rootfs, resolves that ID to its current argument vector, starts the runtime,
-waits for X11, and launches it through the same supervised path as the Apps
-page. A removed application therefore produces an unavailable message instead
-of executing stale shortcut metadata.
+Shortcut IDs include both the installed system and stable desktop entry ID:
+`linux-application:<rootfs-name>:<desktop-entry-id>`. The intent contains those
+two identifiers rather than the executable command. When invoked,
+`MainActivity` activates that exact rootfs, scans it, resolves the desktop ID
+to its current argument vector, starts the matching runtime, waits for X11,
+and launches through the same supervised path as the Apps page. A removed
+system or application therefore produces an unavailable message instead of
+executing stale shortcut metadata or accidentally opening the application in
+another distro.
 
 Shortcut intents use `FLAG_ACTIVITY_CLEAR_TOP` and
 `FLAG_ACTIVITY_SINGLE_TOP`, so both a cold app and an existing single-activity
@@ -151,5 +153,5 @@ an uncaught process-wide exception.
 - Maintain a persistent D-Bus session and honor `DBusActivatable=true`.
 - Pass Android documents and URLs into `%f/%F/%u/%U`.
 - Add per-app logs and running-state controls.
-- Refresh or disable launcher shortcuts when applications are removed from the
-  current rootfs.
+- Refresh or disable launcher shortcuts when applications or their rootfs are
+  removed.

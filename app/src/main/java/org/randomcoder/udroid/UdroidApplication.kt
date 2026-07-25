@@ -5,6 +5,7 @@ import android.os.Build
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.runtime.EventJournal
+import org.randomcoder.udroid.runtime.InstalledRootfsRegistry
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
 import org.randomcoder.udroid.runtime.RuntimeStateStore
 import org.randomcoder.udroid.update.AppUpdateScheduler
@@ -24,12 +25,16 @@ class UdroidApplication : Application() {
     lateinit var updateState: AppUpdateStateStore
         private set
 
+    lateinit var rootfsRegistry: InstalledRootfsRegistry
+        private set
+
     override fun onCreate() {
         super.onCreate()
         runtimeState = RuntimeStateStore(this)
         journal = EventJournal(this)
         installState = InstallStateStore(this)
         updateState = AppUpdateStateStore(this)
+        rootfsRegistry = InstalledRootfsRegistry(this)
         if (!isMainProcess()) return
 
         updateState.reconcileInstalledVersion(BuildConfig.VERSION_NAME)

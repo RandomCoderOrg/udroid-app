@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,13 +52,18 @@ import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
+import org.randomcoder.udroid.runtime.InstalledRootfs
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun DistroCataloguePage(
     state: DistroCatalogState,
+    installedRootfses: List<InstalledRootfs>,
+    activeRootfsName: String?,
     onRetry: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSetActive: (String) -> Unit,
+    onOpenTerminal: (String) -> Unit,
 ) {
     when (state) {
         DistroCatalogState.Loading -> {
@@ -109,6 +115,10 @@ fun DistroCataloguePage(
 
         is DistroCatalogState.Ready -> {
             val catalogue = state.catalog
+            val installedNames =
+                remember(installedRootfses) {
+                    installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name)
+                }
             val recommended =
                 remember(catalogue.variants) {
                     catalogue.variants.firstOrNull { it.recommended }
@@ -148,10 +158,46 @@ fun DistroCataloguePage(
             ) {
                 item {
                     UdroidPageHeader(
-                        title = "Linux images",
-                        subtitle = "Install a compatible system",
+                        title = "Linux systems",
+                        subtitle =
+                            if (installedRootfses.isEmpty()) {
+                                "Install a compatible system"
+                            } else {
+                                "${installedRootfses.size} installed · choose what to run"
+                            },
                         modifier = Modifier.padding(top = 18.dp, bottom = 7.dp),
                     )
+                }
+
+                if (installedRootfses.isNotEmpty()) {
+                    item(key = "installed-label") {
+                        UdroidSectionLabel(
+                            text = "Installed",
+                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
+                        )
+                    }
+                    items(
+                        items = installedRootfses,
+                        key = { "installed:${it.name}" },
+                        contentType = { "installed-rootfs-card" },
+                    ) { rootfs ->
+                        InstalledRootfsCard(
+                            rootfs = rootfs,
+                            distro =
+                                catalogue.variants.firstOrNull {
+                                    it.internalName == rootfs.name
+                                },
+                            active = rootfs.name == activeRootfsName,
+                            onSetActive = { onSetActive(rootfs.name) },
+                            onOpenTerminal = { onOpenTerminal(rootfs.name) },
+                        )
+                    }
+                    item(key = "add-system-label") {
+                        UdroidSectionLabel(
+                            text = "Add a Linux system",
+                            modifier = Modifier.padding(top = 8.dp, bottom = 1.dp),
+                        )
+                    }
                 }
 
                 item(key = "distro-search") {
@@ -196,7 +242,15 @@ fun DistroCataloguePage(
                         DistroCard(
                             distro = recommended,
                             emphasized = true,
-                            onSelect = { onPreviewInstall(recommended) },
+                            installed = recommended.internalName in installedNames,
+                            active = recommended.internalName == activeRootfsName,
+                            onSelect = {
+                                if (recommended.internalName in installedNames) {
+                                    onOpenTerminal(recommended.internalName)
+                                } else {
+                                    onPreviewInstall(recommended)
+                                }
+                            },
                         )
                     }
 
@@ -264,7 +318,15 @@ fun DistroCataloguePage(
                             DistroCard(
                                 distro = distro,
                                 emphasized = false,
-                                onSelect = { onPreviewInstall(distro) },
+                                installed = distro.internalName in installedNames,
+                                active = distro.internalName == activeRootfsName,
+                                onSelect = {
+                                    if (distro.internalName in installedNames) {
+                                        onOpenTerminal(distro.internalName)
+                                    } else {
+                                        onPreviewInstall(distro)
+                                    }
+                                },
                             )
                         }
                     }
@@ -310,7 +372,15 @@ fun DistroCataloguePage(
                             DistroCard(
                                 distro = distro,
                                 emphasized = distro.recommended,
-                                onSelect = { onPreviewInstall(distro) },
+                                installed = distro.internalName in installedNames,
+                                active = distro.internalName == activeRootfsName,
+                                onSelect = {
+                                    if (distro.internalName in installedNames) {
+                                        onOpenTerminal(distro.internalName)
+                                    } else {
+                                        onPreviewInstall(distro)
+                                    }
+                                },
                             )
                         }
                     }
@@ -326,6 +396,8 @@ fun DistroCataloguePage(
 private fun DistroCard(
     distro: DistroVariant,
     emphasized: Boolean,
+    installed: Boolean,
+    active: Boolean,
     onSelect: () -> Unit,
 ) {
     Surface(
@@ -361,6 +433,14 @@ private fun DistroCard(
                             background = UdroidWarm,
                         )
                     }
+                    if (installed) {
+                        Spacer(Modifier.size(8.dp))
+                        UdroidStatusBadge(
+                            label = if (active) "Active" else "Installed",
+                            color = UdroidForest,
+                            background = UdroidSoftGreen,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -380,11 +460,85 @@ private fun DistroCard(
 }
 
 @Composable
+private fun InstalledRootfsCard(
+    rootfs: InstalledRootfs,
+    distro: DistroVariant?,
+    active: Boolean,
+    onSetActive: () -> Unit,
+    onOpenTerminal: () -> Unit,
+) {
+    Surface(
+        color = UdroidRaised,
+        border =
+            BorderStroke(
+                1.dp,
+                if (active) UdroidForest.copy(alpha = 0.45f) else UdroidLine,
+            ),
+        shape = RoundedCornerShape(11.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                distro?.let {
+                    DistroMark(distribution = it.distribution, size = 42)
+                    Spacer(Modifier.size(12.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            distro?.releaseName ?: rootfs.name,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (active) {
+                            Spacer(Modifier.size(8.dp))
+                            UdroidStatusBadge(
+                                label = "Active",
+                                color = UdroidForest,
+                                background = UdroidSoftGreen,
+                            )
+                        }
+                    }
+                    Text(
+                        distro?.let { "${it.experienceName} · ${it.architecture}" }
+                            ?: rootfs.name,
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                if (!active) {
+                    androidx.compose.material3.TextButton(onClick = onSetActive) {
+                        Text("Set active")
+                    }
+                }
+                Button(
+                    onClick = onOpenTerminal,
+                    shape = RoundedCornerShape(9.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text("Open terminal")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun InstallExperiencePage(
     progress: InstallProgress,
     showTerminal: Boolean,
     onToggleTerminal: () -> Unit,
     onBack: () -> Unit,
+    onOpenTerminal: () -> Unit,
     onStartDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onRetryDownload: () -> Unit,
@@ -518,10 +672,10 @@ fun InstallExperiencePage(
 
                     progress.stage == InstallStage.COMPLETE -> {
                         Button(
-                            onClick = onBack,
+                            onClick = onOpenTerminal,
                             shape = RoundedCornerShape(10.dp),
                         ) {
-                            Text("Open workspace")
+                            Text("Open terminal")
                         }
                     }
                 }

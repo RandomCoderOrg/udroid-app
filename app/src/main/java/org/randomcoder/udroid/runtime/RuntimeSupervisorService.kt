@@ -163,7 +163,7 @@ class RuntimeSupervisorService : Service() {
         return when {
             action == ACTION_START_RUNTIME -> {
                 startForeground(NOTIFICATION_ID, notification("Starting Linux terminal…"))
-                startRuntime()
+                startRuntime(intent.getStringExtra(EXTRA_ROOTFS_NAME))
                 START_STICKY
             }
 
@@ -240,6 +240,7 @@ class RuntimeSupervisorService : Service() {
 
     fun launchLinuxApplication(
         application: LinuxApplication,
+        rootfsName: String,
         callback: (Result<Unit>) -> Unit,
     ) {
         val snapshot = app.runtimeState.current()
@@ -248,6 +249,14 @@ class RuntimeSupervisorService : Service() {
             ownedSession.get()?.isRunning != true
         ) {
             callback(Result.failure(IllegalStateException("Start Linux before launching an app")))
+            return
+        }
+        if (ownedSession.get()?.mSessionName != rootfsName) {
+            callback(
+                Result.failure(
+                    IllegalStateException("Switch to $rootfsName before launching ${application.name}"),
+                ),
+            )
             return
         }
         if (application.terminal) {
@@ -292,7 +301,7 @@ class RuntimeSupervisorService : Service() {
             applicationExecutor.execute {
                 val result =
                     runCatching {
-                        val rootfs = InstalledRootfsResolver.resolve(this)
+                        val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
                         val launch =
                             ProotApplicationLaunchBuilder.create(
                                 context = this,
@@ -329,9 +338,21 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
-    private fun startRuntime() {
+    private fun startRuntime(requestedRootfsName: String? = null) {
         val existing = ownedSession.get()
         if (existing?.isRunning == true && existing.pid > 0) {
+            if (requestedRootfsName != null && existing.mSessionName != requestedRootfsName) {
+                publishState(
+                    app.runtimeState.update {
+                        it.copy(
+                            message =
+                                "${existing.mSessionName} is running; stop it before switching " +
+                                    "to $requestedRootfsName",
+                        )
+                    },
+                )
+                return
+            }
             publishState(
                 app.runtimeState.update {
                     it.copy(
@@ -369,7 +390,7 @@ class RuntimeSupervisorService : Service() {
 
         runCatching {
             val runtime = ProotRuntimeInstaller.install(this)
-            val rootfs = InstalledRootfsResolver.resolve(this)
+            val rootfs = InstalledRootfsResolver.resolve(this, requestedRootfsName)
             val x11SocketDirectory = x11Controller.start(rootfs, bootId)
             ProotTerminalLaunchBuilder.create(
                 context = this,
@@ -738,6 +759,7 @@ class RuntimeSupervisorService : Service() {
         const val ACTION_STATE_CHANGED = "org.randomcoder.udroid.action.STATE_CHANGED"
         const val EXTRA_PHASE = "phase"
         const val EXTRA_UPDATED_AT = "updated-at"
+        const val EXTRA_ROOTFS_NAME = "rootfs-name"
 
         private const val ACTION_START_RUNTIME =
             "org.randomcoder.udroid.action.START_RUNTIME"
@@ -754,11 +776,17 @@ class RuntimeSupervisorService : Service() {
         private const val MAX_APP_OUTPUT_CHARS = 2_000
         private const val MAX_APP_OUTPUT_LINES = 200
 
-        fun start(context: Context) {
+        fun start(
+            context: Context,
+            rootfsName: String? = null,
+        ) {
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, RuntimeSupervisorService::class.java)
-                    .setAction(ACTION_START_RUNTIME),
+                    .setAction(ACTION_START_RUNTIME)
+                    .apply {
+                        if (rootfsName != null) putExtra(EXTRA_ROOTFS_NAME, rootfsName)
+                    },
             )
         }
 
