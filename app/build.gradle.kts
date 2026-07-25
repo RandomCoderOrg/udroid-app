@@ -5,6 +5,20 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+val updateSigningStore = providers.environmentVariable("UDROID_SIGNING_STORE_FILE").orNull
+val updateSigningStorePassword =
+    providers.environmentVariable("UDROID_SIGNING_STORE_PASSWORD").orNull
+val updateSigningKeyAlias = providers.environmentVariable("UDROID_SIGNING_KEY_ALIAS").orNull
+val updateSigningKeyPassword =
+    providers.environmentVariable("UDROID_SIGNING_KEY_PASSWORD").orNull
+val hasUpdateSigning =
+    listOf(
+        updateSigningStore,
+        updateSigningStorePassword,
+        updateSigningKeyAlias,
+        updateSigningKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -28,9 +42,25 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        buildConfigField(
+            "String",
+            "UPDATE_RELEASES_API",
+            "\"https://api.github.com/repos/RandomCoderOrg/udroid-app/releases?per_page=20\"",
+        )
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+    }
+
+    signingConfigs {
+        if (hasUpdateSigning) {
+            create("updates") {
+                storeFile = file(updateSigningStore!!)
+                storePassword = updateSigningStorePassword
+                keyAlias = updateSigningKeyAlias
+                keyPassword = updateSigningKeyPassword
+            }
         }
     }
 
@@ -38,7 +68,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig =
+                if (hasUpdateSigning) {
+                    signingConfigs.getByName("updates")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

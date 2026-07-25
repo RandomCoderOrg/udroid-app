@@ -43,6 +43,14 @@ long-press menu and pinned to the home screen.
 See the [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for
 the current contract and limitations.
 
+uDroid also checks its public GitHub prereleases in the background. Newer
+versions appear in the Workspace and, when Android notification permission is
+available, as a system notification. APK downloads are resumable and are
+accepted only when GitHub's asset digest and the release `SHA256SUMS` agree.
+Android's package installer remains the final confirmation boundary. See
+[App updates](docs/APP_UPDATES.md) for the trust model, signing requirements,
+and migration limitation of early debug-signed builds.
+
 ## Development releases
 
 Git tags matching `v*` are built by GitHub Actions. Each resulting prerelease
@@ -54,13 +62,26 @@ contains:
 - GitHub's source archives, including the vendored Termux terminal components
   and the corresponding third-party notices.
 
-The published `v0.0.2` APK predates the optimized release pipeline and retains
-its original debug asset name. It is a development build, not a Play Store or
+The published `v0.0.2` APK predates stable update signing and retains its
+original debug asset name. It is a development build, not a Play Store or
 production-signed release:
 
 ```sh
 adb install -r udroid-v0.0.2-debug.apk
 ```
+
+Tagged releases after this updater checkpoint require these GitHub Actions
+secrets:
+
+- `UDROID_SIGNING_STORE_BASE64`
+- `UDROID_SIGNING_STORE_PASSWORD`
+- `UDROID_SIGNING_KEY_ALIAS`
+- `UDROID_SIGNING_KEY_PASSWORD`
+
+The first stable-signed development release cannot replace the older
+ephemeral-debug-signed APK in place. Existing testers must uninstall and
+install that release once; subsequent releases signed by the same key can use
+the in-app updater.
 
 ## Build
 

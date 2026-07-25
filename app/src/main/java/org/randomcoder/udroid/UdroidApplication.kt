@@ -7,6 +7,8 @@ import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
 import org.randomcoder.udroid.runtime.RuntimeStateStore
+import org.randomcoder.udroid.update.AppUpdateScheduler
+import org.randomcoder.udroid.update.AppUpdateStateStore
 import java.io.File
 
 class UdroidApplication : Application() {
@@ -19,13 +21,19 @@ class UdroidApplication : Application() {
     lateinit var installState: InstallStateStore
         private set
 
+    lateinit var updateState: AppUpdateStateStore
+        private set
+
     override fun onCreate() {
         super.onCreate()
         runtimeState = RuntimeStateStore(this)
         journal = EventJournal(this)
         installState = InstallStateStore(this)
+        updateState = AppUpdateStateStore(this)
         if (!isMainProcess()) return
 
+        updateState.reconcileInstalledVersion(BuildConfig.VERSION_NAME)
+        AppUpdateScheduler.ensureScheduled(this)
         installState.current()?.takeIf { it.cancellable }?.let { interrupted ->
             installState.save(
                 interrupted.copy(

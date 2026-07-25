@@ -74,6 +74,9 @@ class BaselineProfileGenerator {
 
     private companion object {
         const val PACKAGE_NAME = "org.randomcoder.udroid"
-        const val UI_TIMEOUT_MS = 10_000L
+        // A profile collection starts from cleared app data, so there is no catalogue
+        // cache. Cover the repository's bounded network attempt before it falls back to
+        // the packaged catalogue; the timed profile journey starts only after this wait.
+        const val UI_TIMEOUT_MS = 35_000L
     }
 }

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -46,6 +47,13 @@ import org.randomcoder.udroid.ui.UdroidDestination
 import org.randomcoder.udroid.ui.UdroidTerminal
 import org.randomcoder.udroid.ui.UdroidTheme
 import org.randomcoder.udroid.ui.workspaceJourney
+import org.randomcoder.udroid.update.AppUpdateContract
+import org.randomcoder.udroid.update.AppUpdateDownloadService
+import org.randomcoder.udroid.update.AppUpdateInstaller
+import org.randomcoder.udroid.update.AppUpdatePhase
+import org.randomcoder.udroid.update.AppUpdateScheduler
+import org.randomcoder.udroid.update.AppUpdateState
+import org.randomcoder.udroid.update.UpdateInstallResult
 
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
@@ -57,6 +65,7 @@ class MainActivity : ComponentActivity() {
     private var selectedDestination by mutableStateOf(UdroidDestination.HOME)
     private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
     private var installProgress by mutableStateOf<InstallProgress?>(null)
+    private var updateState by mutableStateOf(AppUpdateState())
     private var installedRootfsName by mutableStateOf<String?>(null)
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
@@ -110,6 +119,7 @@ class MainActivity : ComponentActivity() {
                     journalLines = journalLines,
                     catalogueState = catalogueState,
                     installProgress = installProgress,
+                    updateState = updateState,
                     installedRootfsName = installedRootfsName,
                     linuxApplicationsState = linuxApplicationsState,
                     linuxApplicationMessage = linuxApplicationMessage,
@@ -144,17 +154,27 @@ class MainActivity : ComponentActivity() {
                     onRefreshLinuxApplications = { loadLinuxApplications() },
                     onLaunchLinuxApplication = { launchLinuxApplication(it) },
                     onPinLinuxApplication = { pinLinuxApplication(it) },
+                    onCheckForUpdates = { AppUpdateScheduler.checkNow(this) },
+                    onDownloadUpdate = {
+                        ensureNotificationPermission()
+                        AppUpdateDownloadService.start(this)
+                    },
+                    onCancelUpdate = { AppUpdateDownloadService.cancel(this) },
+                    onInstallUpdate = { installDownloadedUpdate() },
+                    onOpenUpdateRelease = { openUpdateRelease() },
                 )
             }
         }
         refreshAll()
         loadCatalogue()
+        handleUpdateIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleUpdateIntent(intent)
         handleShortcutIntent(intent)
     }
 
@@ -166,6 +186,7 @@ class MainActivity : ComponentActivity() {
             IntentFilter().apply {
                 addAction(RuntimeSupervisorService.ACTION_STATE_CHANGED)
                 addAction(InstallerService.ACTION_STATE_CHANGED)
+                addAction(AppUpdateContract.ACTION_STATE_CHANGED)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -232,6 +253,7 @@ class MainActivity : ComponentActivity() {
     private fun refreshFromDisk() {
         snapshot = app.runtimeState.current()
         installProgress = app.installState.current()
+        updateState = app.updateState.current()
         installedRootfsName =
             runCatching { InstalledRootfsResolver.resolve(this).name }
                 .getOrNull()
@@ -420,6 +442,47 @@ class MainActivity : ComponentActivity() {
                 NOTIFICATION_PERMISSION_REQUEST,
             )
         }
+    }
+
+    private fun handleUpdateIntent(intent: Intent?) {
+        if (intent?.action != AppUpdateContract.ACTION_SHOW_UPDATE) return
+        intent.action = null
+        selectDestination(UdroidDestination.HOME)
+        refreshFromDisk()
+    }
+
+    private fun installDownloadedUpdate() {
+        when (val result = AppUpdateInstaller.install(this, updateState)) {
+            UpdateInstallResult.Submitted -> {
+                updateState =
+                    app.updateState.update {
+                        it.copy(message = "Waiting for Android installation confirmation")
+                    }
+            }
+            UpdateInstallResult.PermissionRequested -> {
+                updateState =
+                    app.updateState.update {
+                        it.copy(
+                            phase = AppUpdatePhase.READY,
+                            message = "Allow uDroid to install unknown apps, then tap Install",
+                        )
+                    }
+            }
+            is UpdateInstallResult.Failed -> {
+                updateState =
+                    app.updateState.update {
+                        it.copy(
+                            phase = AppUpdatePhase.READY,
+                            message = result.message,
+                        )
+                    }
+            }
+        }
+    }
+
+    private fun openUpdateRelease() {
+        val url = updateState.release?.releaseUrl ?: return
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 
     private companion object {

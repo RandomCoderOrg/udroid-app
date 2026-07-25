@@ -50,6 +50,36 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Prepare stable update signing
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          SIGNING_STORE_BASE64: ${{ secrets.UDROID_SIGNING_STORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.UDROID_SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.UDROID_SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.UDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          : "${SIGNING_STORE_BASE64:?UDROID_SIGNING_STORE_BASE64 is required}"
+          : "${SIGNING_STORE_PASSWORD:?UDROID_SIGNING_STORE_PASSWORD is required}"
+          : "${SIGNING_KEY_ALIAS:?UDROID_SIGNING_KEY_ALIAS is required}"
+          : "${SIGNING_KEY_PASSWORD:?UDROID_SIGNING_KEY_PASSWORD is required}"
+          printf '%s' "${SIGNING_STORE_BASE64}" \
+            | base64 --decode > "${RUNNER_TEMP}/udroid-updates.jks"
+          echo "UDROID_SIGNING_STORE_FILE=${RUNNER_TEMP}/udroid-updates.jks" >> "${GITHUB_ENV}"
+          echo "UDROID_SIGNING_STORE_PASSWORD=${SIGNING_STORE_PASSWORD}" >> "${GITHUB_ENV}"
+          echo "UDROID_SIGNING_KEY_ALIAS=${SIGNING_KEY_ALIAS}" >> "${GITHUB_ENV}"
+          echo "UDROID_SIGNING_KEY_PASSWORD=${SIGNING_KEY_PASSWORD}" >> "${GITHUB_ENV}"
+
+      - name: Verify release tag matches Android version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION_NAME="$(
+            sed -n 's/^[[:space:]]*versionName = "\(.*\)"/\1/p' app/build.gradle.kts
+          )"
+          test -n "${VERSION_NAME}"
+          test "v${VERSION_NAME}" = "${GITHUB_REF_NAME}"
+
       - name: Test, lint, and assemble optimized APK
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
 
@@ -99,4 +129,4 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "uDroid ${GITHUB_REF_NAME}" \
-            --notes "Extremely early development build for testing and contributor feedback. Expect breaking changes and incomplete features. This universal optimized APK is debug-signed and is not a production release."
+            --notes "Extremely early development build for testing and contributor feedback. Expect breaking changes and incomplete features. This universal optimized APK uses the project update-signing key and is not a production release."

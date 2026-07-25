@@ -43,12 +43,14 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.SystemUpdateAlt
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -57,6 +59,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
+import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.catalog.LinuxDistribution
@@ -78,6 +82,8 @@ import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.update.AppUpdatePhase
+import org.randomcoder.udroid.update.AppUpdateState
 import java.time.Instant
 
 enum class UdroidDestination(
@@ -102,6 +108,7 @@ fun UdroidApp(
     journalLines: List<String>,
     catalogueState: DistroCatalogState,
     installProgress: InstallProgress?,
+    updateState: AppUpdateState,
     installedRootfsName: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
@@ -121,6 +128,11 @@ fun UdroidApp(
     onRefreshLinuxApplications: () -> Unit,
     onLaunchLinuxApplication: (LinuxApplication) -> Unit,
     onPinLinuxApplication: (LinuxApplication) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onCancelUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onOpenUpdateRelease: () -> Unit,
 ) {
     val hasInstalledLinux = installedRootfsName != null
     val requestedJourney =
@@ -196,6 +208,7 @@ fun UdroidApp(
                         journalLines = journalLines,
                         catalogueState = catalogueState,
                         installProgress = installProgress,
+                        updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
@@ -214,6 +227,11 @@ fun UdroidApp(
                         onRefreshLinuxApplications = onRefreshLinuxApplications,
                         onLaunchLinuxApplication = onLaunchLinuxApplication,
                         onPinLinuxApplication = onPinLinuxApplication,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onDownloadUpdate = onDownloadUpdate,
+                        onCancelUpdate = onCancelUpdate,
+                        onInstallUpdate = onInstallUpdate,
+                        onOpenUpdateRelease = onOpenUpdateRelease,
                     )
                 }
             } else {
@@ -226,6 +244,7 @@ fun UdroidApp(
                         journalLines = journalLines,
                         catalogueState = catalogueState,
                         installProgress = installProgress,
+                        updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
@@ -244,6 +263,11 @@ fun UdroidApp(
                         onRefreshLinuxApplications = onRefreshLinuxApplications,
                         onLaunchLinuxApplication = onLaunchLinuxApplication,
                         onPinLinuxApplication = onPinLinuxApplication,
+                        onCheckForUpdates = onCheckForUpdates,
+                        onDownloadUpdate = onDownloadUpdate,
+                        onCancelUpdate = onCancelUpdate,
+                        onInstallUpdate = onInstallUpdate,
+                        onOpenUpdateRelease = onOpenUpdateRelease,
                     )
                     WorkspaceNavigationBar(
                         selected = activeDestination,
@@ -270,6 +294,7 @@ private fun ManagementPane(
     journalLines: List<String>,
     catalogueState: DistroCatalogState,
     installProgress: InstallProgress?,
+    updateState: AppUpdateState,
     installedRootfsName: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
@@ -288,6 +313,11 @@ private fun ManagementPane(
     onRefreshLinuxApplications: () -> Unit,
     onLaunchLinuxApplication: (LinuxApplication) -> Unit,
     onPinLinuxApplication: (LinuxApplication) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onCancelUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onOpenUpdateRelease: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxHeight()) {
@@ -295,6 +325,18 @@ private fun ManagementPane(
             snapshot = snapshot,
             onOpenTerminal = { onDestinationSelected(UdroidDestination.TERMINAL) },
         )
+        if (
+            destination != UdroidDestination.HOME &&
+            updateState.release != null
+        ) {
+            AppUpdateActionStrip(
+                state = updateState,
+                onDownload = onDownloadUpdate,
+                onCancel = onCancelUpdate,
+                onInstall = onInstallUpdate,
+                onOpenRelease = onOpenUpdateRelease,
+            )
+        }
         Box(
             modifier =
                 Modifier
@@ -320,6 +362,7 @@ private fun ManagementPane(
                             distro = installedDistro,
                             rootfsName = installedRootfsName,
                             capabilities = capabilities,
+                            updateState = updateState,
                             onStart = onStart,
                             onStop = onStop,
                             onRefresh = onRefresh,
@@ -335,6 +378,11 @@ private fun ManagementPane(
                             onOpenLogs = {
                                 onDestinationSelected(UdroidDestination.LOGS)
                             },
+                            onCheckForUpdates = onCheckForUpdates,
+                            onDownloadUpdate = onDownloadUpdate,
+                            onCancelUpdate = onCancelUpdate,
+                            onInstallUpdate = onInstallUpdate,
+                            onOpenUpdateRelease = onOpenUpdateRelease,
                         )
                     }
                     UdroidDestination.DISTROS ->
@@ -377,6 +425,81 @@ private fun ManagementPane(
                     UdroidDestination.TERMINAL -> Unit
                     UdroidDestination.DESKTOP -> Unit
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateActionStrip(
+    state: AppUpdateState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenRelease: () -> Unit,
+) {
+    val release = state.release ?: return
+    Surface(
+        color = UdroidSoftGreen,
+    ) {
+        Column {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SystemUpdateAlt,
+                    contentDescription = null,
+                    tint = UdroidForest,
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpenRelease),
+                ) {
+                    Text(
+                        "uDroid ${release.version}",
+                        color = UdroidForest,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        updateStatusText(state),
+                        color = UdroidForest.copy(alpha = 0.76f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                when (state.phase) {
+                    AppUpdatePhase.DOWNLOADING ->
+                        TextButton(onClick = onCancel) {
+                            Text("Pause")
+                        }
+                    AppUpdatePhase.READY ->
+                        TextButton(onClick = onInstall) {
+                            Text("Install")
+                        }
+                    AppUpdatePhase.CHECKING ->
+                        TextButton(onClick = onOpenRelease) {
+                            Text("Details")
+                        }
+                    else ->
+                        TextButton(onClick = onDownload) {
+                            Text("Download")
+                        }
+                }
+            }
+            if (state.phase == AppUpdatePhase.DOWNLOADING) {
+                LinearProgressIndicator(
+                    progress = state.percentage / 100f,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = UdroidForest,
+                )
             }
         }
     }
@@ -497,6 +620,7 @@ private fun WorkspacePage(
     distro: DistroVariant?,
     rootfsName: String?,
     capabilities: List<CapabilityResult>,
+    updateState: AppUpdateState,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRefresh: () -> Unit,
@@ -504,6 +628,11 @@ private fun WorkspacePage(
     onOpenLinux: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenLogs: () -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onCancelUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onOpenUpdateRelease: () -> Unit,
 ) {
     LazyColumn(
         modifier =
@@ -537,6 +666,17 @@ private fun WorkspacePage(
                 onStop = onStop,
                 onOpenTerminal = onOpenTerminal,
             )
+        }
+        if (updateState.release != null) {
+            item {
+                AppUpdatePanel(
+                    state = updateState,
+                    onDownload = onDownloadUpdate,
+                    onCancel = onCancelUpdate,
+                    onInstall = onInstallUpdate,
+                    onOpenRelease = onOpenUpdateRelease,
+                )
+            }
         }
         item {
             UdroidSectionLabel(
@@ -579,9 +719,152 @@ private fun WorkspacePage(
                 onClick = onOpenLogs,
             )
         }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.SystemUpdateAlt,
+                title = "App updates",
+                subtitle = updateStatusText(updateState),
+                trailingText =
+                    updateState.release
+                        ?.takeIf {
+                            updateState.phase != AppUpdatePhase.UP_TO_DATE
+                        }
+                        ?.let { "v${it.version}" },
+                onClick =
+                    if (updateState.release == null) {
+                        onCheckForUpdates
+                    } else {
+                        onOpenUpdateRelease
+                    },
+            )
+        }
         item { Spacer(Modifier.height(16.dp)) }
     }
 }
+
+@Composable
+private fun AppUpdatePanel(
+    state: AppUpdateState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenRelease: () -> Unit,
+) {
+    val release = state.release ?: return
+    Surface(
+        color = UdroidRaised,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, UdroidLine),
+    ) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    color = UdroidSoftGreen,
+                    shape = RoundedCornerShape(9.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.SystemUpdateAlt,
+                            contentDescription = null,
+                            tint = UdroidForest,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "uDroid ${release.version}",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        state.message ?: "Verified GitHub release",
+                        color = UdroidMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                UdroidStatusBadge(
+                    label =
+                        when (state.phase) {
+                            AppUpdatePhase.DOWNLOADING -> "${state.percentage}%"
+                            AppUpdatePhase.READY -> "Ready"
+                            else -> "Available"
+                        },
+                    color = UdroidForest,
+                    background = UdroidSoftGreen,
+                )
+            }
+            if (state.phase == AppUpdatePhase.DOWNLOADING) {
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = state.percentage / 100f,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = UdroidForest,
+                )
+            }
+            release.notes
+                .lineSequence()
+                .firstOrNull { it.isNotBlank() }
+                ?.takeIf(String::isNotBlank)
+                ?.let { summary ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        summary,
+                        color = UdroidMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                when (state.phase) {
+                    AppUpdatePhase.DOWNLOADING ->
+                        OutlinedButton(
+                            onClick = onCancel,
+                            shape = RoundedCornerShape(9.dp),
+                        ) {
+                            Text("Pause")
+                        }
+                    AppUpdatePhase.READY ->
+                        Button(
+                            onClick = onInstall,
+                            shape = RoundedCornerShape(9.dp),
+                        ) {
+                            Text("Install update")
+                        }
+                    else ->
+                        Button(
+                            onClick = onDownload,
+                            shape = RoundedCornerShape(9.dp),
+                        ) {
+                            Text("Download update")
+                        }
+                }
+                TextButton(onClick = onOpenRelease) {
+                    Text("Release notes")
+                }
+            }
+        }
+    }
+}
+
+private fun updateStatusText(state: AppUpdateState): String =
+    when (state.phase) {
+        AppUpdatePhase.IDLE -> "Current version ${BuildConfig.VERSION_NAME} · Tap to check"
+        AppUpdatePhase.CHECKING -> "Checking GitHub releases…"
+        AppUpdatePhase.UP_TO_DATE -> "Version ${BuildConfig.VERSION_NAME} is current"
+        AppUpdatePhase.AVAILABLE -> state.message ?: "A verified release is available"
+        AppUpdatePhase.DOWNLOADING -> "Downloading · ${state.percentage}%"
+        AppUpdatePhase.READY -> "Verified and ready to install"
+        AppUpdatePhase.FAILED -> state.message ?: "Update check needs attention"
+    }
 
 @Composable
 private fun InstalledSystemPanel(

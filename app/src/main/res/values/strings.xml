@@ -2,5 +2,6 @@
 <resources>
     <string name="app_name">uDroid</string>
     <string name="installer_description">Downloads and verifies Linux images.</string>
+    <string name="update_service_description">Downloads and verifies uDroid app updates.</string>
     <string name="supervisor_description">Keeps the Linux runtime and desktop process graph alive.</string>
 </resources>
