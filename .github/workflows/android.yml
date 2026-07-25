@@ -83,6 +83,9 @@ jobs:
       - name: Test, lint, and assemble optimized APK
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
 
+      - name: Verify embedded X11 release JNI contract
+        run: tools/verify-release-jni-contract.sh app/build/outputs/apk/release/app-release.apk
+
       - name: Package release assets
         shell: bash
         run: |
