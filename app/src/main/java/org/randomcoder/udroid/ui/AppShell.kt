@@ -121,7 +121,17 @@ fun UdroidApp(
     onLaunchLinuxApplication: (LinuxApplication) -> Unit,
     onPinLinuxApplication: (LinuxApplication) -> Unit,
 ) {
-    if (destination == UdroidDestination.DESKTOP) {
+    val hasInstalledLinux = installedRootfsName != null
+    val requestedJourney =
+        workspaceJourney(
+            requestedDestination = destination,
+            hasInstalledLinux = hasInstalledLinux,
+            hasInstallation = installProgress != null,
+            compactNavigation = false,
+        )
+    val activeDestination = requestedJourney.destination
+
+    if (activeDestination == UdroidDestination.DESKTOP) {
         DesktopPage(
             snapshot = snapshot,
             service = runtimeService,
@@ -130,7 +140,7 @@ fun UdroidApp(
         return
     }
 
-    if (destination == UdroidDestination.TERMINAL) {
+    if (activeDestination == UdroidDestination.TERMINAL) {
         UdroidTerminalTheme {
             BackHandler {
                 onDestinationSelected(UdroidDestination.HOME)
@@ -169,7 +179,8 @@ fun UdroidApp(
             if (useRail) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     WorkspaceNavigationRail(
-                        selected = destination,
+                        selected = activeDestination,
+                        destinations = requestedJourney.destinations,
                         onSelected = onDestinationSelected,
                     )
                     Divider(
@@ -178,7 +189,7 @@ fun UdroidApp(
                     )
                     ManagementPane(
                         modifier = Modifier.weight(1f),
-                        destination = destination,
+                        destination = activeDestination,
                         snapshot = snapshot,
                         capabilities = capabilities,
                         journalLines = journalLines,
@@ -208,7 +219,7 @@ fun UdroidApp(
                 Column(modifier = Modifier.fillMaxSize()) {
                     ManagementPane(
                         modifier = Modifier.weight(1f),
-                        destination = destination,
+                        destination = activeDestination,
                         snapshot = snapshot,
                         capabilities = capabilities,
                         journalLines = journalLines,
@@ -234,7 +245,14 @@ fun UdroidApp(
                         onPinLinuxApplication = onPinLinuxApplication,
                     )
                     WorkspaceNavigationBar(
-                        selected = destination,
+                        selected = activeDestination,
+                        destinations =
+                            workspaceJourney(
+                                requestedDestination = activeDestination,
+                                hasInstalledLinux = hasInstalledLinux,
+                                hasInstallation = installProgress != null,
+                                compactNavigation = true,
+                            ).destinations,
                         onSelected = onDestinationSelected,
                     )
                 }
@@ -412,6 +430,7 @@ private fun WorkspaceTopBar(
 @Composable
 private fun WorkspaceNavigationBar(
     selected: UdroidDestination,
+    destinations: List<UdroidDestination>,
     onSelected: (UdroidDestination) -> Unit,
 ) {
     NavigationBar(
@@ -419,12 +438,7 @@ private fun WorkspaceNavigationBar(
         tonalElevation = 0.dp,
         windowInsets = WindowInsets(0, 0, 0, 0),
     ) {
-        UdroidDestination.entries
-            .filterNot {
-                it == UdroidDestination.DEVICE ||
-                    it == UdroidDestination.DESKTOP
-            }
-            .forEach { destination ->
+        destinations.forEach { destination ->
             val active = selected == destination
             NavigationBarItem(
                 selected = active,
@@ -450,6 +464,7 @@ private fun WorkspaceNavigationBar(
 @Composable
 private fun WorkspaceNavigationRail(
     selected: UdroidDestination,
+    destinations: List<UdroidDestination>,
     onSelected: (UdroidDestination) -> Unit,
 ) {
     NavigationRail(
@@ -457,7 +472,7 @@ private fun WorkspaceNavigationRail(
         windowInsets = WindowInsets(0, 0, 0, 0),
     ) {
         Spacer(Modifier.height(12.dp))
-        UdroidDestination.entries.forEach { destination ->
+        destinations.forEach { destination ->
             val active = selected == destination
             NavigationRailItem(
                 selected = active,
@@ -603,7 +618,7 @@ private fun InstalledSystemPanel(
                     Text(
                         distro?.releaseName
                             ?: rootfsName?.let(::installedSystemTitle)
-                            ?: sessionTitle(snapshot),
+                            ?: installedSystemTitle(rootfsName.orEmpty()),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.titleLarge,
@@ -855,13 +870,6 @@ private fun JournalRow(line: String) {
         }
     }
 }
-
-private fun sessionTitle(snapshot: RuntimeSnapshot): String =
-    if (snapshot.message.contains("jammy", ignoreCase = true)) {
-        "Ubuntu 22.04 LTS"
-    } else {
-        "Installed Linux"
-    }
 
 private fun installedSystemTitle(rootfsName: String): String =
     when {

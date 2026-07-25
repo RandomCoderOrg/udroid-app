@@ -45,6 +45,7 @@ import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDestination
 import org.randomcoder.udroid.ui.UdroidTerminal
 import org.randomcoder.udroid.ui.UdroidTheme
+import org.randomcoder.udroid.ui.workspaceJourney
 
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
@@ -134,6 +135,9 @@ class MainActivity : ComponentActivity() {
                             app.installState.clear()
                             installProgress = null
                             showInstallTerminal = false
+                            if (installedRootfsName != null) {
+                                selectDestination(UdroidDestination.HOME)
+                            }
                         }
                     },
                     onRetryDownload = { startSelectedDownload() },
@@ -185,9 +189,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectDestination(destination: UdroidDestination) {
-        selectedDestination = destination
-        applySystemBars(destination)
-        if (destination == UdroidDestination.APPS) loadLinuxApplications()
+        val resolvedDestination =
+            workspaceJourney(
+                requestedDestination = destination,
+                hasInstalledLinux = installedRootfsName != null,
+                hasInstallation = installProgress != null,
+                compactNavigation = false,
+            ).destination
+        selectedDestination = resolvedDestination
+        applySystemBars(resolvedDestination)
+        if (resolvedDestination == UdroidDestination.APPS) loadLinuxApplications()
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
@@ -224,6 +235,17 @@ class MainActivity : ComponentActivity() {
         installedRootfsName =
             runCatching { InstalledRootfsResolver.resolve(this).name }
                 .getOrNull()
+        val resolvedDestination =
+            workspaceJourney(
+                requestedDestination = selectedDestination,
+                hasInstalledLinux = installedRootfsName != null,
+                hasInstallation = installProgress != null,
+                compactNavigation = false,
+            ).destination
+        if (resolvedDestination != selectedDestination) {
+            selectedDestination = resolvedDestination
+            applySystemBars(resolvedDestination)
+        }
         journalLines = app.journal.tail()
         launchPendingLinuxApplication()
     }

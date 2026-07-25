@@ -18,7 +18,9 @@ Selecting an image does not start a download. The review screen persists across
 Activity and process recreation, and the archive transfer begins only after
 **Download image** is pressed. A verified archive is retained across pause or
 failure, and is deleted only after the installed rootfs passes its health
-check and receives its readiness marker.
+check and receives its readiness marker. On a new installation, uDroid opens
+the Linux image catalogue first; terminal, app, and desktop actions appear only
+after a Linux system is ready.
 
 PRoot and an interactive terminal are now bundled for the supported Android
 ABIs. The terminal session belongs to the foreground service rather than the
@@ -45,11 +47,11 @@ contains:
 - GitHub's source archives, including the vendored Termux terminal components
   and the corresponding third-party notices.
 
-The `v0.0.1` APK is a development build, not a Play Store or production-signed
+The `v0.0.2` APK is a development build, not a Play Store or production-signed
 release. It can be installed for testing with:
 
 ```sh
-adb install -r udroid-v0.0.1-debug.apk
+adb install -r udroid-v0.0.2-debug.apk
 ```
 
 ## Build

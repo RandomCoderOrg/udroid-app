@@ -291,7 +291,11 @@ fun InstallExperiencePage(
                 item {
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "‹  Linux images",
+                        if (progress.stage == InstallStage.COMPLETE) {
+                            "‹  Workspace"
+                        } else {
+                            "‹  Linux images"
+                        },
                         modifier =
                             Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -399,6 +403,15 @@ fun InstallExperiencePage(
                             shape = RoundedCornerShape(10.dp),
                         ) {
                             Text("Install verified image")
+                        }
+                    }
+
+                    progress.stage == InstallStage.COMPLETE -> {
+                        Button(
+                            onClick = onBack,
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Open workspace")
                         }
                     }
                 }
