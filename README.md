@@ -51,6 +51,19 @@ Android's package installer remains the final confirmation boundary. See
 [App updates](docs/APP_UPDATES.md) for the trust model, signing requirements,
 and migration limitation of early debug-signed builds.
 
+## Download and install
+
+uDroid is currently distributed through the
+[GitHub Releases page](https://github.com/RandomCoderOrg/udroid-app/releases).
+Open the newest prerelease, download its `.apk` asset, and open the downloaded
+file on Android. The system may ask you to allow installs from the browser or
+file manager you used; that permission can be turned off again after
+installation.
+
+Existing stable-signed builds can also download and verify newer releases from
+the app's **About** page. Android still shows its normal package-installer
+confirmation before applying an update.
+
 ## Development releases
 
 Git tags matching `v*` are built by GitHub Actions. Each resulting prerelease
