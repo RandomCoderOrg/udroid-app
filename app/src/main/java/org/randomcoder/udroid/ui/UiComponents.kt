@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,8 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.randomcoder.udroid.R
 
 @Composable
 fun UdroidBrand(
@@ -42,25 +46,14 @@ fun UdroidBrand(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            modifier = Modifier.size(if (compact) 30.dp else 34.dp),
-            color = UdroidForest,
-            shape = RoundedCornerShape(if (compact) 8.dp else 9.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    "u",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style =
-                        if (compact) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.titleLarge
-                        },
-                )
-            }
-        }
+        Image(
+            painter = painterResource(R.drawable.udroid_logo),
+            contentDescription = null,
+            modifier =
+                Modifier
+                    .size(if (compact) 30.dp else 34.dp)
+                    .clip(CircleShape),
+        )
         Spacer(Modifier.width(10.dp))
         Text(
             "uDroid",

@@ -64,7 +64,7 @@ class LinuxApplicationShortcutPublisher(
         return if (bitmap != null) {
             IconCompat.createWithBitmap(bitmap)
         } else {
-            IconCompat.createWithResource(context, R.drawable.ic_launcher)
+            IconCompat.createWithResource(context, R.drawable.udroid_logo)
         }
     }
 }
