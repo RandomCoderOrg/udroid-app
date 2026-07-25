@@ -48,9 +48,8 @@ listed in the README are configured. Normal branch and pull-request builds can
 continue using Android's local debug key because they are not published as
 updates.
 
-The keystore is decoded only inside the temporary GitHub Actions runner and is
-not committed to this repository. Losing it would break the update chain, so a
-separate secure backup is required.
+The PKCS12 keystore is decoded only inside the temporary GitHub Actions runner
+and is not committed to this repository.
 
 The old `v0.0.1` and `v0.0.2` APKs used ephemeral debug signing. They cannot be
 updated in place to the first stable-signed build. This is a one-time reinstall
@@ -59,7 +58,7 @@ boundary for early testers.
 For every tagged release:
 
 1. Increase both `versionName` and Android `versionCode`.
-2. Keep the four signing secrets backed up and configured in GitHub Actions.
+2. Keep the four signing secrets configured in GitHub Actions.
 3. Push the matching `v<versionName>` tag.
 4. Keep both the APK and generated `SHA256SUMS` in the GitHub release.
 

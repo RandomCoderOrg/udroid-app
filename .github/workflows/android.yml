@@ -64,8 +64,8 @@ jobs:
           : "${SIGNING_KEY_ALIAS:?UDROID_SIGNING_KEY_ALIAS is required}"
           : "${SIGNING_KEY_PASSWORD:?UDROID_SIGNING_KEY_PASSWORD is required}"
           printf '%s' "${SIGNING_STORE_BASE64}" \
-            | base64 --decode > "${RUNNER_TEMP}/udroid-updates.jks"
-          echo "UDROID_SIGNING_STORE_FILE=${RUNNER_TEMP}/udroid-updates.jks" >> "${GITHUB_ENV}"
+            | base64 --decode > "${RUNNER_TEMP}/udroid-updates.p12"
+          echo "UDROID_SIGNING_STORE_FILE=${RUNNER_TEMP}/udroid-updates.p12" >> "${GITHUB_ENV}"
           echo "UDROID_SIGNING_STORE_PASSWORD=${SIGNING_STORE_PASSWORD}" >> "${GITHUB_ENV}"
           echo "UDROID_SIGNING_KEY_ALIAS=${SIGNING_KEY_ALIAS}" >> "${GITHUB_ENV}"
           echo "UDROID_SIGNING_KEY_PASSWORD=${SIGNING_KEY_PASSWORD}" >> "${GITHUB_ENV}"

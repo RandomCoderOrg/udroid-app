@@ -56,8 +56,8 @@ and migration limitation of early debug-signed builds.
 Git tags matching `v*` are built by GitHub Actions. Each resulting prerelease
 contains:
 
-- one universal, optimized, debug-signed APK covering `arm64-v8a`,
-  `armeabi-v7a`, and `x86_64`;
+- one universal, optimized APK covering `arm64-v8a`, `armeabi-v7a`, and
+  `x86_64`, signed with the persistent project update key;
 - `SHA256SUMS` for verifying the downloaded APK;
 - GitHub's source archives, including the vendored Termux terminal components
   and the corresponding third-party notices.
