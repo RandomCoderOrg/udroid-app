@@ -77,17 +77,7 @@ object ProotApplicationLaunchBuilder {
             add("--kill-on-exit")
             add("--root-id")
             add("--rootfs=$rootfsPath")
-            listOf(
-                "/system",
-                "/apex",
-                "/dev",
-                "/proc",
-                "/sys",
-                "/linkerconfig/ld.config.txt",
-            ).forEach { path ->
-                add("-b")
-                add(path)
-            }
+            addAndroidProotBindMounts()
             add("-b")
             add("$x11SocketDirectory:/tmp/.X11-unix")
             add("--cwd=$guestWorkingDirectory")

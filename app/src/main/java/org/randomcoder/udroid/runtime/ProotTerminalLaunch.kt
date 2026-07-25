@@ -107,17 +107,7 @@ object ProotTerminalLaunchBuilder {
             add("--kill-on-exit")
             add("--root-id")
             add("--rootfs=$rootfsPath")
-            listOf(
-                "/system",
-                "/apex",
-                "/dev",
-                "/proc",
-                "/sys",
-                "/linkerconfig/ld.config.txt",
-            ).forEach { path ->
-                add("-b")
-                add(path)
-            }
+            addAndroidProotBindMounts()
             if (x11SocketDirectory != null) {
                 add("-b")
                 add("$x11SocketDirectory:/tmp/.X11-unix")

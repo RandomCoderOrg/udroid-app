@@ -3,8 +3,9 @@ package org.randomcoder.udroid.install
 import android.content.Context
 import android.os.Build
 import android.os.StatFs
-import org.tukaani.xz.XZInputStream
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
+import org.randomcoder.udroid.runtime.addAndroidProotBindMounts
+import org.tukaani.xz.XZInputStream
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -336,19 +337,10 @@ class ProotRootfsHealthCheck(
             ProcessBuilder(
                 AndroidExecutableCommand.create(
                     runtime.executable,
-                    "--link2symlink",
-                    "--kill-on-exit",
-                    "--root-id",
-                    "--rootfs=${rootfs.absolutePath}",
-                    "--cwd=/",
-                    "/usr/bin/env",
-                    "-i",
-                    "PATH=/usr/bin:/bin",
-                    "/${shell.relativeTo(rootfs).path}",
-                    "-c",
-                    "test -x /usr/bin/env && test -r /etc/os-release && " +
-                        "if test -e /usr/sbin/dpkg-preconfigure; then " +
-                        "test -x /usr/bin/perl && /usr/bin/perl -e 'exit 0'; fi",
+                    *buildArguments(
+                        rootfsPath = rootfs.absolutePath,
+                        shellPath = "/${shell.relativeTo(rootfs).path}",
+                    ),
                 ),
             ).apply {
                 directory(context.filesDir)
@@ -377,6 +369,31 @@ class ProotRootfsHealthCheck(
 
     private fun File.isSymbolicLink(): Boolean =
         Files.isSymbolicLink(toPath())
+
+    companion object {
+        internal fun buildArguments(
+            rootfsPath: String,
+            shellPath: String,
+        ): Array<String> =
+            buildList {
+                add("--link2symlink")
+                add("--kill-on-exit")
+                add("--root-id")
+                add("--rootfs=$rootfsPath")
+                addAndroidProotBindMounts()
+                add("--cwd=/")
+                add("/usr/bin/env")
+                add("-i")
+                add("PATH=/usr/bin:/bin")
+                add(shellPath)
+                add("-c")
+                add(
+                    "test -x /usr/bin/env && test -r /etc/os-release && " +
+                        "if test -e /usr/sbin/dpkg-preconfigure; then " +
+                        "test -x /usr/bin/perl && /usr/bin/perl -e 'exit 0'; fi",
+                )
+            }.toTypedArray()
+    }
 }
 
 object RootfsStoragePreflight {
