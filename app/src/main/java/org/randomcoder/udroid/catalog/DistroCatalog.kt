@@ -2,6 +2,7 @@ package org.randomcoder.udroid.catalog
 
 import android.content.Context
 import android.os.Build
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -11,6 +12,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
+@Immutable
 data class DistroVariant(
     val suite: String,
     val variant: String,

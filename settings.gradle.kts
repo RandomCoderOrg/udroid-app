@@ -16,6 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "uDroid"
 include(":app")
+include(":baseline-profile")
 include(":terminal-emulator")
 include(":terminal-view")
 include(":x11-lorie")

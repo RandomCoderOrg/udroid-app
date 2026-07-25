@@ -103,9 +103,14 @@ fun DistroCataloguePage(
         is DistroCatalogState.Ready -> {
             val catalogue = state.catalog
             val recommended =
-                catalogue.variants.firstOrNull { it.recommended }
-                    ?: catalogue.variants.first()
-            val remaining = catalogue.variants.filterNot { it.id == recommended.id }
+                remember(catalogue.variants) {
+                    catalogue.variants.firstOrNull { it.recommended }
+                        ?: catalogue.variants.first()
+                }
+            val remaining =
+                remember(catalogue.variants, recommended.id) {
+                    catalogue.variants.filterNot { it.id == recommended.id }
+                }
             var showAll by remember(catalogue.architecture) { mutableStateOf(false) }
 
             LazyColumn(
@@ -130,7 +135,7 @@ fun DistroCataloguePage(
                     )
                 }
 
-                item {
+                item(contentType = "distro-card") {
                     DistroCard(
                         distro = recommended,
                         emphasized = true,
@@ -190,7 +195,11 @@ fun DistroCataloguePage(
                 }
 
                 if (showAll) {
-                    items(remaining, key = { it.id }) { distro ->
+                    items(
+                        items = remaining,
+                        key = { it.id },
+                        contentType = { "distro-card" },
+                    ) { distro ->
                         DistroCard(
                             distro = distro,
                             emphasized = false,
@@ -246,13 +255,11 @@ private fun DistroCard(
                     }
                 }
                 Spacer(Modifier.height(2.dp))
-                UdroidMetadataRow(
-                    items =
-                        listOf(
-                            distro.experienceName,
-                            distro.architecture,
-                            distro.suite,
-                        ),
+                Text(
+                    "${distro.experienceName} · ${distro.architecture} · ${distro.suite}",
+                    color = UdroidMuted,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
             Icon(

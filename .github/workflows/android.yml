@@ -50,24 +50,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Test, lint, and assemble
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Test, lint, and assemble optimized APK
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
 
       - name: Package release assets
         shell: bash
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk \
-            "release-assets/udroid-${GITHUB_REF_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk \
+            "release-assets/udroid-${GITHUB_REF_NAME}-prerelease.apk"
           (
             cd release-assets
-            sha256sum "udroid-${GITHUB_REF_NAME}-debug.apk" > SHA256SUMS
+            sha256sum "udroid-${GITHUB_REF_NAME}-prerelease.apk" > SHA256SUMS
           )
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: udroid-${{ github.ref_name }}-debug
+          name: udroid-${{ github.ref_name }}-prerelease
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30
@@ -85,7 +85,7 @@ jobs:
       - name: Download verified build assets
         uses: actions/download-artifact@v8
         with:
-          name: udroid-${{ github.ref_name }}-debug
+          name: udroid-${{ github.ref_name }}-prerelease
           path: release-assets
 
       - name: Publish tagged prerelease
@@ -99,4 +99,4 @@ jobs:
             --verify-tag \
             --prerelease \
             --title "uDroid ${GITHUB_REF_NAME}" \
-            --notes "Extremely early development build for testing and contributor feedback. Expect breaking changes and incomplete features. This universal debug-signed APK is not a production release."
+            --notes "Extremely early development build for testing and contributor feedback. Expect breaking changes and incomplete features. This universal optimized APK is debug-signed and is not a production release."

@@ -41,14 +41,15 @@ the current contract and limitations.
 Git tags matching `v*` are built by GitHub Actions. Each resulting prerelease
 contains:
 
-- one universal debug-signed APK covering `arm64-v8a`, `armeabi-v7a`, and
-  `x86_64`;
+- one universal, optimized, debug-signed APK covering `arm64-v8a`,
+  `armeabi-v7a`, and `x86_64`;
 - `SHA256SUMS` for verifying the downloaded APK;
 - GitHub's source archives, including the vendored Termux terminal components
   and the corresponding third-party notices.
 
-The `v0.0.2` APK is a development build, not a Play Store or production-signed
-release. It can be installed for testing with:
+The published `v0.0.2` APK predates the optimized release pipeline and retains
+its original debug asset name. It is a development build, not a Play Store or
+production-signed release:
 
 ```sh
 adb install -r udroid-v0.0.2-debug.apk
@@ -67,13 +68,18 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
 ./app/src/main/cpp/build-runtime-probe.sh
 ./tools/build-proot-assets.sh
-./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
 ```
 
 The app targets API 36. On Android 10 and newer it launches packaged Android
 ELFs through `/system/bin/linker(64)`. PRoot's static guest loader is installed
 as an extracted APK native library so its second execution hop is not blocked
 by Android's writable-app-data execution policy.
+
+UI performance is measured from optimized builds with device Macrobenchmarks,
+Perfetto traces, and generated Baseline Profiles. See
+[Performance](docs/PERFORMANCE.md) for the commands and current catalogue
+results.
 
 ## Licensing
 

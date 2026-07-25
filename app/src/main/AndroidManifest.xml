@@ -18,6 +18,10 @@
         android:theme="@style/Theme.Udroid"
         tools:replace="android:icon,android:roundIcon,android:theme">
 
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
