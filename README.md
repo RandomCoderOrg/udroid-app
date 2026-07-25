@@ -3,66 +3,36 @@
 [![Android CI](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml/badge.svg)](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml)
 
 > [!WARNING]
-> **uDroid is in extremely early development.** The current builds are for
-> testing and contributor feedback, not daily use. Expect incomplete features,
-> breaking changes, installation failures, and Linux environments that may need
-> to be reinstalled between versions. Back up anything important before using
-> the app.
+> **uDroid is in early development.** Expect incomplete features and breaking
+> changes. Use it for testing and keep important data backed up.
 
 This is the standalone Android application for
 [uDroid](https://github.com/RandomCoderOrg/fs-manager-udroid): a friendly,
-supervised way to install, boot, manage, and use Linux distributions on
-Android without making a terminal the product UI.
-
-Selecting an image does not start a download. The review screen persists across
-Activity and process recreation, and the archive transfer begins only after
-**Download image** is pressed. A verified archive is retained across pause or
-failure, and is deleted only after the installed rootfs passes its health
-check and receives its readiness marker. On a new installation, uDroid opens
-the Linux image catalogue first; terminal, app, and desktop actions appear only
-after a Linux system is ready.
-
-The searchable catalogue combines uDroid's tested Ubuntu images with pinned,
-checksum-verified archives from `termux/proot-distro` for Debian, Arch Linux,
-Alpine Linux, and Void Linux. Each distribution uses its actual logo and shows
-the image source before installation. See the
-[distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md) for support scope and
-how new image sources are admitted.
-
-PRoot and an interactive terminal are now bundled for the supported Android
-ABIs. The terminal session belongs to the foreground service rather than the
-Activity, so navigating away and returning reattaches to the same PTY and
-transcript. The pinned Termux:X11 server and renderer now build inside the APK,
-and the Desktop page attaches an Android surface to its supervised X11 process
-and private display socket. Its compact controls expose the keyboard and
-persistent output/input settings without tying the X server lifetime to the
-page. The Linux Apps page also discovers freedesktop entries from the installed
-rootfs and can boot the runtime and launch a graphical application directly.
-Selected Linux applications can also be published to the Android launcher's
-long-press menu and pinned to the home screen.
-See the [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for
-the current contract and limitations.
-
-uDroid also checks its public GitHub prereleases in the background. Newer
-versions appear in the Workspace and, when Android notification permission is
-available, as a system notification. APK downloads are resumable and are
-accepted only when GitHub's asset digest and the release `SHA256SUMS` agree.
-Android's package installer remains the final confirmation boundary. See
-[App updates](docs/APP_UPDATES.md) for the trust model, signing requirements,
-and migration limitation of early debug-signed builds.
+supervised way to install and use Linux distributions on Android.
 
 ## Download and install
 
-uDroid is currently distributed through the
-[GitHub Releases page](https://github.com/RandomCoderOrg/udroid-app/releases).
-Open the newest prerelease, download its `.apk` asset, and open the downloaded
-file on Android. The system may ask you to allow installs from the browser or
-file manager you used; that permission can be turned off again after
-installation.
+[Download uDroid from GitHub Releases](https://github.com/RandomCoderOrg/udroid-app/releases),
+open the newest prerelease, and select its `.apk` file. Android may ask you to
+allow installs from the browser or file manager you used.
 
 Existing stable-signed builds can also download and verify newer releases from
-the app's **About** page. Android still shows its normal package-installer
-confirmation before applying an update.
+the app's **About** page.
+
+## What works today
+
+- Search and install Ubuntu, Debian, Arch Linux, Alpine Linux, or Void Linux
+  from checksum-verified images.
+- Use the bundled, persistent terminal without setting up Termux separately.
+- Start the bundled Termux:X11 display and launch graphical Linux applications.
+- Discover installed `.desktop` entries and pin selected Linux apps to the
+  Android launcher.
+- Receive, verify, and install newer uDroid prereleases from inside the app.
+
+See the [distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md),
+[Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md), and
+[app updates](docs/APP_UPDATES.md) documentation for current limitations and
+technical details.
 
 ## Development releases
 
