@@ -19,7 +19,7 @@ class WorkspaceJourneyTest {
         assertEquals(WorkspaceStage.NEEDS_LINUX, journey.stage)
         assertEquals(UdroidDestination.DISTROS, journey.destination)
         assertEquals(
-            listOf(UdroidDestination.DISTROS, UdroidDestination.LOGS),
+            listOf(UdroidDestination.DISTROS, UdroidDestination.ABOUT),
             journey.destinations,
         )
         assertFalse(journey.destinations.contains(UdroidDestination.TERMINAL))
@@ -54,6 +54,20 @@ class WorkspaceJourneyTest {
             )
 
         assertEquals(UdroidDestination.DISTROS, journey.destination)
+    }
+
+    @Test
+    fun `about and maintenance remain available before Linux is installed`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.ABOUT,
+                hasInstalledLinux = false,
+                hasInstallation = false,
+                compactNavigation = true,
+            )
+
+        assertEquals(UdroidDestination.ABOUT, journey.destination)
+        assertTrue(journey.destinations.contains(UdroidDestination.ABOUT))
     }
 
     @Test

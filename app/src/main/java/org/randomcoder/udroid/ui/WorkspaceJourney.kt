@@ -40,7 +40,7 @@ fun workspaceJourney(
             buildList {
                 add(UdroidDestination.DISTROS)
                 if (!compactNavigation) add(UdroidDestination.DEVICE)
-                add(UdroidDestination.LOGS)
+                add(UdroidDestination.ABOUT)
             }
         }
     return WorkspaceJourney(

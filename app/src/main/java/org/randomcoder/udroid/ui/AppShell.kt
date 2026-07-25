@@ -26,11 +26,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
@@ -97,7 +96,7 @@ enum class UdroidDestination(
     APPS("Apps", Icons.Outlined.Apps, Icons.Filled.Apps),
     DESKTOP("Desktop", Icons.Outlined.DesktopWindows, Icons.Filled.DesktopWindows),
     DEVICE("Device", Icons.Outlined.Memory, Icons.Filled.Memory),
-    LOGS("Logs", Icons.AutoMirrored.Outlined.Article, Icons.AutoMirrored.Filled.Article),
+    ABOUT("About", Icons.Outlined.Info, Icons.Filled.Info),
 }
 
 @Composable
@@ -325,18 +324,6 @@ private fun ManagementPane(
             snapshot = snapshot,
             onOpenTerminal = { onDestinationSelected(UdroidDestination.TERMINAL) },
         )
-        if (
-            destination != UdroidDestination.HOME &&
-            updateState.release != null
-        ) {
-            AppUpdateActionStrip(
-                state = updateState,
-                onDownload = onDownloadUpdate,
-                onCancel = onCancelUpdate,
-                onInstall = onInstallUpdate,
-                onOpenRelease = onOpenUpdateRelease,
-            )
-        }
         Box(
             modifier =
                 Modifier
@@ -362,7 +349,6 @@ private fun ManagementPane(
                             distro = installedDistro,
                             rootfsName = installedRootfsName,
                             capabilities = capabilities,
-                            updateState = updateState,
                             onStart = onStart,
                             onStop = onStop,
                             onRefresh = onRefresh,
@@ -375,14 +361,6 @@ private fun ManagementPane(
                             onOpenDevice = {
                                 onDestinationSelected(UdroidDestination.DEVICE)
                             },
-                            onOpenLogs = {
-                                onDestinationSelected(UdroidDestination.LOGS)
-                            },
-                            onCheckForUpdates = onCheckForUpdates,
-                            onDownloadUpdate = onDownloadUpdate,
-                            onCancelUpdate = onCancelUpdate,
-                            onInstallUpdate = onInstallUpdate,
-                            onOpenUpdateRelease = onOpenUpdateRelease,
                         )
                     }
                     UdroidDestination.DISTROS ->
@@ -406,10 +384,16 @@ private fun ManagementPane(
                             capabilities = capabilities,
                             onRefresh = onRefresh,
                         )
-                    UdroidDestination.LOGS ->
-                        LogsPage(
+                    UdroidDestination.ABOUT ->
+                        AboutPage(
                             journalLines = journalLines,
+                            updateState = updateState,
                             onRefresh = onRefresh,
+                            onCheckForUpdates = onCheckForUpdates,
+                            onDownloadUpdate = onDownloadUpdate,
+                            onCancelUpdate = onCancelUpdate,
+                            onInstallUpdate = onInstallUpdate,
+                            onOpenUpdateRelease = onOpenUpdateRelease,
                         )
                     UdroidDestination.APPS ->
                         LinuxAppsPage(
@@ -425,81 +409,6 @@ private fun ManagementPane(
                     UdroidDestination.TERMINAL -> Unit
                     UdroidDestination.DESKTOP -> Unit
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppUpdateActionStrip(
-    state: AppUpdateState,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onInstall: () -> Unit,
-    onOpenRelease: () -> Unit,
-) {
-    val release = state.release ?: return
-    Surface(
-        color = UdroidSoftGreen,
-    ) {
-        Column {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.SystemUpdateAlt,
-                    contentDescription = null,
-                    tint = UdroidForest,
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .clickable(onClick = onOpenRelease),
-                ) {
-                    Text(
-                        "uDroid ${release.version}",
-                        color = UdroidForest,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        updateStatusText(state),
-                        color = UdroidForest.copy(alpha = 0.76f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                when (state.phase) {
-                    AppUpdatePhase.DOWNLOADING ->
-                        TextButton(onClick = onCancel) {
-                            Text("Pause")
-                        }
-                    AppUpdatePhase.READY ->
-                        TextButton(onClick = onInstall) {
-                            Text("Install")
-                        }
-                    AppUpdatePhase.CHECKING ->
-                        TextButton(onClick = onOpenRelease) {
-                            Text("Details")
-                        }
-                    else ->
-                        TextButton(onClick = onDownload) {
-                            Text("Download")
-                        }
-                }
-            }
-            if (state.phase == AppUpdatePhase.DOWNLOADING) {
-                LinearProgressIndicator(
-                    progress = state.percentage / 100f,
-                    modifier = Modifier.fillMaxWidth(),
-                    color = UdroidForest,
-                )
             }
         }
     }
@@ -545,8 +454,14 @@ private fun WorkspaceTopBar(
                     )
                 }
             }
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(12.dp))
         }
+        Text(
+            "v${BuildConfig.VERSION_NAME}",
+            color = UdroidFaint,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
     Divider(color = UdroidLine)
 }
@@ -620,19 +535,12 @@ private fun WorkspacePage(
     distro: DistroVariant?,
     rootfsName: String?,
     capabilities: List<CapabilityResult>,
-    updateState: AppUpdateState,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRefresh: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenLinux: () -> Unit,
     onOpenDevice: () -> Unit,
-    onOpenLogs: () -> Unit,
-    onCheckForUpdates: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onCancelUpdate: () -> Unit,
-    onInstallUpdate: () -> Unit,
-    onOpenUpdateRelease: () -> Unit,
 ) {
     LazyColumn(
         modifier =
@@ -667,17 +575,6 @@ private fun WorkspacePage(
                 onOpenTerminal = onOpenTerminal,
             )
         }
-        if (updateState.release != null) {
-            item {
-                AppUpdatePanel(
-                    state = updateState,
-                    onDownload = onDownloadUpdate,
-                    onCancel = onCancelUpdate,
-                    onInstall = onInstallUpdate,
-                    onOpenRelease = onOpenUpdateRelease,
-                )
-            }
-        }
         item {
             UdroidSectionLabel(
                 text = "Tools",
@@ -709,33 +606,6 @@ private fun WorkspacePage(
                         "$passed/${capabilities.size}"
                     },
                 onClick = onOpenDevice,
-            )
-        }
-        item {
-            UdroidToolRow(
-                icon = Icons.AutoMirrored.Outlined.Article,
-                title = "Supervisor journal",
-                subtitle = "Lifecycle events and technical diagnostics",
-                onClick = onOpenLogs,
-            )
-        }
-        item {
-            UdroidToolRow(
-                icon = Icons.Outlined.SystemUpdateAlt,
-                title = "App updates",
-                subtitle = updateStatusText(updateState),
-                trailingText =
-                    updateState.release
-                        ?.takeIf {
-                            updateState.phase != AppUpdatePhase.UP_TO_DATE
-                        }
-                        ?.let { "v${it.version}" },
-                onClick =
-                    if (updateState.release == null) {
-                        onCheckForUpdates
-                    } else {
-                        onOpenUpdateRelease
-                    },
             )
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -1055,34 +925,122 @@ private fun CapabilityRow(capability: CapabilityResult) {
 }
 
 @Composable
-private fun LogsPage(
+private fun AboutPage(
     journalLines: List<String>,
+    updateState: AppUpdateState,
     onRefresh: () -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onCancelUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onOpenUpdateRelease: () -> Unit,
 ) {
+    val visibleJournalLines = journalLines.takeLast(25).asReversed()
     LazyColumn(
         modifier =
             Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
             UdroidPageHeader(
-                title = "Journal",
-                subtitle = "Supervisor lifecycle and diagnostics",
-                modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
-                trailing = {
-                    IconButton(onClick = onRefresh) {
-                        Icon(
-                            Icons.Outlined.Refresh,
-                            contentDescription = "Refresh journal",
-                            tint = UdroidMuted,
-                        )
-                    }
-                },
+                title = "About uDroid",
+                subtitle = "App details, updates, and diagnostics",
+                modifier = Modifier.padding(top = 18.dp, bottom = 4.dp),
             )
         }
-        if (journalLines.isEmpty()) {
+        item {
+            Surface(
+                color = UdroidRaised,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, UdroidLine),
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        UdroidBrand()
+                        Spacer(Modifier.weight(1f))
+                        UdroidStatusBadge(
+                            label = "v${BuildConfig.VERSION_NAME}",
+                            color = UdroidForest,
+                            background = UdroidSoftGreen,
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "A Linux experience shaped for Android",
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        "The goal is a self-contained way to install and use Linux systems, " +
+                            "while keeping the terminal close when it is useful.",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+        item {
+            UdroidSectionLabel(
+                text = "App updates",
+                modifier =
+                    Modifier
+                        .padding(top = 8.dp),
+            )
+        }
+        if (updateState.release == null) {
+            item {
+                AppUpdateStatusPanel(
+                    state = updateState,
+                    onCheckForUpdates = onCheckForUpdates,
+                )
+            }
+        } else {
+            item {
+                AppUpdatePanel(
+                    state = updateState,
+                    onDownload = onDownloadUpdate,
+                    onCancel = onCancelUpdate,
+                    onInstall = onInstallUpdate,
+                    onOpenRelease = onOpenUpdateRelease,
+                )
+            }
+        }
+        item {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    UdroidSectionLabel(text = "Supervisor journal")
+                    Text(
+                        if (journalLines.size > visibleJournalLines.size) {
+                            "Latest ${visibleJournalLines.size} events"
+                        } else {
+                            "Lifecycle events and technical diagnostics"
+                        },
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        Icons.Outlined.Refresh,
+                        contentDescription = "Refresh journal",
+                        tint = UdroidMuted,
+                    )
+                }
+            }
+        }
+        if (visibleJournalLines.isEmpty()) {
             item {
                 Surface(
                     color = UdroidRaised,
@@ -1097,11 +1055,70 @@ private fun LogsPage(
                 }
             }
         } else {
-            items(journalLines) { line ->
+            items(visibleJournalLines) { line ->
                 JournalRow(line)
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun AppUpdateStatusPanel(
+    state: AppUpdateState,
+    onCheckForUpdates: () -> Unit,
+) {
+    Surface(
+        color = UdroidRaised,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, UdroidLine),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(start = 15.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    color = UdroidInset,
+                    shape = RoundedCornerShape(9.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.SystemUpdateAlt,
+                            contentDescription = null,
+                            tint = UdroidForest,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Version ${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        updateStatusText(state),
+                        color = UdroidMuted,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(
+                    onClick = onCheckForUpdates,
+                    enabled = state.phase != AppUpdatePhase.CHECKING,
+                ) {
+                    Text(if (state.phase == AppUpdatePhase.CHECKING) "Checking" else "Check")
+                }
+            }
+            if (state.phase == AppUpdatePhase.CHECKING) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = UdroidForest,
+                )
+            }
+        }
     }
 }
 

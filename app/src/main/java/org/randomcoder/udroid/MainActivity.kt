@@ -447,7 +447,7 @@ class MainActivity : ComponentActivity() {
     private fun handleUpdateIntent(intent: Intent?) {
         if (intent?.action != AppUpdateContract.ACTION_SHOW_UPDATE) return
         intent.action = null
-        selectDestination(UdroidDestination.HOME)
+        selectDestination(UdroidDestination.ABOUT)
         refreshFromDisk()
     }
 
