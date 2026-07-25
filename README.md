@@ -14,11 +14,6 @@ This is the standalone Android application for
 supervised way to install, boot, manage, and use Linux distributions on
 Android without making a terminal the product UI.
 
-The app is device- and distro-oriented, not Tensor-specific. Optional hardware
-profiles may provide graphics, video, or audio acceleration on supported
-devices. The experimental Tensor G1 Panfrost work is one such future profile,
-not a uDroid dependency or compatibility requirement.
-
 Selecting an image does not start a download. The review screen persists across
 Activity and process recreation, and the archive transfer begins only after
 **Download image** is pressed. A verified archive is retained across pause or
@@ -36,10 +31,8 @@ page. The Linux Apps page also discovers freedesktop entries from the installed
 rootfs and can boot the runtime and launch a graphical application directly.
 Selected Linux applications can also be published to the Android launcher's
 long-press menu and pinned to the home screen.
-The generic presenter currently uses Android GLES; no device-specific GPU
-driver is bundled. See the
-[Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for the
-current contract and limitations.
+See the [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md) for
+the current contract and limitations.
 
 ## Development releases
 
