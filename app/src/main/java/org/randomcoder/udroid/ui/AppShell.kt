@@ -45,7 +45,6 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SystemUpdateAlt
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,7 +71,6 @@ import org.json.JSONObject
 import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
-import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
@@ -349,8 +347,6 @@ private fun ManagementPane(
                             distro = installedDistro,
                             rootfsName = installedRootfsName,
                             capabilities = capabilities,
-                            onStart = onStart,
-                            onStop = onStop,
                             onRefresh = onRefresh,
                             onOpenTerminal = {
                                 onDestinationSelected(UdroidDestination.TERMINAL)
@@ -360,6 +356,15 @@ private fun ManagementPane(
                             },
                             onOpenDevice = {
                                 onDestinationSelected(UdroidDestination.DEVICE)
+                            },
+                            onOpenApps = {
+                                onDestinationSelected(UdroidDestination.APPS)
+                            },
+                            onOpenDesktop = {
+                                onDestinationSelected(UdroidDestination.DESKTOP)
+                            },
+                            onOpenAbout = {
+                                onDestinationSelected(UdroidDestination.ABOUT)
                             },
                         )
                     }
@@ -535,13 +540,15 @@ private fun WorkspacePage(
     distro: DistroVariant?,
     rootfsName: String?,
     capabilities: List<CapabilityResult>,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
     onRefresh: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenLinux: () -> Unit,
     onOpenDevice: () -> Unit,
+    onOpenApps: () -> Unit,
+    onOpenDesktop: () -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
+    val hasInstalledLinux = rootfsName != null
     LazyColumn(
         modifier =
             Modifier
@@ -551,8 +558,8 @@ private fun WorkspacePage(
     ) {
         item {
             UdroidPageHeader(
-                title = "Workspace",
-                subtitle = "Linux systems on this device",
+                title = "Home",
+                subtitle = "Everything in one place",
                 modifier = Modifier.padding(top = 18.dp, bottom = 4.dp),
                 trailing = {
                     IconButton(onClick = onRefresh) {
@@ -566,31 +573,68 @@ private fun WorkspacePage(
             )
         }
         item {
-            InstalledSystemPanel(
-                snapshot = snapshot,
-                distro = distro,
-                rootfsName = rootfsName,
-                onStart = onStart,
-                onStop = onStop,
-                onOpenTerminal = onOpenTerminal,
-            )
-        }
-        item {
             UdroidSectionLabel(
-                text = "Tools",
-                modifier = Modifier.padding(top = 10.dp, bottom = 1.dp),
+                text = "Everything",
+                modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
             )
         }
         item {
             UdroidToolRow(
                 icon = Icons.Outlined.Storage,
-                title = "Linux images",
+                title = "Linux systems",
                 subtitle =
                     distro?.releaseName
                         ?: rootfsName?.let(::installedSystemTitle)
-                        ?: "Install or inspect a distribution",
-                trailingText = if (rootfsName == null) null else "Installed",
+                        ?: "Choose and install a distribution",
+                trailingText = if (hasInstalledLinux) "Installed" else "Set up",
                 onClick = onOpenLinux,
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.Terminal,
+                title = "Terminal",
+                subtitle =
+                    if (hasInstalledLinux) {
+                        "Open a shell in the installed Linux system"
+                    } else {
+                        "Install Linux to open a terminal"
+                    },
+                trailingText =
+                    when {
+                        !hasInstalledLinux -> "Needs Linux"
+                        snapshot.phase == RuntimePhase.RUNNING -> "Live"
+                        else -> null
+                    },
+                onClick = onOpenTerminal,
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.Apps,
+                title = "Linux apps",
+                subtitle =
+                    if (hasInstalledLinux) {
+                        "Find and launch installed applications"
+                    } else {
+                        "Install Linux to discover applications"
+                    },
+                trailingText = if (hasInstalledLinux) null else "Needs Linux",
+                onClick = onOpenApps,
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.DesktopWindows,
+                title = "Desktop",
+                subtitle =
+                    if (hasInstalledLinux) {
+                        "Open the graphical Linux desktop"
+                    } else {
+                        "Install Linux to use a graphical desktop"
+                    },
+                trailingText = if (hasInstalledLinux) null else "Needs Linux",
+                onClick = onOpenDesktop,
             )
         }
         item {
@@ -606,6 +650,14 @@ private fun WorkspacePage(
                         "$passed/${capabilities.size}"
                     },
                 onClick = onOpenDevice,
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.Info,
+                title = "About uDroid",
+                subtitle = "App updates, supervisor journal, and project details",
+                onClick = onOpenAbout,
             )
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -735,108 +787,6 @@ private fun updateStatusText(state: AppUpdateState): String =
         AppUpdatePhase.READY -> "Verified and ready to install"
         AppUpdatePhase.FAILED -> state.message ?: "Update check needs attention"
     }
-
-@Composable
-private fun InstalledSystemPanel(
-    snapshot: RuntimeSnapshot,
-    distro: DistroVariant?,
-    rootfsName: String?,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onOpenTerminal: () -> Unit,
-) {
-    val running = snapshot.phase == RuntimePhase.RUNNING
-    val inTransition =
-        snapshot.phase == RuntimePhase.STARTING || snapshot.phase == RuntimePhase.STOPPING
-    val (badgeColor, badgeBackground) =
-        when (snapshot.phase) {
-            RuntimePhase.RUNNING -> UdroidForest to UdroidSoftGreen
-            RuntimePhase.CRASHED -> MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.errorContainer
-            RuntimePhase.STARTING, RuntimePhase.STOPPING ->
-                UdroidWarning to UdroidWarningSurface
-            RuntimePhase.STOPPED -> UdroidMuted to UdroidInset
-        }
-    Surface(
-        color = UdroidRaised,
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, UdroidLine),
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.padding(15.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DistroMark(distro?.distribution ?: LinuxDistribution.UBUNTU)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        distro?.releaseName
-                            ?: rootfsName?.let(::installedSystemTitle)
-                            ?: installedSystemTitle(rootfsName.orEmpty()),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    UdroidMetadataRow(
-                        items =
-                            listOfNotNull(
-                                distro?.suite?.replaceFirstChar { it.titlecase() },
-                                rootfsName
-                                    ?.substringAfter("udroid-", "")
-                                    ?.substringBefore('-')
-                                    ?.replaceFirstChar { it.titlecase() }
-                                    ?.takeIf { distro == null && it.isNotBlank() },
-                                distro?.architecture ?: "aarch64",
-                                snapshot.childPid?.let { "PID $it" },
-                            ),
-                    )
-                }
-                UdroidStatusBadge(
-                    label = snapshot.phase.name.lowercase().replaceFirstChar { it.titlecase() },
-                    color = badgeColor,
-                    background = badgeBackground,
-                )
-            }
-            Divider(color = UdroidLine)
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 15.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
-            ) {
-                Button(
-                    onClick = if (running) onOpenTerminal else onStart,
-                    modifier = Modifier.weight(1f),
-                    enabled = !inTransition,
-                    shape = RoundedCornerShape(9.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Terminal,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (running) "Open terminal" else "Start terminal")
-                }
-                if (running || inTransition) {
-                    OutlinedButton(
-                        onClick = onStop,
-                        enabled = snapshot.phase != RuntimePhase.STOPPING,
-                        shape = RoundedCornerShape(9.dp),
-                        colors =
-                            ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                    ) {
-                        Text("Stop")
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun DevicePage(

@@ -7,7 +7,7 @@ import org.junit.Test
 
 class WorkspaceJourneyTest {
     @Test
-    fun `fresh install opens Linux images and hides unusable destinations`() {
+    fun `fresh install opens Home and keeps setup destinations available`() {
         val journey =
             workspaceJourney(
                 requestedDestination = UdroidDestination.HOME,
@@ -17,9 +17,13 @@ class WorkspaceJourneyTest {
             )
 
         assertEquals(WorkspaceStage.NEEDS_LINUX, journey.stage)
-        assertEquals(UdroidDestination.DISTROS, journey.destination)
+        assertEquals(UdroidDestination.HOME, journey.destination)
         assertEquals(
-            listOf(UdroidDestination.DISTROS, UdroidDestination.ABOUT),
+            listOf(
+                UdroidDestination.HOME,
+                UdroidDestination.DISTROS,
+                UdroidDestination.ABOUT,
+            ),
             journey.destinations,
         )
         assertFalse(journey.destinations.contains(UdroidDestination.TERMINAL))
@@ -71,7 +75,7 @@ class WorkspaceJourneyTest {
     }
 
     @Test
-    fun `paused or active setup remains in the installation journey`() {
+    fun `paused or active setup keeps Home available`() {
         val journey =
             workspaceJourney(
                 requestedDestination = UdroidDestination.HOME,
@@ -81,6 +85,6 @@ class WorkspaceJourneyTest {
             )
 
         assertEquals(WorkspaceStage.SETTING_UP, journey.stage)
-        assertEquals(UdroidDestination.DISTROS, journey.destination)
+        assertEquals(UdroidDestination.HOME, journey.destination)
     }
 }

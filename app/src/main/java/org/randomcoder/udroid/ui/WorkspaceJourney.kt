@@ -38,6 +38,7 @@ fun workspaceJourney(
             }
         } else {
             buildList {
+                add(UdroidDestination.HOME)
                 add(UdroidDestination.DISTROS)
                 if (!compactNavigation) add(UdroidDestination.DEVICE)
                 add(UdroidDestination.ABOUT)
@@ -52,7 +53,6 @@ fun workspaceJourney(
 
 val UdroidDestination.requiresInstalledLinux: Boolean
     get() =
-        this == UdroidDestination.HOME ||
-            this == UdroidDestination.TERMINAL ||
+        this == UdroidDestination.TERMINAL ||
             this == UdroidDestination.APPS ||
             this == UdroidDestination.DESKTOP
