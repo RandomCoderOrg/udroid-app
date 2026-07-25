@@ -35,7 +35,10 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Feedback
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material.icons.outlined.Info
@@ -63,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -886,6 +890,7 @@ private fun AboutPage(
     onOpenUpdateRelease: () -> Unit,
 ) {
     val visibleJournalLines = journalLines.takeLast(25).asReversed()
+    val uriHandler = LocalUriHandler.current
     LazyColumn(
         modifier =
             Modifier
@@ -934,6 +939,34 @@ private fun AboutPage(
                     )
                 }
             }
+        }
+        item {
+            UdroidSectionLabel(
+                text = "Project",
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.Code,
+                title = "GitHub repository",
+                subtitle = "Source code, releases, and project history",
+                onClick = { uriHandler.openUri(GITHUB_REPOSITORY_URL) },
+            )
+        }
+        item {
+            SupportProjectPanel(
+                onStar = { uriHandler.openUri(GITHUB_REPOSITORY_URL) },
+                onSponsor = { uriHandler.openUri(GITHUB_SPONSOR_URL) },
+            )
+        }
+        item {
+            UdroidToolRow(
+                icon = Icons.Outlined.Feedback,
+                title = "Request a feature or report an issue",
+                subtitle = "Open a new issue on GitHub",
+                onClick = { uriHandler.openUri(GITHUB_ISSUES_URL) },
+            )
         }
         item {
             UdroidSectionLabel(
@@ -1010,6 +1043,61 @@ private fun AboutPage(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun SupportProjectPanel(
+    onStar: () -> Unit,
+    onSponsor: () -> Unit,
+) {
+    Surface(
+        color = UdroidRaised,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, UdroidLine),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 15.dp, vertical = 13.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    color = UdroidSoftGreen,
+                    shape = RoundedCornerShape(9.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.FavoriteBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = UdroidForest,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Support uDroid",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "Star the repository to help others find it, or sponsor ongoing work.",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onStar) {
+                    Text("Star on GitHub")
+                }
+                TextButton(onClick = onSponsor) {
+                    Text("Sponsor")
+                }
+            }
+        }
     }
 }
 
@@ -1130,3 +1218,8 @@ private fun installedSystemTitle(rootfsName: String): String =
         rootfsName.contains("focal", ignoreCase = true) -> "Ubuntu 20.04 LTS"
         else -> rootfsName
     }
+
+private const val GITHUB_REPOSITORY_URL = "https://github.com/RandomCoderOrg/udroid-app"
+private const val GITHUB_SPONSOR_URL = "https://github.com/sponsors/RandomCoderOrg"
+private const val GITHUB_ISSUES_URL =
+    "https://github.com/RandomCoderOrg/udroid-app/issues/new/choose"
