@@ -22,6 +22,13 @@ check and receives its readiness marker. On a new installation, uDroid opens
 the Linux image catalogue first; terminal, app, and desktop actions appear only
 after a Linux system is ready.
 
+The searchable catalogue combines uDroid's tested Ubuntu images with pinned,
+checksum-verified archives from `termux/proot-distro` for Debian, Arch Linux,
+Alpine Linux, and Void Linux. Each distribution uses its actual logo and shows
+the image source before installation. See the
+[distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md) for support scope and
+how new image sources are admitted.
+
 PRoot and an interactive terminal are now bundled for the supported Android
 ABIs. The terminal session belongs to the foreground service rather than the
 Activity, so navigating away and returning reattaches to the same PTY and

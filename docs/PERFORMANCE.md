@@ -7,10 +7,14 @@ users.
 
 The first benchmark covers the first-run Linux catalogue:
 
-- expand **Show all images**;
+- expand **Browse all images**;
 - compose the newly visible image cards;
 - scroll the catalogue;
 - record frame CPU duration and frame overrun in Perfetto.
+
+The second benchmark focuses the search field, enters a distro query, waits for
+the filtered result, and records the same frame metrics. This keeps search
+regressions reproducible without repeatedly installing a distro.
 
 Run it on a connected device:
 
@@ -35,7 +39,8 @@ Measured on Android 17 using the optimized APK on 25 July 2026:
 
 | Interaction | P50 CPU | P90 CPU | P95 CPU | P99 CPU | P99 overrun |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Expand catalogue and scroll | 4.8 ms | 6.3 ms | 7.2 ms | 16.6 ms | 7.1 ms |
+| Expand catalogue and scroll | 5.2 ms | 6.8 ms | 7.1 ms | 19.1 ms | 6.5 ms |
+| Search for a distribution | 10.2 ms | 15.1 ms | 17.1 ms | 19.1 ms | 3.6 ms |
 
 The benchmark uses five repeated iterations and stores a Perfetto trace for
 each iteration under the benchmark module's build output. This Pixel result is
@@ -49,7 +54,8 @@ release.
 - Stable item keys and content types let the lazy list reuse composed rows.
 - Catalogue-derived lists are cached instead of filtered during recomposition.
 - A distro row uses one metadata text layout rather than several small layouts.
-- The distro mark uses primitive drawing rather than first-use font glyph work.
+- Packaged vector distro marks avoid first-use font glyph work and network image
+  loading.
 - Baseline and startup profiles are generated from real device journeys.
 
 Keep expensive runtime scenarios small and reproducible first. Add focused

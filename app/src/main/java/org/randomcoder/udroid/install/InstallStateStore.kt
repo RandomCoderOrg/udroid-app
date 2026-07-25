@@ -14,7 +14,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
+import org.randomcoder.udroid.catalog.DistroProvider
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 
 class InstallStateStore(context: Context) {
     private val preferences =
@@ -54,6 +56,10 @@ class InstallStateStore(context: Context) {
             put("architecture", progress.distro.architecture)
             put("download_url", progress.distro.downloadUrl)
             put("sha256", progress.distro.sha256)
+            put("distribution", progress.distro.distribution.id)
+            put("provider", progress.distro.provider.name)
+            progress.distro.releaseLabel?.let { put("release_label", it) }
+            put("archive_strip_components", progress.distro.archiveStripComponents)
             put("stage", progress.stage.name)
             put("stage_progress", progress.stageProgress)
             put("current_detail", progress.currentDetail)
@@ -80,6 +86,27 @@ class InstallStateStore(context: Context) {
                 architecture = value.requiredString("architecture"),
                 downloadUrl = value.requiredString("download_url"),
                 sha256 = value.requiredString("sha256"),
+                distribution =
+                    value["distribution"]
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.let { id -> LinuxDistribution.entries.firstOrNull { it.id == id } }
+                        ?: LinuxDistribution.UBUNTU,
+                provider =
+                    value["provider"]
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.let { name ->
+                            DistroProvider.entries.firstOrNull { it.name == name }
+                        }
+                        ?: DistroProvider.UDROID,
+                releaseLabel = value["release_label"]?.jsonPrimitive?.contentOrNull,
+                archiveStripComponents =
+                    value["archive_strip_components"]
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.toIntOrNull()
+                        ?: 0,
             )
         return InstallProgress(
             distro = distro,

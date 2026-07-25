@@ -4,8 +4,23 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.file.Files
+import java.nio.file.Path
 
 class ProotTerminalLaunchTest {
+    @Test
+    fun `absolute guest shell symlink is accepted without resolving against host root`() {
+        val rootfs = Files.createTempDirectory("udroid-shell-link").toFile()
+        try {
+            val bin = rootfs.resolve("bin").apply { mkdirs() }
+            Files.createSymbolicLink(bin.resolve("sh").toPath(), Path.of("/bin/busybox"))
+
+            assertEquals("/bin/sh", ProotTerminalLaunchBuilder.findGuestShell(rootfs))
+        } finally {
+            rootfs.deleteRecursively()
+        }
+    }
+
     @Test
     fun `linker remains argv zero and starts proot`() {
         val arguments =

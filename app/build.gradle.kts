@@ -75,6 +75,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.tukaani:xz:1.12")
     implementation(project(":terminal-view"))
     implementation(project(":x11-lorie")) {
         // Upstream currently declares Lifecycle 2.11 but does not reference it.

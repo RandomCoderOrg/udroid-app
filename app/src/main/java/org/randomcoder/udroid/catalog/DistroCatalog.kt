@@ -21,24 +21,53 @@ data class DistroVariant(
     val architecture: String,
     val downloadUrl: String,
     val sha256: String,
+    val distribution: LinuxDistribution = LinuxDistribution.UBUNTU,
+    val provider: DistroProvider = DistroProvider.UDROID,
+    val releaseLabel: String? = null,
+    val archiveStripComponents: Int = 0,
 ) {
-    val id: String = "$suite:$variant"
-    val recommended: Boolean = suite == "jammy" && variant == "raw"
+    val id: String = "${distribution.id}:$suite:$variant"
+    val recommended: Boolean =
+        distribution == LinuxDistribution.UBUNTU &&
+            provider == DistroProvider.UDROID &&
+            suite == "jammy" &&
+            variant == "raw"
 
     val releaseName: String
         get() =
-            when (suite) {
-                "focal" -> "Ubuntu 20.04 LTS"
-                "jammy" -> "Ubuntu 22.04 LTS"
-                "noble" -> "Ubuntu 24.04 LTS"
-                "resolute" -> "Ubuntu 26.04 LTS"
-                else -> "Ubuntu ${suite.replaceFirstChar { it.titlecase() }}"
-            }
+            releaseLabel
+                ?: when (distribution) {
+                    LinuxDistribution.UBUNTU ->
+                        when (suite) {
+                            "focal" -> "Ubuntu 20.04 LTS"
+                            "jammy" -> "Ubuntu 22.04 LTS"
+                            "noble" -> "Ubuntu 24.04 LTS"
+                            "resolute" -> "Ubuntu 26.04 LTS"
+                            else -> "Ubuntu ${suite.replaceFirstChar { it.titlecase() }}"
+                        }
+                    else -> distribution.displayName
+                }
+
+    val searchableText: String
+        get() =
+            listOf(
+                distribution.displayName,
+                releaseName,
+                suite,
+                variant,
+                experienceName,
+                architecture,
+                provider.displayName,
+            ).joinToString(" ").lowercase()
+
+    val sourceName: String
+        get() = provider.displayName
 
     val experienceName: String
         get() =
             when {
                 variant.equals("raw", ignoreCase = true) -> "Terminal-first"
+                variant.equals("base", ignoreCase = true) -> "Minimal system"
                 variant.contains("xfce", ignoreCase = true) -> "Xfce desktop"
                 variant.contains("gnome", ignoreCase = true) -> "GNOME desktop"
                 variant.contains("kde", ignoreCase = true) -> "KDE desktop"
@@ -46,6 +75,22 @@ data class DistroVariant(
                 variant.contains("mate", ignoreCase = true) -> "MATE desktop"
                 else -> variant
             }
+}
+
+enum class LinuxDistribution(
+    val id: String,
+    val displayName: String,
+) {
+    UBUNTU("ubuntu", "Ubuntu"),
+    DEBIAN("debian", "Debian"),
+    ARCH("arch", "Arch Linux"),
+    ALPINE("alpine", "Alpine Linux"),
+    VOID("void", "Void Linux"),
+}
+
+enum class DistroProvider(val displayName: String) {
+    UDROID("uDroid"),
+    PROOT_DISTRO("proot-distro"),
 }
 
 data class DistroCatalog(
@@ -136,7 +181,9 @@ class DistroCatalogRepository(private val context: Context) {
                 persistCache(json)
                 DistroCatalogParser.parse(json, architecture, CatalogSource.NETWORK)
             }
-        if (networkResult.isSuccess) return networkResult.getOrThrow()
+        if (networkResult.isSuccess) {
+            return networkResult.getOrThrow().withProotDistroArchives()
+        }
 
         val cachedResult =
             runCatching {
@@ -146,10 +193,25 @@ class DistroCatalogRepository(private val context: Context) {
                     CatalogSource.CACHE,
                 )
             }
-        if (cachedResult.isSuccess) return cachedResult.getOrThrow()
+        if (cachedResult.isSuccess) {
+            return cachedResult.getOrThrow().withProotDistroArchives()
+        }
 
-        return builtInFallback(architecture)
+        return builtInFallback(architecture).withProotDistroArchives()
     }
+
+    private fun DistroCatalog.withProotDistroArchives(): DistroCatalog =
+        copy(
+            variants =
+                (variants + ProotDistroArchiveCatalog.forArchitecture(architecture))
+                    .distinctBy(DistroVariant::id)
+                    .sortedWith(
+                        compareByDescending<DistroVariant> { it.recommended }
+                            .thenBy { it.distribution.displayName }
+                            .thenBy { it.releaseName }
+                            .thenBy { it.variant },
+                    ),
+        )
 
     private fun downloadCatalogue(): String {
         val connection =

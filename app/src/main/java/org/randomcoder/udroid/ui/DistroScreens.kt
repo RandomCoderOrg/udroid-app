@@ -19,16 +19,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +53,7 @@ import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DistroCataloguePage(
     state: DistroCatalogState,
     onRetry: () -> Unit,
@@ -60,7 +67,7 @@ fun DistroCataloguePage(
                     Spacer(Modifier.height(12.dp))
                     Text("Finding Linux images")
                     Text(
-                        "Checking the uDroid catalogue",
+                        "Checking uDroid and proot-distro sources",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -112,6 +119,25 @@ fun DistroCataloguePage(
                     catalogue.variants.filterNot { it.id == recommended.id }
                 }
             var showAll by remember(catalogue.architecture) { mutableStateOf(false) }
+            var searchQuery by remember(catalogue.architecture) { mutableStateOf("") }
+            val searchResults by
+                remember(catalogue.variants, searchQuery) {
+                    derivedStateOf {
+                        val terms =
+                            searchQuery
+                                .trim()
+                                .lowercase()
+                                .split(Regex("\\s+"))
+                                .filter(String::isNotBlank)
+                        if (terms.isEmpty()) {
+                            emptyList()
+                        } else {
+                            catalogue.variants.filter { distro ->
+                                terms.all(distro.searchableText::contains)
+                            }
+                        }
+                    }
+                }
 
             LazyColumn(
                 modifier =
@@ -128,83 +154,165 @@ fun DistroCataloguePage(
                     )
                 }
 
-                item {
-                    UdroidSectionLabel(
-                        text = "Recommended",
-                        modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
+                item(key = "distro-search") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search Ubuntu, Debian, Arch…") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingIcon =
+                            if (searchQuery.isBlank()) {
+                                null
+                            } else {
+                                {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Clear search",
+                                        )
+                                    }
+                                }
+                            },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                     )
                 }
 
-                item(contentType = "distro-card") {
-                    DistroCard(
-                        distro = recommended,
-                        emphasized = true,
-                        onSelect = { onPreviewInstall(recommended) },
-                    )
-                }
+                if (searchQuery.isBlank()) {
+                    item {
+                        UdroidSectionLabel(
+                            text = "Recommended",
+                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
+                        )
+                    }
 
-                item {
-                    val sourceText =
-                        when (catalogue.source) {
-                            CatalogSource.NETWORK -> "Live uDroid catalogue"
-                            CatalogSource.CACHE -> "Saved catalogue · offline"
-                            CatalogSource.BUILT_IN -> "Built-in recovery image"
-                        }
-                    Surface(
-                        color = UdroidRaised,
-                        border = BorderStroke(1.dp, UdroidLine),
-                        shape = RoundedCornerShape(11.dp),
-                    ) {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showAll = !showAll }
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                    item(contentType = "distro-card") {
+                        DistroCard(
+                            distro = recommended,
+                            emphasized = true,
+                            onSelect = { onPreviewInstall(recommended) },
+                        )
+                    }
+
+                    item {
+                        val sourceText =
+                            when (catalogue.source) {
+                                CatalogSource.NETWORK -> "Live uDroid + pinned archives"
+                                CatalogSource.CACHE -> "Saved uDroid + pinned archives"
+                                CatalogSource.BUILT_IN -> "Offline recovery + pinned archives"
+                            }
+                        Surface(
+                            color = UdroidRaised,
+                            border = BorderStroke(1.dp, UdroidLine),
+                            shape = RoundedCornerShape(11.dp),
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    if (showAll) "Hide advanced images" else "Show all images",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                                Text(
-                                    "${remaining.size} compatible variants · $sourceText",
-                                    color = UdroidMuted,
-                                    style = MaterialTheme.typography.bodySmall,
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showAll = !showAll }
+                                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        if (showAll) {
+                                            "Hide other images"
+                                        } else {
+                                            "Browse all images"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Text(
+                                        "${remaining.size} compatible images · $sourceText",
+                                        color = UdroidMuted,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                                Icon(
+                                    imageVector =
+                                        if (showAll) {
+                                            Icons.Outlined.ExpandLess
+                                        } else {
+                                            Icons.Outlined.ExpandMore
+                                        },
+                                    contentDescription =
+                                        if (showAll) {
+                                            "Hide compatible images"
+                                        } else {
+                                            "Show compatible images"
+                                        },
+                                    tint = UdroidMuted,
                                 )
                             }
-                            Icon(
-                                imageVector =
-                                    if (showAll) {
-                                        Icons.Outlined.ExpandLess
-                                    } else {
-                                        Icons.Outlined.ExpandMore
-                                    },
-                                contentDescription =
-                                    if (showAll) {
-                                        "Hide compatible images"
-                                    } else {
-                                        "Show compatible images"
-                                    },
-                                tint = UdroidMuted,
+                        }
+                    }
+
+                    if (showAll) {
+                        items(
+                            items = remaining,
+                            key = { it.id },
+                            contentType = { "distro-card" },
+                        ) { distro ->
+                            DistroCard(
+                                distro = distro,
+                                emphasized = false,
+                                onSelect = { onPreviewInstall(distro) },
                             )
                         }
                     }
-                }
-
-                if (showAll) {
-                    items(
-                        items = remaining,
-                        key = { it.id },
-                        contentType = { "distro-card" },
-                    ) { distro ->
-                        DistroCard(
-                            distro = distro,
-                            emphasized = false,
-                            onSelect = { onPreviewInstall(distro) },
+                } else {
+                    item(key = "search-result-count") {
+                        UdroidSectionLabel(
+                            text =
+                                if (searchResults.size == 1) {
+                                    "1 matching image"
+                                } else {
+                                    "${searchResults.size} matching images"
+                                },
+                            modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
                         )
+                    }
+                    if (searchResults.isEmpty()) {
+                        item(key = "empty-search") {
+                            Surface(
+                                color = UdroidRaised,
+                                border = BorderStroke(1.dp, UdroidLine),
+                                shape = RoundedCornerShape(11.dp),
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        "No matching Linux image",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "Try a distro, release, desktop, or architecture.",
+                                        color = UdroidMuted,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(
+                            items = searchResults,
+                            key = { it.id },
+                            contentType = { "distro-card" },
+                        ) { distro ->
+                            DistroCard(
+                                distro = distro,
+                                emphasized = distro.recommended,
+                                onSelect = { onPreviewInstall(distro) },
+                            )
+                        }
                     }
                 }
 
@@ -233,7 +341,7 @@ private fun DistroCard(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UbuntuMark(size = 42)
+            DistroMark(distribution = distro.distribution, size = 42)
             Column(
                 modifier =
                     Modifier
@@ -256,7 +364,7 @@ private fun DistroCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    "${distro.experienceName} · ${distro.architecture} · ${distro.suite}",
+                    "${distro.experienceName} · ${distro.architecture} · ${distro.sourceName}",
                     color = UdroidMuted,
                     maxLines = 1,
                     style = MaterialTheme.typography.labelSmall,
@@ -269,11 +377,6 @@ private fun DistroCard(
             )
         }
     }
-}
-
-@Composable
-private fun DistroMark(size: Int) {
-    UbuntuMark(size = size)
 }
 
 @Composable
@@ -318,7 +421,7 @@ fun InstallExperiencePage(
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    DistroMark(size = 48)
+                    DistroMark(distribution = progress.distro.distribution, size = 48)
                     Column(modifier = Modifier.padding(start = 12.dp)) {
                         Text(
                             progress.distro.releaseName,

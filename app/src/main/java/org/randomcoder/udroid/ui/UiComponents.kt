@@ -1,7 +1,6 @@
 package org.randomcoder.udroid.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +26,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -38,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.randomcoder.udroid.R
+import org.randomcoder.udroid.catalog.LinuxDistribution
 
 @Composable
 fun UdroidBrand(
@@ -150,32 +148,33 @@ fun UdroidStatusBadge(
 }
 
 @Composable
-fun UbuntuMark(
+fun DistroMark(
+    distribution: LinuxDistribution,
     modifier: Modifier = Modifier,
     size: Int = 42,
 ) {
     Surface(
         modifier = modifier.size(size.dp),
-        color = UdroidUbuntu,
+        color = UdroidSurface,
+        border = BorderStroke(1.dp, UdroidLine),
         shape = RoundedCornerShape((size / 4).dp),
     ) {
-        Canvas(
+        Image(
+            painter =
+                painterResource(
+                    when (distribution) {
+                        LinuxDistribution.UBUNTU -> R.drawable.distro_ubuntu
+                        LinuxDistribution.DEBIAN -> R.drawable.distro_debian
+                        LinuxDistribution.ARCH -> R.drawable.distro_arch
+                        LinuxDistribution.ALPINE -> R.drawable.distro_alpine
+                        LinuxDistribution.VOID -> R.drawable.distro_void
+                    },
+                ),
+            contentDescription = null,
             modifier =
                 Modifier
-                    .fillMaxSize()
-                    .padding((size / 3).dp),
-        ) {
-            val strokeWidth = this.size.minDimension * 0.14f
-            drawCircle(
-                color = Color.White,
-                radius = (this.size.minDimension - strokeWidth) / 2f,
-                style = Stroke(width = strokeWidth),
-            )
-            drawCircle(
-                color = Color.White,
-                radius = this.size.minDimension * 0.12f,
-            )
-        }
+                    .padding((size * 0.20f).dp),
+        )
     }
 }
 

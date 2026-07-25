@@ -30,7 +30,7 @@ class LinuxCatalogueBenchmark {
                 startActivityAndWait()
                 val showAll =
                     device.wait(
-                        Until.findObject(By.text("Show all images")),
+                        Until.findObject(By.text("Browse all images")),
                         UI_TIMEOUT_MS,
                     )
                 assertNotNull("Linux catalogue did not become ready", showAll)
@@ -38,7 +38,7 @@ class LinuxCatalogueBenchmark {
         ) {
             val showAll =
                 device.wait(
-                    Until.findObject(By.text("Show all images")),
+                    Until.findObject(By.text("Browse all images")),
                     UI_TIMEOUT_MS,
                 )
             assertNotNull("Linux catalogue did not become ready", showAll)
@@ -51,6 +51,31 @@ class LinuxCatalogueBenchmark {
                 device.displayHeight / 4,
                 48,
             )
+            device.waitForIdle()
+        }
+
+    @Test
+    fun search() =
+        benchmarkRule.measureRepeated(
+            packageName = PACKAGE_NAME,
+            metrics = listOf(FrameTimingMetric()),
+            compilationMode = CompilationMode.Partial(),
+            startupMode = null,
+            iterations = 5,
+            setupBlock = {
+                killProcess()
+                pressHome()
+                startActivityAndWait()
+                val search =
+                    device.wait(
+                        Until.findObject(By.textContains("Search Ubuntu")),
+                        UI_TIMEOUT_MS,
+                    )
+                assertNotNull("Linux catalogue search did not become ready", search)
+                search.click()
+            },
+        ) {
+            device.executeShellCommand("input text debian")
             device.waitForIdle()
         }
 

@@ -34,7 +34,7 @@ class BaselineProfileGenerator {
             startActivityAndWait()
             val showAll =
                 device.wait(
-                    Until.findObject(By.text("Show all images")),
+                    Until.findObject(By.text("Browse all images")),
                     UI_TIMEOUT_MS,
                 )
             assertNotNull("Linux catalogue did not become ready", showAll)
@@ -51,6 +51,25 @@ class BaselineProfileGenerator {
                 )
                 device.waitForIdle()
             }
+        }
+
+    @Test
+    fun catalogueSearch() =
+        baselineProfileRule.collect(
+            packageName = PACKAGE_NAME,
+            includeInStartupProfile = false,
+        ) {
+            pressHome()
+            startActivityAndWait()
+            val search =
+                device.wait(
+                    Until.findObject(By.textContains("Search Ubuntu")),
+                    UI_TIMEOUT_MS,
+                )
+            assertNotNull("Linux catalogue search did not become ready", search)
+            search.click()
+            device.executeShellCommand("input text debian")
+            device.waitForIdle()
         }
 
     private companion object {

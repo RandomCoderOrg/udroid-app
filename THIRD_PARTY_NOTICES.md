@@ -55,3 +55,38 @@ APKs containing this module are GPLv3 combined works. uDroid-authored files
 retain their existing MIT grants and may also be distributed under GPLv3 as
 part of the combined application. Complete corresponding source includes this
 repository and all recursively pinned Termux:X11 submodules.
+
+## PRoot-Distro rootfs recipes
+
+- Project: <https://github.com/termux/proot-distro>
+- Recipe release: `v4.34.2`
+- Recipe commit: `deb3abd32f233605b51baf6726ba70ad9ca57c57`
+- License: GNU General Public License version 3
+- Local catalogue:
+  `app/src/main/java/org/randomcoder/udroid/catalog/ProotDistroArchiveCatalog.kt`
+
+uDroid does not bundle these distribution archives in the APK. It packages
+their pinned upstream URLs and SHA-256 values and downloads a selected archive
+at runtime. Current PRoot-Distro has moved to arbitrary OCI image installation;
+the pinned archive recipes remain intentionally separate from future registry
+search support.
+
+## XZ for Java
+
+- Project: <https://tukaani.org/xz/java.html>
+- Version: `1.12`
+- License: BSD Zero Clause License
+
+XZ for Java streams pinned PRoot-Distro `.tar.xz` root filesystems into the
+existing PRoot-aware tar extraction path.
+
+## Distribution marks
+
+- Project: <https://github.com/simple-icons/simple-icons>
+- Version: `16.21.0`
+- Project license: CC0 1.0
+- Included marks: Ubuntu, Debian, Arch Linux, Alpine Linux, and Void Linux
+
+The vector paths and brand colors identify their respective distributions.
+Distribution names and marks may be trademarks of their respective owners;
+Simple Icons' legal disclaimer applies.

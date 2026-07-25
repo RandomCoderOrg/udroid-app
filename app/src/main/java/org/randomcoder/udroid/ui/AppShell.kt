@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
@@ -612,7 +613,7 @@ private fun InstalledSystemPanel(
                 modifier = Modifier.padding(15.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                UbuntuMark()
+                DistroMark(distro?.distribution ?: LinuxDistribution.UBUNTU)
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

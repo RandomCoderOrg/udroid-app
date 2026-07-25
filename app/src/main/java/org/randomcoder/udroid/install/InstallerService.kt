@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.DistroProvider
+import org.randomcoder.udroid.catalog.LinuxDistribution
 import java.io.File
 import java.io.InterruptedIOException
 import java.net.URL
@@ -295,6 +297,7 @@ class InstallerService : Service() {
                     ProotTarExtractor(
                         context = this,
                         runtime = prootRuntime,
+                        stripComponents = distro.archiveStripComponents,
                         onDiagnostic = { line ->
                             app.journal.append(
                                 component = "installer",
@@ -680,6 +683,10 @@ class InstallerService : Service() {
         private const val EXTRA_ARCHITECTURE = "architecture"
         private const val EXTRA_DOWNLOAD_URL = "download-url"
         private const val EXTRA_SHA256 = "sha256"
+        private const val EXTRA_DISTRIBUTION = "distribution"
+        private const val EXTRA_PROVIDER = "provider"
+        private const val EXTRA_RELEASE_LABEL = "release-label"
+        private const val EXTRA_ARCHIVE_STRIP_COMPONENTS = "archive-strip-components"
 
         fun start(
             context: Context,
@@ -695,7 +702,14 @@ class InstallerService : Service() {
                     .putExtra(EXTRA_FRIENDLY_NAME, distro.friendlyName)
                     .putExtra(EXTRA_ARCHITECTURE, distro.architecture)
                     .putExtra(EXTRA_DOWNLOAD_URL, distro.downloadUrl)
-                    .putExtra(EXTRA_SHA256, distro.sha256),
+                    .putExtra(EXTRA_SHA256, distro.sha256)
+                    .putExtra(EXTRA_DISTRIBUTION, distro.distribution.id)
+                    .putExtra(EXTRA_PROVIDER, distro.provider.name)
+                    .putExtra(EXTRA_RELEASE_LABEL, distro.releaseLabel)
+                    .putExtra(
+                        EXTRA_ARCHIVE_STRIP_COMPONENTS,
+                        distro.archiveStripComponents,
+                    ),
             )
         }
 
@@ -715,6 +729,17 @@ class InstallerService : Service() {
                 architecture = intent.getStringExtra(EXTRA_ARCHITECTURE) ?: return null,
                 downloadUrl = intent.getStringExtra(EXTRA_DOWNLOAD_URL) ?: return null,
                 sha256 = intent.getStringExtra(EXTRA_SHA256) ?: return null,
+                distribution =
+                    intent.getStringExtra(EXTRA_DISTRIBUTION)
+                        ?.let { id -> LinuxDistribution.entries.firstOrNull { it.id == id } }
+                        ?: LinuxDistribution.UBUNTU,
+                provider =
+                    intent.getStringExtra(EXTRA_PROVIDER)
+                        ?.let { name -> DistroProvider.entries.firstOrNull { it.name == name } }
+                        ?: DistroProvider.UDROID,
+                releaseLabel = intent.getStringExtra(EXTRA_RELEASE_LABEL),
+                archiveStripComponents =
+                    intent.getIntExtra(EXTRA_ARCHIVE_STRIP_COMPONENTS, 0),
             )
         }
 

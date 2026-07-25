@@ -5,6 +5,7 @@ import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
+import java.nio.file.Files
 
 data class ProotTerminalLaunch(
     val executable: String,
@@ -62,8 +63,7 @@ object ProotTerminalLaunchBuilder {
                 "/"
             }
         val guestShell =
-            listOf("/bin/bash", "/usr/bin/bash", "/bin/sh")
-                .firstOrNull { File(rootfs, it.removePrefix("/")).isFile }
+            findGuestShell(rootfs)
                 ?: error("The installed Linux image has no supported shell")
 
         val arguments =
@@ -154,4 +154,12 @@ object ProotTerminalLaunchBuilder {
             "PROOT_TMP_DIR=$temporaryDirectory",
             "TMPDIR=$temporaryDirectory",
         )
+
+    internal fun findGuestShell(rootfs: File): String? =
+        listOf("/bin/bash", "/usr/bin/bash", "/bin/sh")
+            .firstOrNull { guestPath ->
+                File(rootfs, guestPath.removePrefix("/")).let { candidate ->
+                    candidate.isFile || Files.isSymbolicLink(candidate.toPath())
+                }
+            }
 }

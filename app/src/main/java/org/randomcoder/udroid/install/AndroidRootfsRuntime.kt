@@ -3,10 +3,13 @@ package org.randomcoder.udroid.install
 import android.content.Context
 import android.os.Build
 import android.os.StatFs
+import org.tukaani.xz.XZInputStream
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
+import java.io.FilterInputStream
+import java.io.InputStream
 import java.io.InterruptedIOException
 import java.io.InputStreamReader
 import java.io.RandomAccessFile
@@ -63,6 +66,7 @@ object ProotRuntimeInstaller {
 class ProotTarExtractor(
     private val context: Context,
     private val runtime: ProotRuntime,
+    private val stripComponents: Int = 0,
     private val onDiagnostic: (String) -> Unit = {},
 ) : RootfsExtractor {
     override fun extract(
@@ -70,12 +74,18 @@ class ProotTarExtractor(
         destination: File,
         onProgress: (completedBytes: Long, totalBytes: Long) -> Unit,
     ) {
+        val xzCompressed = archive.name.endsWith(".tar.xz", ignoreCase = true)
+        check(!archive.name.endsWith(".tar.zst", ignoreCase = true)) {
+            "Zstandard rootfs archives are not supported yet"
+        }
+        require(stripComponents in 0..4) {
+            "Unsafe archive strip depth: $stripComponents"
+        }
         check(File(destination, "linkerconfig").mkdirs()) {
             "Could not prepare Android linker configuration mount"
         }
-        val command =
-            AndroidExecutableCommand.create(
-                runtime.executable,
+        val prootArguments =
+            mutableListOf(
                 "--link2symlink",
                 "--rootfs=${destination.absolutePath}",
                 "-b",
@@ -88,10 +98,27 @@ class ProotTarExtractor(
                 "/linkerconfig/ld.config.txt",
                 "--cwd=/",
                 "/system/bin/tar",
-                "-xzopf",
-                "-",
-                "-C",
-                "/",
+            ).apply {
+                if (stripComponents > 0) {
+                    add("--strip-components=$stripComponents")
+                }
+                addAll(
+                    listOf(
+                        // Android device paths are bind-mounted into the PRoot. Restoring a
+                        // rootfs archive's directory mtimes can therefore attempt to mutate
+                        // Android's /dev and fail the whole extraction. Toybox tar's -m keeps
+                        // archive contents while leaving those mount-point mtimes alone.
+                        if (xzCompressed) "-xopmf" else "-xzopmf",
+                        "-",
+                        "-C",
+                        "/",
+                    ),
+                )
+            }
+        val command =
+            AndroidExecutableCommand.create(
+                runtime.executable,
+                *prootArguments.toTypedArray(),
             )
         val prootTemporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -129,9 +156,11 @@ class ProotTarExtractor(
                 start()
             }
 
-        var completed = 0L
         try {
-            archive.inputStream().buffered().use { input ->
+            val compressedInput = CountingInputStream(archive.inputStream().buffered())
+            val archiveInput: InputStream =
+                if (xzCompressed) XZInputStream(compressedInput) else compressedInput
+            archiveInput.use { input ->
                 process.outputStream.buffered().use { output ->
                     val buffer = ByteArray(COPY_BUFFER_BYTES)
                     while (true) {
@@ -141,8 +170,7 @@ class ProotTarExtractor(
                         val count = input.read(buffer)
                         if (count < 0) break
                         output.write(buffer, 0, count)
-                        completed += count
-                        onProgress(completed, archive.length())
+                        onProgress(compressedInput.bytesRead, archive.length())
                     }
                 }
             }
@@ -164,6 +192,25 @@ class ProotTarExtractor(
         }
     }
 
+    private class CountingInputStream(input: InputStream) : FilterInputStream(input) {
+        var bytesRead: Long = 0
+            private set
+
+        override fun read(): Int =
+            super.read().also { value ->
+                if (value >= 0) bytesRead++
+            }
+
+        override fun read(
+            buffer: ByteArray,
+            offset: Int,
+            length: Int,
+        ): Int =
+            super.read(buffer, offset, length).also { count ->
+                if (count > 0) bytesRead += count
+            }
+    }
+
     private companion object {
         const val COPY_BUFFER_BYTES = 64 * 1024
         const val MAX_DIAGNOSTIC_LINES = 40
@@ -179,8 +226,11 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                 "Could not prepare /$it"
             }
         }
-        File(rootfs, "proc").setReadable(true, true)
-        File(rootfs, "proc").setExecutable(true, true)
+        File(rootfs, "proc").apply {
+            check(setReadable(true, true) && setWritable(true, true) && setExecutable(true, true)) {
+                "Could not prepare rootfs /proc compatibility directory"
+            }
+        }
 
         replaceFile(
             File(rootfs, "etc/hosts"),
@@ -277,9 +327,9 @@ class ProotRootfsHealthCheck(
         val shell =
             listOf("bin/sh", "usr/bin/sh", "bin/bash")
                 .map { File(rootfs, it) }
-                .firstOrNull(File::isFile)
+                .firstOrNull { it.isFile || it.isSymbolicLink() }
                 ?: error("Extracted rootfs has no shell")
-        check(File(rootfs, "usr/bin/env").isFile) {
+        check(File(rootfs, "usr/bin/env").let { it.isFile || it.isSymbolicLink() }) {
             "Extracted rootfs has no /usr/bin/env"
         }
         val process =
@@ -324,6 +374,9 @@ class ProotRootfsHealthCheck(
             }
         }
     }
+
+    private fun File.isSymbolicLink(): Boolean =
+        Files.isSymbolicLink(toPath())
 }
 
 object RootfsStoragePreflight {
