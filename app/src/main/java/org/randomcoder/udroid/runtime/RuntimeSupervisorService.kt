@@ -32,9 +32,10 @@ import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
-import java.util.UUID
 import java.util.Properties
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
@@ -44,6 +45,9 @@ class RuntimeSupervisorService : Service() {
     private val binder = RuntimeBinder()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ownedSession = AtomicReference<TerminalSession?>(null)
+    private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
+    private val desktopLaunchToken = AtomicReference<String?>(null)
+    private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
     private val applicationProcesses = ConcurrentHashMap<String, Process>()
     private val applicationExecutor = Executors.newCachedThreadPool()
@@ -197,6 +201,9 @@ class RuntimeSupervisorService : Service() {
     override fun onDestroy() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
+        pendingDesktopRestart.set(null)
+        desktopLaunchToken.set(null)
+        ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
         stopApplicationProcesses()
         applicationExecutor.shutdownNow()
         val snapshot = app.runtimeState.current()
@@ -212,6 +219,8 @@ class RuntimeSupervisorService : Service() {
     }
 
     fun currentTerminalSession(): TerminalSession? = ownedSession.get()
+
+    fun currentDesktopSession(): DesktopSessionSnapshot = app.runtimeState.current().desktop
 
     fun attachTerminalView(view: TerminalView) {
         check(Looper.myLooper() == Looper.getMainLooper()) {
@@ -236,6 +245,43 @@ class RuntimeSupervisorService : Service() {
 
     fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
         x11Controller.requestRendererConnection(callback)
+    }
+
+    fun startDesktop(
+        rootfsName: String,
+        environment: DesktopEnvironment,
+        configuration: DesktopConfiguration,
+    ) {
+        pendingDesktopRestart.set(null)
+        startDesktopInternal(
+            DesktopLaunchRequest(rootfsName, environment, configuration),
+        )
+    }
+
+    fun restartDesktop(
+        rootfsName: String,
+        environment: DesktopEnvironment,
+        configuration: DesktopConfiguration,
+    ) {
+        val request = DesktopLaunchRequest(rootfsName, environment, configuration)
+        val current = ownedDesktop.get()
+        if (current == null || !current.process.isAlive) {
+            if (app.runtimeState.current().desktop.phase == DesktopSessionPhase.STARTING) {
+                pendingDesktopRestart.set(request)
+                stopDesktopProcess(restarting = true)
+                return
+            }
+            pendingDesktopRestart.set(null)
+            startDesktopInternal(request)
+            return
+        }
+        pendingDesktopRestart.set(request)
+        stopDesktopProcess(restarting = true)
+    }
+
+    fun stopDesktop() {
+        pendingDesktopRestart.set(null)
+        stopDesktopProcess(restarting = false)
     }
 
     fun launchLinuxApplication(
@@ -338,6 +384,424 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
+    private fun startDesktopInternal(request: DesktopLaunchRequest) {
+        val runtime = app.runtimeState.current()
+        val terminal = ownedSession.get()
+        if (
+            runtime.phase != RuntimePhase.RUNNING ||
+            terminal?.isRunning != true ||
+            terminal.mSessionName != request.rootfsName
+        ) {
+            publishDesktopFailure(
+                request,
+                "Start ${request.rootfsName} before starting its desktop",
+            )
+            return
+        }
+        if (runtime.desktop.phase == DesktopSessionPhase.STARTING) {
+            publishState(
+                app.runtimeState.update {
+                    it.copy(
+                        desktop =
+                            it.desktop.copy(
+                                message =
+                                    "${runtime.desktop.environmentName ?: "A desktop"} " +
+                                        "is already starting on display :0",
+                            ),
+                    )
+                },
+            )
+            return
+        }
+        val existing = ownedDesktop.get()
+        if (existing?.process?.isAlive == true) {
+            if (
+                existing.rootfsName == request.rootfsName &&
+                existing.environment.id == request.environment.id
+            ) {
+                publishState(
+                    app.runtimeState.update {
+                        it.copy(
+                            desktop =
+                                it.desktop.copy(
+                                    phase = DesktopSessionPhase.RUNNING,
+                                    desiredRunning = true,
+                                    message = "${request.environment.name} is already running",
+                                ),
+                        )
+                    },
+                )
+            } else {
+                publishDesktopFailure(
+                    request,
+                    "${existing.environment.name} owns display :0; stop it before switching",
+                )
+            }
+            return
+        }
+        ownedDesktop.compareAndSet(existing, null)
+        val launchToken = UUID.randomUUID().toString()
+        desktopLaunchToken.set(launchToken)
+        publishState(
+            app.runtimeState.update {
+                it.copy(
+                    desktop =
+                        DesktopSessionSnapshot(
+                            phase = DesktopSessionPhase.STARTING,
+                            desiredRunning = true,
+                            rootfsName = request.rootfsName,
+                            environmentId = request.environment.id,
+                            environmentName = request.environment.name,
+                            displayNumber = DISPLAY_NUMBER,
+                            message = "Starting ${request.environment.name} on display :0",
+                        ),
+                )
+            },
+        )
+        app.journal.append(
+            component = "desktop",
+            severity = "info",
+            event = "desktop_start_requested",
+            message = "Starting ${request.environment.name} for ${request.rootfsName}",
+            bootId = runtime.bootId,
+            fields =
+                mapOf(
+                    "rootfs" to request.rootfsName,
+                    "environment_id" to request.environment.id,
+                    "display" to DISPLAY_NUMBER,
+                    "compositing" to request.configuration.compositingEnabled,
+                    "touch_scale" to request.configuration.touchScaleEnabled,
+                ),
+        )
+        x11Controller.whenReady { socketDirectory ->
+            if (desktopLaunchToken.get() != launchToken) return@whenReady
+            if (socketDirectory == null) {
+                if (desktopLaunchToken.compareAndSet(launchToken, null)) {
+                    publishDesktopFailure(request, "Embedded X11 display :0 is unavailable")
+                }
+                return@whenReady
+            }
+            applicationExecutor.execute {
+                runCatching {
+                    if (desktopLaunchToken.get() != launchToken) return@runCatching null
+                    val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
+                    val launch =
+                        ProotDesktopLaunchBuilder.create(
+                            context = this,
+                            runtime = ProotRuntimeInstaller.install(this),
+                            rootfs = rootfs,
+                            x11SocketDirectory = socketDirectory,
+                            environment = request.environment,
+                            configuration = request.configuration,
+                        )
+                    val pidFile =
+                        File(cacheDir, "desktop-process-$launchToken.pid").apply {
+                            delete()
+                        }
+                    val process =
+                        ProcessBuilder(wrapWithPidFile(launch.command, pidFile))
+                            .directory(launch.workingDirectory)
+                            .redirectErrorStream(true)
+                            .apply {
+                                environment().clear()
+                                environment().putAll(launch.environment)
+                            }.start()
+                    val hostPid =
+                        awaitHostPid(pidFile)
+                            ?: run {
+                                process.destroy()
+                                error("Desktop launcher did not publish its host PID")
+                            }
+                    if (desktopLaunchToken.get() != launchToken) {
+                        runCatching { Os.kill(hostPid, OsConstants.SIGKILL) }
+                        pidFile.delete()
+                        return@runCatching null
+                    }
+                    val owned =
+                        OwnedDesktopProcess(
+                            process = process,
+                            hostPid = hostPid,
+                            pidFile = pidFile,
+                            rootfsName = request.rootfsName,
+                            environment = request.environment,
+                        )
+                    check(ownedDesktop.compareAndSet(null, owned)) {
+                        "Another desktop session won display :0"
+                    }
+                    owned
+                }.onSuccess { owned ->
+                    if (owned == null) return@onSuccess
+                    if (!desktopLaunchToken.compareAndSet(launchToken, null)) {
+                        ownedDesktop.compareAndSet(owned, null)
+                        terminateDesktopProcess(owned, OsConstants.SIGKILL)
+                        return@onSuccess
+                    }
+                    publishState(
+                        app.runtimeState.update {
+                            it.copy(
+                                desktop =
+                                    DesktopSessionSnapshot(
+                                        phase = DesktopSessionPhase.RUNNING,
+                                        desiredRunning = true,
+                                        rootfsName = owned.rootfsName,
+                                        environmentId = owned.environment.id,
+                                        environmentName = owned.environment.name,
+                                        displayNumber = DISPLAY_NUMBER,
+                                        message =
+                                            "${owned.environment.name} owns display :0",
+                                    ),
+                            )
+                        },
+                    )
+                    updateNotification("${owned.environment.name} desktop is running")
+                    app.journal.append(
+                        component = "desktop",
+                        severity = "info",
+                        event = "desktop_started",
+                        message = "${owned.environment.name} started on display :0",
+                        bootId = app.runtimeState.current().bootId,
+                        fields =
+                            mapOf(
+                                "rootfs" to owned.rootfsName,
+                                "display" to DISPLAY_NUMBER,
+                            ),
+                    )
+                    monitorDesktop(owned)
+                }.onFailure { error ->
+                    if (desktopLaunchToken.compareAndSet(launchToken, null)) {
+                        publishDesktopFailure(
+                            request,
+                            error.message ?: "Could not start ${request.environment.name}",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun stopDesktopProcess(restarting: Boolean) {
+        desktopLaunchToken.set(null)
+        val current = ownedDesktop.get()
+        if (current == null || !current.process.isAlive) {
+            ownedDesktop.compareAndSet(current, null)
+            publishState(
+                app.runtimeState.update {
+                    it.copy(
+                        desktop =
+                            DesktopSessionSnapshot(
+                                message =
+                                    if (restarting) {
+                                        "Preparing to restart the desktop"
+                                    } else {
+                                        "Desktop session is stopped"
+                                    },
+                            ),
+                    )
+                },
+            )
+            pendingDesktopRestart.getAndSet(null)?.let(::startDesktopInternal)
+            return
+        }
+        publishState(
+            app.runtimeState.update {
+                it.copy(
+                    desktop =
+                        it.desktop.copy(
+                            phase = DesktopSessionPhase.STOPPING,
+                            desiredRunning = false,
+                            message =
+                                if (restarting) {
+                                    "Restarting ${current.environment.name}"
+                                } else {
+                                    "Stopping ${current.environment.name}"
+                                },
+                        ),
+                )
+            },
+        )
+        terminateDesktopProcess(current, OsConstants.SIGTERM)
+        mainHandler.postDelayed(
+            {
+                if (ownedDesktop.get() === current && current.process.isAlive) {
+                    app.journal.append(
+                        component = "desktop",
+                        severity = "warning",
+                        event = "desktop_force_stop",
+                        message = "${current.environment.name} ignored SIGTERM",
+                        bootId = app.runtimeState.current().bootId,
+                        fields = mapOf("rootfs" to current.rootfsName),
+                    )
+                    terminateDesktopProcess(current, OsConstants.SIGKILL)
+                }
+            },
+            GRACEFUL_STOP_TIMEOUT_MS,
+        )
+    }
+
+    private fun monitorDesktop(owned: OwnedDesktopProcess) {
+        applicationExecutor.execute {
+            var linesRead = 0
+            runCatching {
+                BufferedReader(InputStreamReader(owned.process.inputStream)).useLines { lines ->
+                    lines.forEach { line ->
+                        if (linesRead < MAX_DESKTOP_OUTPUT_LINES) {
+                            app.journal.append(
+                                component = "desktop",
+                                severity = "debug",
+                                event = "desktop_output",
+                                message = line.take(MAX_APP_OUTPUT_CHARS),
+                                bootId = app.runtimeState.current().bootId,
+                                fields = mapOf("environment_id" to owned.environment.id),
+                            )
+                        }
+                        linesRead++
+                    }
+                }
+            }
+        }
+        applicationExecutor.execute {
+            val exitCode =
+                try {
+                    owned.process.waitFor()
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return@execute
+                }
+            mainHandler.post { handleDesktopExit(owned, exitCode) }
+        }
+    }
+
+    private fun handleDesktopExit(
+        owned: OwnedDesktopProcess,
+        exitCode: Int,
+    ) {
+        if (!ownedDesktop.compareAndSet(owned, null)) return
+        owned.pidFile.delete()
+        val previous = app.runtimeState.current().desktop
+        val expected =
+            previous.phase == DesktopSessionPhase.STOPPING ||
+                !previous.desiredRunning
+        publishState(
+            app.runtimeState.update {
+                it.copy(
+                    desktop =
+                        DesktopSessionSnapshot(
+                            phase =
+                                if (expected) {
+                                    DesktopSessionPhase.STOPPED
+                                } else {
+                                    DesktopSessionPhase.CRASHED
+                                },
+                            message =
+                                if (expected) {
+                                    "${owned.environment.name} stopped"
+                                } else {
+                                    "${owned.environment.name} exited with $exitCode"
+                                },
+                        ),
+                )
+            },
+        )
+        app.journal.append(
+            component = "desktop",
+            severity = if (expected) "info" else "error",
+            event = if (expected) "desktop_stopped" else "desktop_crashed",
+            message = "${owned.environment.name} exited with $exitCode",
+            bootId = app.runtimeState.current().bootId,
+            fields =
+                mapOf(
+                    "rootfs" to owned.rootfsName,
+                    "environment_id" to owned.environment.id,
+                    "exit_code" to exitCode,
+                ),
+        )
+        pendingDesktopRestart.getAndSet(null)?.let(::startDesktopInternal)
+    }
+
+    private fun publishDesktopFailure(
+        request: DesktopLaunchRequest,
+        message: String,
+    ) {
+        pendingDesktopRestart.set(null)
+        publishState(
+            app.runtimeState.update {
+                it.copy(
+                    desktop =
+                        DesktopSessionSnapshot(
+                            phase = DesktopSessionPhase.CRASHED,
+                            rootfsName = request.rootfsName,
+                            environmentId = request.environment.id,
+                            environmentName = request.environment.name,
+                            message = message,
+                        ),
+                )
+            },
+        )
+        app.journal.append(
+            component = "desktop",
+            severity = "error",
+            event = "desktop_start_failed",
+            message = message,
+            bootId = app.runtimeState.current().bootId,
+            fields =
+                mapOf(
+                    "rootfs" to request.rootfsName,
+                    "environment_id" to request.environment.id,
+                ),
+        )
+    }
+
+    private fun wrapWithPidFile(
+        command: List<String>,
+        pidFile: File,
+    ): List<String> =
+        buildList {
+            add("/system/bin/sh")
+            add("-c")
+            add("printf '%s' \"\$\$\" > \"\$1\"; shift; exec \"\$@\"")
+            add("udroid-desktop-host")
+            add(pidFile.absolutePath)
+            addAll(command)
+        }
+
+    private fun awaitHostPid(pidFile: File): Int? {
+        repeat(50) {
+            pidFile
+                .takeIf(File::isFile)
+                ?.let { file ->
+                    file.readText().trim().toIntOrNull()?.let { return it }
+                }
+            Thread.sleep(20)
+        }
+        return null
+    }
+
+    private fun terminateDesktopProcess(
+        owned: OwnedDesktopProcess,
+        signal: Int,
+    ) {
+        try {
+            Os.kill(owned.hostPid, signal)
+        } catch (error: ErrnoException) {
+            if (error.errno != OsConstants.ESRCH) {
+                app.journal.append(
+                    component = "desktop",
+                    severity = "warning",
+                    event = "desktop_signal_failed",
+                    message = error.message ?: "Could not signal desktop process",
+                    bootId = app.runtimeState.current().bootId,
+                    fields =
+                        mapOf(
+                            "rootfs" to owned.rootfsName,
+                            "host_pid" to owned.hostPid,
+                            "signal" to signal,
+                        ),
+                )
+            }
+        }
+        if (signal == OsConstants.SIGKILL) owned.pidFile.delete()
+    }
+
     private fun startRuntime(requestedRootfsName: String? = null) {
         val existing = ownedSession.get()
         if (existing?.isRunning == true && existing.pid > 0) {
@@ -360,6 +824,7 @@ class RuntimeSupervisorService : Service() {
                         desiredRunning = true,
                         message = "Linux terminal is already running · PID ${existing.pid}",
                         childPid = existing.pid.toLong(),
+                        rootfsName = existing.mSessionName,
                     )
                 },
             )
@@ -439,6 +904,7 @@ class RuntimeSupervisorService : Service() {
                         desiredRunning = true,
                         message = "${launch.rootfs.name} terminal is running · PID ${session.pid}",
                         childPid = session.pid.toLong(),
+                        rootfsName = launch.rootfs.name,
                     )
                 }
             publishState(running)
@@ -499,6 +965,8 @@ class RuntimeSupervisorService : Service() {
         val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
         val expected = !beforeExit.desiredRunning || beforeExit.phase == RuntimePhase.STOPPING
+        pendingDesktopRestart.set(null)
+        stopDesktopProcess(restarting = false)
         val next =
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
         stopApplicationProcesses()
@@ -521,6 +989,8 @@ class RuntimeSupervisorService : Service() {
 
     private fun stopRuntime(userRequested: Boolean) {
         val current = app.runtimeState.current()
+        pendingDesktopRestart.set(null)
+        stopDesktopProcess(restarting = false)
         stopApplicationProcesses()
         x11Controller.stop(current.bootId)
         val stopping =
@@ -591,6 +1061,8 @@ class RuntimeSupervisorService : Service() {
                     message = "uDroid terminal is stopped",
                     childPid = null,
                     heartbeatSequence = null,
+                    rootfsName = null,
+                    desktop = DesktopSessionSnapshot(),
                 )
             }
         publishState(stopped)
@@ -707,7 +1179,7 @@ class RuntimeSupervisorService : Service() {
                     "uDroid runtime",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = "Interactive Linux terminal lifecycle"
+                    description = "Linux runtime and desktop lifecycle"
                 },
             )
     }
@@ -731,7 +1203,7 @@ class RuntimeSupervisorService : Service() {
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("uDroid terminal")
+            .setContentTitle("uDroid Linux")
             .setContentText(text)
             .setContentIntent(openIntent)
             .setOngoing(true)
@@ -775,6 +1247,8 @@ class RuntimeSupervisorService : Service() {
         private const val DEFAULT_CELL_HEIGHT_PX = 20
         private const val MAX_APP_OUTPUT_CHARS = 2_000
         private const val MAX_APP_OUTPUT_LINES = 200
+        private const val MAX_DESKTOP_OUTPUT_LINES = 400
+        private const val DISPLAY_NUMBER = 0
 
         fun start(
             context: Context,
@@ -797,4 +1271,18 @@ class RuntimeSupervisorService : Service() {
             )
         }
     }
+
+    private data class DesktopLaunchRequest(
+        val rootfsName: String,
+        val environment: DesktopEnvironment,
+        val configuration: DesktopConfiguration,
+    )
+
+    private data class OwnedDesktopProcess(
+        val process: Process,
+        val hostPid: Int,
+        val pidFile: File,
+        val rootfsName: String,
+        val environment: DesktopEnvironment,
+    )
 }

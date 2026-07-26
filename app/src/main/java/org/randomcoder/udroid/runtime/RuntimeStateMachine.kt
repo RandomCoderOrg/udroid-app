@@ -2,15 +2,26 @@ package org.randomcoder.udroid.runtime
 
 object RuntimeStateMachine {
     fun recoverAfterApplicationCreate(snapshot: RuntimeSnapshot): RuntimeSnapshot {
-        if (snapshot.desiredRunning || snapshot.phase == RuntimePhase.STOPPED) {
-            return snapshot
-        }
-        return snapshot.copy(
-            phase = RuntimePhase.STOPPED,
-            message = "Recovered a previously interrupted stop",
-            childPid = null,
-            heartbeatSequence = null,
-        )
+        val runtime =
+            if (snapshot.desiredRunning || snapshot.phase == RuntimePhase.STOPPED) {
+                snapshot
+            } else {
+                snapshot.copy(
+                    phase = RuntimePhase.STOPPED,
+                    message = "Recovered a previously interrupted stop",
+                    childPid = null,
+                    heartbeatSequence = null,
+                )
+            }
+        val desktop =
+            if (runtime.desktop.phase == DesktopSessionPhase.STOPPED) {
+                runtime.desktop
+            } else {
+                DesktopSessionSnapshot(
+                    message = "Previous desktop session ended with the app process",
+                )
+            }
+        return runtime.copy(desktop = desktop)
     }
 
     fun afterProcessExit(
@@ -29,6 +40,16 @@ object RuntimeStateMachine {
                 },
             childPid = null,
             heartbeatSequence = null,
+            rootfsName = if (expected) null else snapshot.rootfsName,
+            desktop =
+                DesktopSessionSnapshot(
+                    message =
+                        if (expected) {
+                            "Desktop stopped with the Linux runtime"
+                        } else {
+                            "Desktop stopped because the Linux runtime crashed"
+                        },
+                ),
         )
     }
 }

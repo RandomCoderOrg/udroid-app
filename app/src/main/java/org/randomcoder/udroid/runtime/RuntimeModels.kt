@@ -15,6 +15,8 @@ data class RuntimeSnapshot(
     val message: String = "Runtime has not been started",
     val childPid: Long? = null,
     val heartbeatSequence: Long? = null,
+    val rootfsName: String? = null,
+    val desktop: DesktopSessionSnapshot = DesktopSessionSnapshot(),
     val updatedAtEpochMs: Long = System.currentTimeMillis(),
 )
 

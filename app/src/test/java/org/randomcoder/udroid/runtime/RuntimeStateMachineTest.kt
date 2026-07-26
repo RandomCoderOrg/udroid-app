@@ -32,9 +32,25 @@ class RuntimeStateMachineTest {
                 phase = RuntimePhase.RUNNING,
                 desiredRunning = true,
                 childPid = 42,
+                desktop =
+                    DesktopSessionSnapshot(
+                        phase = DesktopSessionPhase.RUNNING,
+                        desiredRunning = true,
+                        rootfsName = "ubuntu",
+                        environmentId = "xfce",
+                    ),
             )
 
-        assertEquals(running, RuntimeStateMachine.recoverAfterApplicationCreate(running))
+        val recovered = RuntimeStateMachine.recoverAfterApplicationCreate(running)
+
+        assertEquals(RuntimePhase.RUNNING, recovered.phase)
+        assertTrue(recovered.desiredRunning)
+        assertEquals(DesktopSessionPhase.STOPPED, recovered.desktop.phase)
+        assertFalse(recovered.desktop.desiredRunning)
+        assertEquals(
+            "Previous desktop session ended with the app process",
+            recovered.desktop.message,
+        )
     }
 
     @Test
@@ -73,5 +89,7 @@ class RuntimeStateMachineTest {
         assertEquals("uDroid runtime stopped cleanly", stopped.message)
         assertNull(stopped.childPid)
         assertNull(stopped.heartbeatSequence)
+        assertEquals(DesktopSessionPhase.STOPPED, stopped.desktop.phase)
+        assertEquals("Desktop stopped with the Linux runtime", stopped.desktop.message)
     }
 }
