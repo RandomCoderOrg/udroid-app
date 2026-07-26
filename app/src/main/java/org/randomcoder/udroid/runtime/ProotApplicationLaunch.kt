@@ -29,7 +29,7 @@ object ProotApplicationLaunchBuilder {
         val prootArguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
-                rootfsPath = rootfs.absolutePath,
+                rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                 x11SocketDirectory = x11SocketDirectory.absolutePath,
                 guestHome = guestHome,
                 guestWorkingDirectory = guestWorkingDirectory,

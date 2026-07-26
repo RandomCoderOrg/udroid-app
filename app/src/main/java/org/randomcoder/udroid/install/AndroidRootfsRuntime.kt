@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StatFs
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
+import org.randomcoder.udroid.runtime.ProotPathContract
 import org.randomcoder.udroid.runtime.addAndroidProotBindMounts
 import org.tukaani.xz.XZInputStream
 import java.io.BufferedReader
@@ -88,7 +89,7 @@ class ProotTarExtractor(
         val prootArguments =
             mutableListOf(
                 "--link2symlink",
-                "--rootfs=${destination.absolutePath}",
+                "--rootfs=${ProotPathContract.rootfsPath(context, destination)}",
                 "-b",
                 "/system",
                 "-b",
@@ -338,7 +339,7 @@ class ProotRootfsHealthCheck(
                 AndroidExecutableCommand.create(
                     runtime.executable,
                     *buildArguments(
-                        rootfsPath = rootfs.absolutePath,
+                        rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                         shellPath = "/${shell.relativeTo(rootfs).path}",
                     ),
                 ),

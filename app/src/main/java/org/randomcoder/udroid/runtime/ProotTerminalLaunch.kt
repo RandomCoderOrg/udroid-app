@@ -52,7 +52,7 @@ object ProotTerminalLaunchBuilder {
             buildArguments(
                 linker = linker,
                 prootPath = runtime.executable.absolutePath,
-                rootfsPath = rootfs.absolutePath,
+                rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                 guestHome = guestHome,
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
