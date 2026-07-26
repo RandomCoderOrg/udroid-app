@@ -4,7 +4,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.PointF;
 import android.graphics.drawable.ColorDrawable;
 import android.opengl.GLES20;
 import android.os.ParcelFileDescriptor;
@@ -16,6 +15,7 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.ViewConfiguration;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -36,20 +36,21 @@ import java.nio.charset.StandardCharsets;
  * broadcasts, or navigation. The X server is owned by the supervisor and can
  * continue running while this view is detached.
  */
-public final class X11DisplayView extends SurfaceView implements InputStub {
+public final class X11DisplayView extends SurfaceView
+        implements InputStub, X11InputSink.TouchFrameTransport {
     private static final int HAL_PIXEL_FORMAT_BGRA_8888 = 5;
     private final InputEventSender inputSender;
+    private final X11InputSink inputSink;
+    private final TrackpadGestureController trackpadGestures;
+    private final NativeTouchController nativeTouches;
+    private final float[] mappedPoint = new float[2];
     private final InputMethodManager inputMethodManager;
     private final BaseInputConnection inputConnection;
     private boolean rendererAttached;
     private boolean surfaceAvailable;
-    private boolean touchButtonDown;
     private boolean imeHasCommittedText;
     private CharSequence composingText;
     private int pressedMouseButton = BUTTON_UNDEFINED;
-    private float trackpadLastX;
-    private float trackpadLastY;
-    private float trackpadDistance;
     private int viewportLeft;
     private int viewportTop;
     private int viewportWidth;
@@ -60,7 +61,18 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
 
     public X11DisplayView(Context context) {
         super(context);
-        inputSender = new InputEventSender(this);
+        inputSink = new StatefulX11InputSink(this);
+        inputSender = new InputEventSender(inputSink);
+        ViewConfiguration viewConfiguration = ViewConfiguration.get(context);
+        trackpadGestures =
+                new TrackpadGestureController(
+                        inputSink,
+                        viewConfiguration.getScaledTouchSlop(),
+                        viewConfiguration.getScaledDoubleTapSlop(),
+                        ViewConfiguration.getDoubleTapTimeout(),
+                        ViewConfiguration.getLongPressTimeout()
+                );
+        nativeTouches = new NativeTouchController(inputSink);
         inputMethodManager =
                 (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
         inputConnection = new BaseInputConnection(this, false) {
@@ -164,6 +176,7 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
 
             @Override
             public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+                releaseAllInput();
                 surfaceAvailable = false;
                 X11DisplayView.this.surfaceChanged(null);
             }
@@ -191,6 +204,7 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
 
     public void detachRenderer() {
         if (!rendererAttached) return;
+        releaseAllInput();
         connect(-1);
         rendererAttached = false;
     }
@@ -201,6 +215,7 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
 
     public void applySettings(X11Settings updatedSettings) {
         if (updatedSettings == null) return;
+        boolean inputModeChanged = updatedSettings.getTouchMode() != settings.getTouchMode();
         boolean geometryChanged =
                 updatedSettings.getResolutionMode() != settings.getResolutionMode() ||
                         updatedSettings.getDisplayScalePercent() !=
@@ -210,8 +225,12 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
                         updatedSettings.getStretchDisplay() != settings.getStretchDisplay();
         boolean filterChanged =
                 updatedSettings.getDisplayFilter() != settings.getDisplayFilter();
+        if (inputModeChanged) {
+            releaseAllInput();
+        }
         settings = updatedSettings;
         inputSender.preferScancodes = settings.getPreferScancodes();
+        trackpadGestures.setSpeed(settings.getTrackpadSpeedPercent() / 100f);
         setKeepScreenOn(settings.getKeepScreenOn());
         if (rendererAttached && geometryChanged) {
             publishGeometry(getWidth(), getHeight());
@@ -274,29 +293,51 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
         if (settings.getTouchMode() == X11TouchMode.TRACKPAD) {
             return handleTrackpadTouch(event);
         }
+        if (settings.getTouchMode() == X11TouchMode.NATIVE) {
+            return handleNativeTouch(event);
+        }
 
-        PointF point =
-                mapToGuest(
-                        event.getX(event.getActionIndex()),
-                        event.getY(event.getActionIndex())
-                );
+        mapToGuest(
+                event.getX(event.getActionIndex()),
+                event.getY(event.getActionIndex()),
+                mappedPoint
+        );
+        float pointX = mappedPoint[0];
+        float pointY = mappedPoint[1];
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
-                sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
-                touchButtonDown = true;
+                inputSink.sendMouseEvent(
+                        pointX,
+                        pointY,
+                        BUTTON_UNDEFINED,
+                        false,
+                        false
+                );
+                inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
                 return true;
             case MotionEvent.ACTION_MOVE:
-                PointF move = mapToGuest(event.getX(0), event.getY(0));
-                sendMouseEvent(move.x, move.y, BUTTON_UNDEFINED, false, false);
+                mapToGuest(event.getX(0), event.getY(0), mappedPoint);
+                inputSink.sendMouseEvent(
+                        mappedPoint[0],
+                        mappedPoint[1],
+                        BUTTON_UNDEFINED,
+                        false,
+                        false
+                );
                 return true;
             case MotionEvent.ACTION_UP:
-                sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
+                inputSink.sendMouseEvent(
+                        pointX,
+                        pointY,
+                        BUTTON_UNDEFINED,
+                        false,
+                        false
+                );
                 releaseTouchButton();
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
-                releaseTouchButton();
+                releaseAllInput();
                 return true;
             default:
                 return true;
@@ -304,42 +345,75 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
     }
 
     private boolean handleTrackpadTouch(MotionEvent event) {
+        return trackpadGestures.onTouchEvent(event);
+    }
+
+    private boolean handleNativeTouch(MotionEvent event) {
         int action = event.getActionMasked();
-        float x = event.getX(event.getActionIndex());
-        float y = event.getY(event.getActionIndex());
+        int actionIndex = event.getActionIndex();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                trackpadLastX = x;
-                trackpadLastY = y;
-                trackpadDistance = 0;
-                return true;
-            case MotionEvent.ACTION_MOVE:
-                float deltaX = x - trackpadLastX;
-                float deltaY = y - trackpadLastY;
-                trackpadLastX = x;
-                trackpadLastY = y;
-                trackpadDistance += Math.abs(deltaX) + Math.abs(deltaY);
-                float speed = settings.getTrackpadSpeedPercent() / 100f;
-                sendMouseEvent(
-                        deltaX * speed,
-                        deltaY * speed,
-                        BUTTON_UNDEFINED,
-                        false,
-                        true
+                nativeTouches.cancel();
+                mapToGuest(event.getX(actionIndex), event.getY(actionIndex), mappedPoint);
+                nativeTouches.handleDown(
+                        event.getPointerId(actionIndex),
+                        Math.round(mappedPoint[0]),
+                        Math.round(mappedPoint[1])
                 );
                 return true;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                mapToGuest(event.getX(actionIndex), event.getY(actionIndex), mappedPoint);
+                nativeTouches.handleDown(
+                        event.getPointerId(actionIndex),
+                        Math.round(mappedPoint[0]),
+                        Math.round(mappedPoint[1])
+                );
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                // Historical samples are already stale when this callback runs. Replaying
+                // them as individual JNI/socket writes creates visible catch-up latency,
+                // especially when several contacts share one batched MotionEvent.
+                sendNativeMoveFrame(event);
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
             case MotionEvent.ACTION_UP:
-                if (trackpadDistance < getResources().getDisplayMetrics().density * 12f) {
-                    sendMouseEvent(0, 0, BUTTON_LEFT, true, true);
-                    sendMouseEvent(0, 0, BUTTON_LEFT, false, true);
+                mapToGuest(event.getX(actionIndex), event.getY(actionIndex), mappedPoint);
+                nativeTouches.handleUp(
+                        event.getPointerId(actionIndex),
+                        Math.round(mappedPoint[0]),
+                        Math.round(mappedPoint[1])
+                );
+                if (action == MotionEvent.ACTION_UP) {
+                    nativeTouches.cancel();
+                }
+                if (action == MotionEvent.ACTION_UP) {
                     performClick();
                 }
                 return true;
             case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_OUTSIDE:
+                nativeTouches.cancel();
                 return true;
             default:
                 return true;
         }
+    }
+
+    private void sendNativeMoveFrame(MotionEvent event) {
+        nativeTouches.beginMoveFrame();
+        for (int pointerIndex = 0; pointerIndex < event.getPointerCount(); pointerIndex++) {
+            mapToGuest(
+                    event.getX(pointerIndex),
+                    event.getY(pointerIndex),
+                    mappedPoint
+            );
+            nativeTouches.handleMove(
+                    event.getPointerId(pointerIndex),
+                    Math.round(mappedPoint[0]),
+                    Math.round(mappedPoint[1])
+            );
+        }
+        nativeTouches.endMoveFrame();
     }
 
     @Override
@@ -380,11 +454,17 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
     }
 
     private boolean handleMouseEvent(MotionEvent event) {
-        PointF point = mapToGuest(event.getX(), event.getY());
-        sendMouseEvent(point.x, point.y, BUTTON_UNDEFINED, false, false);
+        mapToGuest(event.getX(), event.getY(), mappedPoint);
+        inputSink.sendMouseEvent(
+                mappedPoint[0],
+                mappedPoint[1],
+                BUTTON_UNDEFINED,
+                false,
+                false
+        );
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_SCROLL:
-                sendMouseWheelEvent(
+                inputSink.sendMouseWheelEvent(
                         -120f * event.getAxisValue(MotionEvent.AXIS_HSCROLL),
                         120f * event.getAxisValue(MotionEvent.AXIS_VSCROLL)
                 );
@@ -393,7 +473,7 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
             case MotionEvent.ACTION_DOWN:
                 int pressed = mapButton(event);
                 if (pressed != BUTTON_UNDEFINED && pressedMouseButton != pressed) {
-                    sendMouseEvent(0, 0, pressed, true, false);
+                    inputSink.sendMouseEvent(0, 0, pressed, true, false);
                     pressedMouseButton = pressed;
                 }
                 return true;
@@ -401,7 +481,13 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 if (pressedMouseButton != BUTTON_UNDEFINED) {
-                    sendMouseEvent(0, 0, pressedMouseButton, false, false);
+                    inputSink.sendMouseEvent(
+                            0,
+                            0,
+                            pressedMouseButton,
+                            false,
+                            false
+                    );
                     pressedMouseButton = BUTTON_UNDEFINED;
                 }
                 return true;
@@ -410,19 +496,19 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
         }
     }
 
-    private PointF mapToGuest(float x, float y) {
+    private void mapToGuest(float x, float y, float[] destination) {
         if (viewportWidth <= 0 || viewportHeight <= 0 ||
                 guestWidth <= 0 || guestHeight <= 0) {
-            return new PointF(x, y);
+            destination[0] = x;
+            destination[1] = y;
+            return;
         }
         float mappedX =
                 (x - viewportLeft) * guestWidth / (float) viewportWidth;
         float mappedY =
                 (y - viewportTop) * guestHeight / (float) viewportHeight;
-        return new PointF(
-                Math.max(0, Math.min(guestWidth, mappedX)),
-                Math.max(0, Math.min(guestHeight, mappedY))
-        );
+        destination[0] = Math.max(0, Math.min(guestWidth, mappedX));
+        destination[1] = Math.max(0, Math.min(guestHeight, mappedY));
     }
 
     private static int mapButton(MotionEvent event) {
@@ -443,9 +529,28 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
     }
 
     private void releaseTouchButton() {
-        if (!touchButtonDown) return;
-        sendMouseEvent(0, 0, BUTTON_LEFT, false, false);
-        touchButtonDown = false;
+        inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, false, false);
+    }
+
+    private void releaseAllInput() {
+        trackpadGestures.cancel();
+        nativeTouches.cancel();
+        inputSink.releaseAllInput();
+        pressedMouseButton = BUTTON_UNDEFINED;
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        super.onWindowFocusChanged(hasWindowFocus);
+        if (!hasWindowFocus) {
+            releaseAllInput();
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        releaseAllInput();
+        super.onDetachedFromWindow();
     }
 
     private boolean replaceImeText(CharSequence replacement, boolean keepComposing) {
@@ -556,6 +661,9 @@ public final class X11DisplayView extends SurfaceView implements InputStub {
 
     @Override
     public native void sendTouchEvent(int action, int id, int x, int y);
+
+    @Override
+    public native void sendTouchFrame(int[] events, int eventCount);
 
     @Override
     public native void sendTextEvent(byte[] text);

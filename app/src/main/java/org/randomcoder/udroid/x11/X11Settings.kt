@@ -17,6 +17,7 @@ enum class X11DisplayFilter {
 enum class X11TouchMode {
     DIRECT,
     TRACKPAD,
+    NATIVE,
 }
 
 data class X11Settings(

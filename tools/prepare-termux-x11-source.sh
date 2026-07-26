@@ -41,5 +41,8 @@ apply_once \
 apply_once \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0003-udroid-renderer-bridge.patch"
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0004-udroid-batched-native-touch.patch"
 
 echo "Termux:X11 native source patches are ready."

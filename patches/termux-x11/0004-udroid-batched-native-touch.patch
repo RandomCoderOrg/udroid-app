@@ -1,0 +1,204 @@
+--- a/lorie.h
++++ b/lorie.h
+@@ -100,6 +100,7 @@ typedef enum {
+     EVENT_REMOVE_BUFFER,
+     EVENT_SCREEN_SIZE,
+     EVENT_TOUCH,
++    EVENT_TOUCH_FRAME,
+     EVENT_MOUSE,
+     EVENT_KEY,
+     EVENT_STYLUS,
+@@ -114,6 +115,12 @@ typedef enum {
+     EVENT_GPU_COPY_DONE,
+ } eventType;
+ 
++#define LORIE_MAX_TOUCH_CONTACTS 20
++
++typedef struct {
++    uint16_t type, id, x, y;
++} lorieTouchPoint;
++
+ typedef union {
+     uint8_t type;
+     struct {
+@@ -130,6 +137,9 @@ typedef union {
+         uint8_t t;
+         uint16_t type, id, x, y;
+     } touch;
++    struct {
++        uint8_t t, count;
++    } touchFrame;
+     struct {
+         uint8_t t;
+         float x, y;
+--- a/activity.c
++++ b/activity.c
+@@ -320,6 +320,55 @@ static void sendTouchEvent(__unused JNIEnv* env, __unused jobject cls, jint acti
+     }
+ }
+ 
++static void sendTouchFrame(
++        JNIEnv* env,
++        __unused jobject cls,
++        jintArray packed_events,
++        jint event_count
++) {
++    enum { TOUCH_EVENT_STRIDE = 4 };
++    if (conn_fd == -1 || !packed_events || event_count <= 0 ||
++        event_count > LORIE_MAX_TOUCH_CONTACTS)
++        return;
++
++    jsize packed_length = (*env)->GetArrayLength(env, packed_events);
++    if (packed_length < event_count * TOUCH_EVENT_STRIDE)
++        return;
++
++    jint packed[LORIE_MAX_TOUCH_CONTACTS * TOUCH_EVENT_STRIDE];
++    (*env)->GetIntArrayRegion(
++            env,
++            packed_events,
++            0,
++            event_count * TOUCH_EVENT_STRIDE,
++            packed
++    );
++    if ((*env)->ExceptionCheck(env))
++        return;
++
++    struct {
++        lorieEvent header;
++        lorieTouchPoint points[LORIE_MAX_TOUCH_CONTACTS];
++    } message = {
++            .header = { .touchFrame = { .t = EVENT_TOUCH_FRAME, .count = event_count } }
++    };
++
++    for (int index = 0; index < event_count; index++) {
++        int offset = index * TOUCH_EVENT_STRIDE;
++        message.points[index] = (lorieTouchPoint) {
++                .type = packed[offset],
++                .id = packed[offset + 1],
++                .x = packed[offset + 2],
++                .y = packed[offset + 3],
++        };
++    }
++    write(
++            conn_fd,
++            &message,
++            sizeof(message.header) + event_count * sizeof(message.points[0])
++    );
++}
++
+ static void sendStylusEvent(__unused JNIEnv *env, __unused jobject thiz, jfloat x, jfloat y,
+                             jint pressure, jint tilt_x, jint tilt_y,
+                             jint orientation, jint buttons, jboolean eraser, jboolean mouse) {
+--- a/cmdentrypoint.c
++++ b/cmdentrypoint.c
+@@ -246,40 +246,74 @@ static Bool handleClipboardData(__unused ClientPtr pClient, void *closure) {
+     return TRUE;
+ }
+ 
+-static Bool handleTouchEvent(__unused ClientPtr pClient, void *closure) {
++static void queueTouchEvent(const lorieTouchPoint *event) {
+     ValuatorMask mask;
+-    lorieEvent *e = closure;
+-    double x = max(min((float) e->touch.x, pScreenPtr->width), 0);
+-    double y = max(min((float) e->touch.y, pScreenPtr->height), 0);
++    uint16_t type = event->type;
++    double x = max(min((float) event->x, pScreenPtr->width), 0);
++    double y = max(min((float) event->y, pScreenPtr->height), 0);
+     valuator_mask_zero(&mask);
+-    DDXTouchPointInfoPtr touch = TouchFindByDDXID(lorieTouch, e->touch.id, FALSE);
++    DDXTouchPointInfoPtr touch = TouchFindByDDXID(lorieTouch, event->id, FALSE);
+ 
+     // Avoid duplicating events
+     if (touch && touch->active) {
+         double oldx = 0, oldy = 0;
+-        if (e->touch.type == XI_TouchUpdate &&
++        if (type == XI_TouchUpdate &&
+             valuator_mask_fetch_double(touch->valuators, 0, &oldx) &&
+             valuator_mask_fetch_double(touch->valuators, 1, &oldy) &&
+             oldx == x && oldy == y)
+-            goto end;
++            return;
+     }
+ 
+     // Sometimes activity part does not send XI_TouchBegin and sends only XI_TouchUpdate.
+-    if (e->touch.type == XI_TouchUpdate && (!touch || !touch->active))
+-        e->touch.type = XI_TouchBegin;
++    if (type == XI_TouchUpdate && (!touch || !touch->active))
++        type = XI_TouchBegin;
+ 
+-    if (e->touch.type == XI_TouchEnd && (!touch || !touch->active))
+-        goto end;
++    if (type == XI_TouchEnd && (!touch || !touch->active))
++        return;
+ 
+     valuator_mask_set_double(&mask, 0, x * 0xFFFF / (float) pScreenPtr->width);
+     valuator_mask_set_double(&mask, 1, y * 0xFFFF / (float) pScreenPtr->height);
+-    QueueTouchEvents(lorieTouch, e->touch.type, e->touch.id, 0, &mask);
++    QueueTouchEvents(lorieTouch, type, event->id, 0, &mask);
++}
+ 
+-    end:
++static Bool handleTouchEvent(__unused ClientPtr pClient, void *closure) {
++    lorieEvent *e = closure;
++    lorieTouchPoint event = {
++            .type = e->touch.type,
++            .id = e->touch.id,
++            .x = e->touch.x,
++            .y = e->touch.y,
++    };
++    queueTouchEvent(&event);
+     free(e);
+     return TRUE;
+ }
+ 
++typedef struct {
++    uint8_t count;
++    lorieTouchPoint points[LORIE_MAX_TOUCH_CONTACTS];
++} lorieTouchFrameWork;
++
++static Bool handleTouchFrame(__unused ClientPtr pClient, void *closure) {
++    lorieTouchFrameWork *frame = closure;
++    for (int index = 0; index < frame->count; index++)
++        queueTouchEvent(&frame->points[index]);
++    free(frame);
++    return TRUE;
++}
++
++static Bool readFully(int fd, void *destination, size_t size) {
++    uint8_t *cursor = destination;
++    while (size > 0) {
++        ssize_t received = read(fd, cursor, size);
++        if (received <= 0)
++            return FALSE;
++        cursor += received;
++        size -= received;
++    }
++    return TRUE;
++}
++
+ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
+     ValuatorMask mask;
+     lorieEvent e = {0};
+@@ -316,6 +350,22 @@ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
+                 lorieWakeServer();
+                 break;
+             }
++            case EVENT_TOUCH_FRAME: {
++                if (e.touchFrame.count == 0 ||
++                    e.touchFrame.count > LORIE_MAX_TOUCH_CONTACTS)
++                    break;
++                lorieTouchFrameWork *frame = calloc(1, sizeof(*frame));
++                frame->count = e.touchFrame.count;
++                size_t payload_size =
++                        frame->count * sizeof(frame->points[0]);
++                if (!readFully(fd, frame->points, payload_size)) {
++                    free(frame);
++                    break;
++                }
++                QueueWorkProc(handleTouchFrame, NULL, frame);
++                lorieWakeServer();
++                break;
++            }
+             case EVENT_STYLUS: {
+                 static int buttons_prev = 0;
+                 uint32_t released, pressed, diff;

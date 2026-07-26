@@ -169,7 +169,9 @@ fun X11SettingsDialog(
                         SettingsSectionTitle("POINTER")
                         SettingsLabel(
                             title = "Touch input",
-                            subtitle = "Direct touch follows your finger. Trackpad moves relatively.",
+                            subtitle =
+                                "Direct controls the pointer. Trackpad moves relatively. " +
+                                    "Native sends every contact to Linux.",
                         )
                         ChoiceGroup(
                             selected = settings.touchMode,
@@ -177,6 +179,7 @@ fun X11SettingsDialog(
                                 listOf(
                                     X11TouchMode.DIRECT to "Direct",
                                     X11TouchMode.TRACKPAD to "Trackpad",
+                                    X11TouchMode.NATIVE to "Native",
                                 ),
                             onSelected = {
                                 onSettingsChanged(settings.copy(touchMode = it))
