@@ -50,6 +50,19 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Build and self-test XI2 Touchscope probe
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            desktop-file-utils \
+            libx11-dev \
+            libxi-dev
+          make -C tools/touchscope
+          tools/touchscope/touchscope --self-test
+          desktop-file-validate tools/touchscope/touchscope.desktop
+          make -C tools/touchscope clean
+
       - name: Prepare stable update signing
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash

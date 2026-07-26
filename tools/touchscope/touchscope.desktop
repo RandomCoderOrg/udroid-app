@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Touchscope
+GenericName=Multi-touch diagnostics
+Comment=Visualize native XInput2 contacts and event sequence health
+Exec=touchscope --fullscreen
+TryExec=touchscope
+Icon=input-touchpad
+Terminal=false
+Categories=Development;
+Keywords=touch;multitouch;XInput2;XI2;diagnostics;

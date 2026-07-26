@@ -1,0 +1,22 @@
+FROM ubuntu:22.04 AS build
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        gcc \
+        libc6-dev \
+        libx11-dev \
+        libxi-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY touchscope.c .
+RUN cc -O2 -std=c11 -Wall -Wextra -Wpedantic \
+        $(pkg-config --cflags x11 xi) \
+        touchscope.c \
+        -o /touchscope \
+        $(pkg-config --libs x11 xi) \
+        -lm
+
+FROM scratch
+COPY --from=build /touchscope /touchscope
