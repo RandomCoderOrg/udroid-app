@@ -44,7 +44,22 @@ class WorkspaceJourneyTest {
         assertEquals(UdroidDestination.HOME, journey.destination)
         assertTrue(journey.destinations.contains(UdroidDestination.TERMINAL))
         assertTrue(journey.destinations.contains(UdroidDestination.APPS))
+        assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
         assertFalse(journey.destinations.contains(UdroidDestination.DESKTOP))
+    }
+
+    @Test
+    fun `installed system detail is reachable but never becomes a navigation tab`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.SYSTEM,
+                hasInstalledLinux = true,
+                hasInstallation = false,
+                compactNavigation = false,
+            )
+
+        assertEquals(UdroidDestination.SYSTEM, journey.destination)
+        assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
     }
 
     @Test

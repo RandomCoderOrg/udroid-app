@@ -33,7 +33,8 @@ fun workspaceJourney(
     val destinations =
         if (hasInstalledLinux) {
             UdroidDestination.entries.filterNot {
-                it == UdroidDestination.DESKTOP ||
+                it == UdroidDestination.SYSTEM ||
+                    it == UdroidDestination.DESKTOP ||
                     (compactNavigation && it == UdroidDestination.DEVICE)
             }
         } else {
@@ -54,5 +55,6 @@ fun workspaceJourney(
 val UdroidDestination.requiresInstalledLinux: Boolean
     get() =
         this == UdroidDestination.TERMINAL ||
+            this == UdroidDestination.SYSTEM ||
             this == UdroidDestination.APPS ||
             this == UdroidDestination.DESKTOP

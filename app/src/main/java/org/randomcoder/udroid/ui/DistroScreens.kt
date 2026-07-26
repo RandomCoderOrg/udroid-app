@@ -58,7 +58,7 @@ fun DistroCataloguePage(
     activeRootfsName: String?,
     onRetry: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
-    onOpenTerminal: (String) -> Unit,
+    onOpenInstalledSystem: (String) -> Unit,
 ) {
     when (state) {
         DistroCatalogState.Loading -> {
@@ -244,7 +244,7 @@ fun DistroCataloguePage(
                             active = distro.internalName == activeRootfsName,
                             onSelect = {
                                 if (installed) {
-                                    onOpenTerminal(distro.internalName)
+                                    onOpenInstalledSystem(distro.internalName)
                                 } else {
                                     onPreviewInstall(distro)
                                 }

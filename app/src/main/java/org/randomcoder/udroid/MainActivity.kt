@@ -39,6 +39,11 @@ import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
+import org.randomcoder.udroid.runtime.DesktopCompositorSupport
+import org.randomcoder.udroid.runtime.DesktopConfiguration
+import org.randomcoder.udroid.runtime.DesktopConfigurationStore
+import org.randomcoder.udroid.runtime.DesktopEnvironment
+import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
@@ -61,6 +66,12 @@ private data class PendingLinuxApplication(
     val rootfsName: String,
 )
 
+private data class PendingDesktopStart(
+    val rootfsName: String,
+    val environment: DesktopEnvironment,
+    val configuration: DesktopConfiguration,
+)
+
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -74,17 +85,26 @@ class MainActivity : ComponentActivity() {
     private var updateState by mutableStateOf(AppUpdateState())
     private var installedRootfsName by mutableStateOf<String?>(null)
     private var installedRootfses by mutableStateOf<List<InstalledRootfs>>(emptyList())
+    private var selectedSystemRootfsName by mutableStateOf<String?>(null)
+    private var desktopEnvironments by mutableStateOf<List<DesktopEnvironment>>(emptyList())
+    private var desktopConfiguration by
+        mutableStateOf(DesktopConfiguration(null, compositingEnabled = false, touchScaleEnabled = true))
+    private var desktopScanLoading by mutableStateOf(false)
+    private var desktopScanMessage by mutableStateOf<String?>(null)
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
     private var pendingLinuxApplication: PendingLinuxApplication? = null
     private var pendingLinuxApplicationId: String? = null
+    private var pendingDesktopStart: PendingDesktopStart? = null
     private var pendingShortcutRootfsName: String? = null
     private var pendingTerminalRootfsName: String? = null
     private var linuxApplicationsLoadGeneration = 0L
+    private var desktopScanGeneration = 0L
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
+    private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
 
     private val runtimeServiceConnection =
         object : ServiceConnection {
@@ -97,6 +117,7 @@ class MainActivity : ComponentActivity() {
                 runtimeService = connectedService
                 refreshFromDisk()
                 launchPendingLinuxApplication()
+                launchPendingDesktop()
                 if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
                     RuntimeSupervisorService.start(
                         this@MainActivity,
@@ -135,6 +156,11 @@ class MainActivity : ComponentActivity() {
                     updateState = updateState,
                     installedRootfsName = installedRootfsName,
                     installedRootfses = installedRootfses,
+                    selectedSystemRootfsName = selectedSystemRootfsName,
+                    desktopEnvironments = desktopEnvironments,
+                    desktopConfiguration = desktopConfiguration,
+                    desktopScanLoading = desktopScanLoading,
+                    desktopScanMessage = desktopScanMessage,
                     linuxApplicationsState = linuxApplicationsState,
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
@@ -149,7 +175,15 @@ class MainActivity : ComponentActivity() {
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
+                    onOpenInstalledSystem = { openSystemDetails(it) },
                     onOpenRootfsTerminal = { openRootfsTerminal(it) },
+                    onOpenRootfsApps = { openRootfsApps(it) },
+                    onSelectDesktopEnvironment = { selectDesktopEnvironment(it) },
+                    onCompositingChanged = { updateCompositing(it) },
+                    onTouchScaleChanged = { updateTouchScale(it) },
+                    onStartDesktop = { startSelectedDesktop() },
+                    onStopDesktop = { runtimeService?.stopDesktop() },
+                    onRestartDesktop = { restartSelectedDesktop() },
                     onStartDownload = { startSelectedDownload() },
                     onPauseDownload = { InstallerService.pause(this) },
                     onToggleInstallTerminal = {
@@ -235,6 +269,9 @@ class MainActivity : ComponentActivity() {
         selectedDestination = resolvedDestination
         applySystemBars(resolvedDestination)
         if (resolvedDestination == UdroidDestination.APPS) loadLinuxApplications()
+        if (resolvedDestination == UdroidDestination.SYSTEM) {
+            selectedSystemRootfsName?.let(::loadDesktopEnvironments)
+        }
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
@@ -271,6 +308,9 @@ class MainActivity : ComponentActivity() {
         updateState = app.updateState.current()
         installedRootfses = app.rootfsRegistry.all()
         installedRootfsName = app.rootfsRegistry.active()?.name
+        if (selectedSystemRootfsName !in installedRootfses.map(InstalledRootfs::name)) {
+            selectedSystemRootfsName = installedRootfsName
+        }
         installProgress
             ?.takeIf { progress ->
                 progress.stage == InstallStage.READY &&
@@ -303,6 +343,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         launchPendingLinuxApplication()
+        launchPendingDesktop()
     }
 
     private fun loadCatalogue() {
@@ -326,7 +367,7 @@ class MainActivity : ComponentActivity() {
 
     private fun selectDistro(distro: DistroVariant) {
         if (installedRootfses.any { it.name == distro.internalName }) {
-            openRootfsTerminal(distro.internalName)
+            openSystemDetails(distro.internalName)
             return
         }
         selectDestination(UdroidDestination.DISTROS)
@@ -362,6 +403,163 @@ class MainActivity : ComponentActivity() {
                 resolveShortcutApplication(loadedState)
             }
         }
+    }
+
+    private fun openSystemDetails(rootfsName: String) {
+        if (installedRootfses.none { it.name == rootfsName }) return
+        selectedSystemRootfsName = rootfsName
+        selectDestination(UdroidDestination.SYSTEM)
+    }
+
+    private fun loadDesktopEnvironments(rootfsName: String) {
+        val generation = ++desktopScanGeneration
+        desktopScanLoading = true
+        desktopScanMessage = null
+        lifecycleScope.launch {
+            val result =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        val rootfs =
+                            app.rootfsRegistry
+                                .all()
+                                .firstOrNull { it.name == rootfsName }
+                                ?.directory
+                                ?: error("Linux system $rootfsName is no longer installed")
+                        val environments = DesktopEnvironmentScanner().scan(rootfs)
+                        environments to desktopConfigurationStore.load(rootfsName, environments)
+                    }
+                }
+            if (generation != desktopScanGeneration) return@launch
+            desktopScanLoading = false
+            result.fold(
+                onSuccess = { (environments, configuration) ->
+                    desktopEnvironments = environments
+                    desktopConfiguration = configuration
+                    desktopScanMessage =
+                        if (environments.isEmpty()) {
+                            "No X11 session was found in /usr/share/xsessions"
+                        } else {
+                            "${environments.size} desktop session" +
+                                if (environments.size == 1) " detected" else "s detected"
+                        }
+                },
+                onFailure = {
+                    desktopEnvironments = emptyList()
+                    desktopConfiguration =
+                        DesktopConfiguration(
+                            environmentId = null,
+                            compositingEnabled = false,
+                            touchScaleEnabled = true,
+                        )
+                    desktopScanMessage = it.message ?: "Desktop detection failed"
+                },
+            )
+        }
+    }
+
+    private fun selectDesktopEnvironment(environmentId: String) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        val environment = desktopEnvironments.firstOrNull { it.id == environmentId } ?: return
+        val compositing =
+            when (environment.kind.compositorSupport) {
+                DesktopCompositorSupport.REQUIRED -> true
+                DesktopCompositorSupport.EXTERNAL_OR_NONE -> false
+                else -> desktopConfiguration.compositingEnabled
+            }
+        saveDesktopConfiguration(
+            rootfsName,
+            desktopConfiguration.copy(
+                environmentId = environmentId,
+                compositingEnabled = compositing,
+            ),
+        )
+    }
+
+    private fun updateCompositing(enabled: Boolean) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        val environment =
+            desktopEnvironments.firstOrNull {
+                it.id == desktopConfiguration.environmentId
+            } ?: return
+        if (environment.kind.compositorSupport != DesktopCompositorSupport.CONFIGURABLE) return
+        saveDesktopConfiguration(
+            rootfsName,
+            desktopConfiguration.copy(compositingEnabled = enabled),
+        )
+    }
+
+    private fun updateTouchScale(enabled: Boolean) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        saveDesktopConfiguration(
+            rootfsName,
+            desktopConfiguration.copy(touchScaleEnabled = enabled),
+        )
+    }
+
+    private fun saveDesktopConfiguration(
+        rootfsName: String,
+        configuration: DesktopConfiguration,
+    ) {
+        runCatching { desktopConfigurationStore.save(rootfsName, configuration) }
+            .onSuccess { desktopConfiguration = it }
+            .onFailure { desktopScanMessage = it.message ?: "Could not save desktop settings" }
+    }
+
+    private fun startSelectedDesktop() {
+        val rootfsName = selectedSystemRootfsName ?: return
+        val environment =
+            desktopEnvironments.firstOrNull {
+                it.id == desktopConfiguration.environmentId
+            } ?: desktopEnvironments.firstOrNull()
+            ?: return
+        setActiveRootfs(rootfsName)
+        pendingDesktopStart =
+            PendingDesktopStart(
+                rootfsName = rootfsName,
+                environment = environment,
+                configuration =
+                    desktopConfiguration.copy(environmentId = environment.id),
+            )
+        ensureNotificationPermission()
+        val runningRootfs = runtimeService?.currentTerminalSession()?.mSessionName
+        when {
+            snapshot.phase == org.randomcoder.udroid.runtime.RuntimePhase.RUNNING &&
+                runtimeService?.currentTerminalSession()?.isRunning == true &&
+                runningRootfs == rootfsName -> launchPendingDesktop()
+            runningRootfs != null && runningRootfs != rootfsName -> {
+                pendingTerminalRootfsName = rootfsName
+                RuntimeSupervisorService.stop(this)
+            }
+            else -> RuntimeSupervisorService.start(this, rootfsName)
+        }
+    }
+
+    private fun launchPendingDesktop() {
+        val pending = pendingDesktopStart ?: return
+        val service = runtimeService ?: return
+        if (
+            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
+            service.currentTerminalSession()?.isRunning != true ||
+            service.currentTerminalSession()?.mSessionName != pending.rootfsName
+        ) {
+            return
+        }
+        pendingDesktopStart = null
+        pendingTerminalRootfsName = null
+        service.startDesktop(
+            pending.rootfsName,
+            pending.environment,
+            pending.configuration,
+        )
+    }
+
+    private fun restartSelectedDesktop() {
+        val rootfsName = selectedSystemRootfsName ?: return
+        val environment =
+            desktopEnvironments.firstOrNull {
+                it.id == desktopConfiguration.environmentId
+            } ?: return
+        runtimeService?.restartDesktop(rootfsName, environment, desktopConfiguration)
     }
 
     private fun launchLinuxApplication(application: LinuxApplication) {
@@ -526,6 +724,11 @@ class MainActivity : ComponentActivity() {
         installedRootfses = app.rootfsRegistry.all()
         linuxApplicationsLoadGeneration++
         linuxApplicationsState = LinuxApplicationsState.Loading
+    }
+
+    private fun openRootfsApps(rootfsName: String) {
+        setActiveRootfs(rootfsName)
+        selectDestination(UdroidDestination.APPS)
     }
 
     private fun openRootfsTerminal(rootfsName: String) {

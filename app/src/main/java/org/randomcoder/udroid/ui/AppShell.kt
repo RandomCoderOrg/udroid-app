@@ -80,6 +80,8 @@ import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
+import org.randomcoder.udroid.runtime.DesktopConfiguration
+import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
@@ -95,6 +97,7 @@ enum class UdroidDestination(
 ) {
     HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
     DISTROS("Linux", Icons.Outlined.Storage, Icons.Filled.Storage),
+    SYSTEM("System", Icons.Outlined.Storage, Icons.Filled.Storage),
     TERMINAL("Terminal", Icons.Outlined.Terminal, Icons.Filled.Terminal),
     APPS("Apps", Icons.Outlined.Apps, Icons.Filled.Apps),
     DESKTOP("Desktop", Icons.Outlined.DesktopWindows, Icons.Filled.DesktopWindows),
@@ -113,6 +116,11 @@ fun UdroidApp(
     updateState: AppUpdateState,
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
+    selectedSystemRootfsName: String?,
+    desktopEnvironments: List<DesktopEnvironment>,
+    desktopConfiguration: DesktopConfiguration,
+    desktopScanLoading: Boolean,
+    desktopScanMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -123,7 +131,15 @@ fun UdroidApp(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
+    onOpenRootfsApps: (String) -> Unit,
+    onSelectDesktopEnvironment: (String) -> Unit,
+    onCompositingChanged: (Boolean) -> Unit,
+    onTouchScaleChanged: (Boolean) -> Unit,
+    onStartDesktop: () -> Unit,
+    onStopDesktop: () -> Unit,
+    onRestartDesktop: () -> Unit,
     onStartDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onToggleInstallTerminal: () -> Unit,
@@ -152,7 +168,7 @@ fun UdroidApp(
         DesktopPage(
             snapshot = snapshot,
             service = runtimeService,
-            onExit = { onDestinationSelected(UdroidDestination.APPS) },
+            onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
         )
         return
     }
@@ -160,7 +176,7 @@ fun UdroidApp(
     if (activeDestination == UdroidDestination.TERMINAL) {
         UdroidTerminalTheme {
             BackHandler {
-                onDestinationSelected(UdroidDestination.HOME)
+                onDestinationSelected(UdroidDestination.SYSTEM)
             }
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -175,7 +191,7 @@ fun UdroidApp(
                     service = runtimeService,
                     onStart = onStart,
                     onStop = onStop,
-                    onExit = { onDestinationSelected(UdroidDestination.HOME) },
+                    onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
                 )
             }
         }
@@ -215,6 +231,11 @@ fun UdroidApp(
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
+                        selectedSystemRootfsName = selectedSystemRootfsName,
+                        desktopEnvironments = desktopEnvironments,
+                        desktopConfiguration = desktopConfiguration,
+                        desktopScanLoading = desktopScanLoading,
+                        desktopScanMessage = desktopScanMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -224,7 +245,15 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
+                        onOpenRootfsApps = onOpenRootfsApps,
+                        onSelectDesktopEnvironment = onSelectDesktopEnvironment,
+                        onCompositingChanged = onCompositingChanged,
+                        onTouchScaleChanged = onTouchScaleChanged,
+                        onStartDesktop = onStartDesktop,
+                        onStopDesktop = onStopDesktop,
+                        onRestartDesktop = onRestartDesktop,
                         onStartDownload = onStartDownload,
                         onPauseDownload = onPauseDownload,
                         onToggleInstallTerminal = onToggleInstallTerminal,
@@ -253,6 +282,11 @@ fun UdroidApp(
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
+                        selectedSystemRootfsName = selectedSystemRootfsName,
+                        desktopEnvironments = desktopEnvironments,
+                        desktopConfiguration = desktopConfiguration,
+                        desktopScanLoading = desktopScanLoading,
+                        desktopScanMessage = desktopScanMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -262,7 +296,15 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
+                        onOpenRootfsApps = onOpenRootfsApps,
+                        onSelectDesktopEnvironment = onSelectDesktopEnvironment,
+                        onCompositingChanged = onCompositingChanged,
+                        onTouchScaleChanged = onTouchScaleChanged,
+                        onStartDesktop = onStartDesktop,
+                        onStopDesktop = onStopDesktop,
+                        onRestartDesktop = onRestartDesktop,
                         onStartDownload = onStartDownload,
                         onPauseDownload = onPauseDownload,
                         onToggleInstallTerminal = onToggleInstallTerminal,
@@ -305,6 +347,11 @@ private fun ManagementPane(
     updateState: AppUpdateState,
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
+    selectedSystemRootfsName: String?,
+    desktopEnvironments: List<DesktopEnvironment>,
+    desktopConfiguration: DesktopConfiguration,
+    desktopScanLoading: Boolean,
+    desktopScanMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -314,7 +361,15 @@ private fun ManagementPane(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
+    onOpenRootfsApps: (String) -> Unit,
+    onSelectDesktopEnvironment: (String) -> Unit,
+    onCompositingChanged: (Boolean) -> Unit,
+    onTouchScaleChanged: (Boolean) -> Unit,
+    onStartDesktop: () -> Unit,
+    onStopDesktop: () -> Unit,
+    onRestartDesktop: () -> Unit,
     onStartDownload: () -> Unit,
     onPauseDownload: () -> Unit,
     onToggleInstallTerminal: () -> Unit,
@@ -366,7 +421,8 @@ private fun ManagementPane(
                                 onDestinationSelected(UdroidDestination.TERMINAL)
                             },
                             onOpenLinux = {
-                                onDestinationSelected(UdroidDestination.DISTROS)
+                                installedRootfsName?.let(onOpenInstalledSystem)
+                                    ?: onDestinationSelected(UdroidDestination.DISTROS)
                             },
                             onOpenDevice = {
                                 onDestinationSelected(UdroidDestination.DEVICE)
@@ -402,8 +458,50 @@ private fun ManagementPane(
                             activeRootfsName = installedRootfsName,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
-                            onOpenTerminal = onOpenRootfsTerminal,
+                            onOpenInstalledSystem = onOpenInstalledSystem,
                         )
+                    UdroidDestination.SYSTEM -> {
+                        val rootfsName = selectedSystemRootfsName ?: installedRootfsName
+                        val selectedRootfs =
+                            installedRootfses.firstOrNull { it.name == rootfsName }
+                        val selectedDistro =
+                            (catalogueState as? DistroCatalogState.Ready)
+                                ?.catalog
+                                ?.variants
+                                ?.firstOrNull { it.internalName == rootfsName }
+                        if (selectedRootfs == null) {
+                            onDestinationSelected(UdroidDestination.DISTROS)
+                        } else {
+                            LinuxSystemPage(
+                                rootfs = selectedRootfs,
+                                distro = selectedDistro,
+                                active = rootfsName == installedRootfsName,
+                                snapshot = snapshot,
+                                environments = desktopEnvironments,
+                                configuration = desktopConfiguration,
+                                scanLoading = desktopScanLoading,
+                                scanMessage = desktopScanMessage,
+                                onBack = {
+                                    onDestinationSelected(UdroidDestination.DISTROS)
+                                },
+                                onOpenTerminal = {
+                                    onOpenRootfsTerminal(selectedRootfs.name)
+                                },
+                                onOpenApps = {
+                                    onOpenRootfsApps(selectedRootfs.name)
+                                },
+                                onOpenDisplay = {
+                                    onDestinationSelected(UdroidDestination.DESKTOP)
+                                },
+                                onSelectEnvironment = onSelectDesktopEnvironment,
+                                onCompositingChanged = onCompositingChanged,
+                                onTouchScaleChanged = onTouchScaleChanged,
+                                onStartDesktop = onStartDesktop,
+                                onStopDesktop = onStopDesktop,
+                                onRestartDesktop = onRestartDesktop,
+                            )
+                        }
+                    }
                     UdroidDestination.DEVICE ->
                         DevicePage(
                             capabilities = capabilities,
