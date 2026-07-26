@@ -19,22 +19,43 @@ allow installs from the browser or file manager you used.
 Existing stable-signed builds can also download and verify newer releases from
 the app's **About** page.
 
-## What works today
+## Current feature support
 
-- Search and install Ubuntu, Debian, Arch Linux, Alpine Linux, or Void Linux
-  from checksum-verified images.
-- Keep multiple Linux systems installed, choose the active system, and open a
-  terminal in a specific installation.
-- Use the bundled, persistent terminal without setting up Termux separately.
-- Start the bundled Termux:X11 display and launch graphical Linux applications.
-- Discover installed `.desktop` entries and pin selected Linux apps to the
-  Android launcher.
-- Receive, verify, and install newer uDroid prereleases from inside the app.
+| Area | What is supported |
+| --- | --- |
+| Linux installation | Search Ubuntu, Debian, Arch Linux, Alpine Linux, and Void Linux images; review an image before downloading; resume transfers; verify checksums; and retain validated archives across installation retries. |
+| Multiple systems | Keep multiple distributions installed. Selecting an installed system opens its own status and controls page instead of immediately starting a terminal. |
+| Terminal | Use the bundled Termux terminal emulator and persistent, service-owned PTY without installing Termux separately. Each terminal action targets the selected rootfs. |
+| Linux applications | Discover freedesktop `.desktop` entries, launch graphical or terminal applications, publish dynamic shortcuts, and pin selected applications to the Android home screen. |
+| Embedded X11 | Use the bundled Termux:X11 server and uDroid display surface without installing the separate Termux:X11 application. Keyboard, direct-pointer, trackpad-style, native multi-touch, and display settings are available inside uDroid. |
+| Desktop environments | Detect installed X11 sessions from standard `xsessions` directories. Start, stop, or restart the selected desktop while uDroid reports which rootfs and desktop own `DISPLAY :0`. |
+| Compositing | Enable or disable compositing for supported XFCE, Plasma, and MATE sessions, then apply the setting through a supervised desktop restart. GNOME is treated as compositor-required. |
+
+### Current limitations
+
+- uDroid currently supervises one active Linux runtime and one X11 display,
+  `DISPLAY :0`, at a time. Multiple distributions can remain installed, but
+  their live desktop sessions are not concurrent.
+- Desktop lifecycle support currently targets X11 sessions advertised through
+  `/usr/share/xsessions` or `/usr/local/share/xsessions`. Wayland sessions are
+  not launched.
+- Compositor control is desktop-specific. LXQt and unknown/custom sessions are
+  still launchable, but uDroid does not guess at a compositor switch when no
+  safe standard adapter is known.
+- PRoot provides the Linux userspace. It is not a virtual machine, does not
+  provide a normal systemd/logind boot, and cannot reproduce every native Linux
+  service or sandbox boundary.
+- The embedded display is functional, but general-purpose GPU acceleration is
+  not yet a supported app contract. Desktop responsiveness depends on the
+  device, resolution, applications, and compositor choice.
+- Audio integration, background desktop recovery, multiple displays, and
+  production-level desktop compatibility remain incomplete.
 
 See the [distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md),
-[Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md), and
-[app updates](docs/APP_UPDATES.md) documentation for current limitations and
-technical details.
+[Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md),
+[X11 runtime architecture](docs/X11_RUNTIME_ARCHITECTURE.md),
+[performance notes](docs/PERFORMANCE.md), and
+[app updates](docs/APP_UPDATES.md) for current behavior and technical details.
 
 ## Development releases
 
