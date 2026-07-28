@@ -25,6 +25,25 @@ the hashes, applies the recorded patch, and builds the checked-in binaries.
 Release packaging must provide the applicable full license texts and complete
 corresponding source alongside binary downloads.
 
+## GNU tar and libandroid-glob
+
+- GNU tar project: <https://www.gnu.org/software/tar/>
+- GNU tar version: `1.35`
+- GNU tar source archive SHA-256:
+  `4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16`
+- GNU tar license: GNU General Public License version 3 or later
+- libandroid-glob project:
+  <https://github.com/termux/termux-packages/tree/fea50ba4649e6fddd1861741402c0aafa63411f2/packages/libandroid-glob>
+- libandroid-glob version: `0.6`, revision `3`
+- libandroid-glob license: BSD 3-Clause
+
+`tools/build-gnu-tar-assets.sh` reproduces the checked-in Android helpers from
+the pinned sources. The helper is intentionally private to uDroid; it does not
+assume Termux's application id or prefix. It provides the
+`--delay-directory-restore` behavior required by PRoot-Distro archives such as
+Arch Linux, whose read-only directory modes must be applied after their
+contents have been extracted.
+
 ## Termux terminal emulator and view
 
 - Project: <https://github.com/termux/termux-app>

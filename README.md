@@ -102,6 +102,7 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
 ./app/src/main/cpp/build-runtime-probe.sh
 ./tools/build-proot-assets.sh
+./tools/build-gnu-tar-assets.sh
 ./gradlew :app:assembleRelease
 ```
 
@@ -119,10 +120,12 @@ results.
 
 The uDroid-owned Android shell is MIT-licensed, matching
 `fs-manager-udroid`. Packaged PRoot is GPL-2.0 and statically links talloc,
-whose library is LGPL-3.0-or-later. The vendored Termux terminal emulator and
-view are the Apache-2.0 components identified by Termux's upstream license
-exception. The embedded Termux:X11 module is GPLv3, so APKs containing it are
-distributed as GPLv3 combined works. Exact source versions, checksums, local
-changes, and build commands are recorded in `tools/` and `third_party/`;
-binary releases must also provide the applicable corresponding source and
-license texts. See [Third-party notices](THIRD_PARTY_NOTICES.md).
+whose library is LGPL-3.0-or-later. The rootfs installer also packages GNU tar
+and Termux's BSD-licensed libandroid-glob implementation. The vendored Termux
+terminal emulator and view are the Apache-2.0 components identified by
+Termux's upstream license exception. The embedded Termux:X11 module is GPLv3,
+so APKs containing it are distributed as GPLv3 combined works. Exact source
+versions, checksums, local changes, and build commands are recorded in
+`tools/` and `third_party/`; binary releases must also provide the applicable
+corresponding source and license texts. See
+[Third-party notices](THIRD_PARTY_NOTICES.md).
