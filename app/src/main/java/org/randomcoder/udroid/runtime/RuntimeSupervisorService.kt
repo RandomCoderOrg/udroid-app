@@ -81,14 +81,37 @@ class RuntimeSupervisorService : Service() {
             }
 
             override fun onPasteTextFromClipboard(session: TerminalSession) {
-                val clipboard = getSystemService(ClipboardManager::class.java)
-                val text =
-                    clipboard.primaryClip
-                        ?.getItemAt(0)
-                        ?.coerceToText(this@RuntimeSupervisorService)
-                        ?.toString()
-                        .orEmpty()
-                if (text.isNotEmpty()) session.write(text)
+                try {
+                    val clip = getSystemService(ClipboardManager::class.java).primaryClip
+                    if (clip == null || clip.itemCount == 0) return
+
+                    val text =
+                        clip
+                            .getItemAt(0)
+                            .coerceToText(this@RuntimeSupervisorService)
+                            ?.toString()
+                            .orEmpty()
+                    if (text.isEmpty()) return
+
+                    // Keep paste semantics in the terminal emulator. It removes
+                    // unsafe control characters, normalizes line endings, and
+                    // wraps input when applications such as nano enable
+                    // bracketed-paste mode.
+                    session.emulator.paste(text)
+                } catch (error: RuntimeException) {
+                    Log.e("uDroidTerminal", "Could not paste clipboard text", error)
+                    app.journal.append(
+                        component = "terminal",
+                        severity = "error",
+                        event = "clipboard_paste_failed",
+                        message = "Android clipboard paste failed",
+                        bootId = app.runtimeState.current().bootId,
+                        fields =
+                            mapOf(
+                                "error_type" to error.javaClass.simpleName,
+                            ),
+                    )
+                }
             }
 
             override fun onBell(session: TerminalSession) = Unit
