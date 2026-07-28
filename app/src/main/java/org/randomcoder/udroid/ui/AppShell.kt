@@ -1,5 +1,9 @@
 package org.randomcoder.udroid.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,6 +40,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -67,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1052,7 +1058,8 @@ private fun AboutPage(
     onInstallUpdate: () -> Unit,
     onOpenUpdateRelease: () -> Unit,
 ) {
-    val visibleJournalLines = journalLines.takeLast(25).asReversed()
+    val visibleJournalLines = newestSupervisorEvents(journalLines)
+    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     LazyColumn(
         modifier =
@@ -1176,6 +1183,33 @@ private fun AboutPage(
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                TextButton(
+                    onClick = {
+                        val report =
+                            buildSupervisorReport(
+                                appVersion = BuildConfig.VERSION_NAME,
+                                androidVersion =
+                                    "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                                device = "${Build.MANUFACTURER} ${Build.MODEL}",
+                                capturedAt = Instant.now().toString(),
+                                newestFirstJournalLines = journalLines,
+                            )
+                        context
+                            .getSystemService(ClipboardManager::class.java)
+                            .setPrimaryClip(ClipData.newPlainText("uDroid diagnostics", report))
+                        Toast
+                            .makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT)
+                            .show()
+                    },
+                ) {
+                    Icon(
+                        Icons.Outlined.ContentCopy,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text("Copy report")
                 }
                 IconButton(onClick = onRefresh) {
                     Icon(
