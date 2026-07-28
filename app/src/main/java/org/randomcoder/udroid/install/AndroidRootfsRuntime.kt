@@ -186,9 +186,7 @@ class ProotTarExtractor(
             stderrThread.join(DIAGNOSTIC_JOIN_MS)
             check(exitCode == 0) {
                 synchronized(stderrLines) {
-                    stderrLines.lastOrNull()
-                        ?.let { "PRoot tar failed ($exitCode): $it" }
-                        ?: "PRoot tar failed with exit code $exitCode"
+                    diagnosticSummary(exitCode, stderrLines)
                 }
             }
         } catch (error: Throwable) {
@@ -223,6 +221,23 @@ class ProotTarExtractor(
     }
 
     companion object {
+        internal fun diagnosticSummary(
+            exitCode: Int,
+            stderrLines: List<String>,
+        ): String {
+            val detail =
+                stderrLines.firstOrNull { line ->
+                    line.isNotBlank() &&
+                        !line.substringAfterLast(": ").lowercase().let { message ->
+                            message == "had errors" ||
+                                message == "exiting with failure status due to previous errors"
+                        }
+                }
+            return detail
+                ?.let { "PRoot tar failed ($exitCode): $it" }
+                ?: "PRoot tar failed with exit code $exitCode"
+        }
+
         internal fun buildArguments(
             rootfsPath: String,
             tarExecutablePath: String,

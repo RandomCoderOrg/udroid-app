@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.install
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,5 +29,24 @@ class ProotTarExtractorTest {
             ),
         )
         assertFalse("/system/bin/tar" in arguments)
+    }
+
+    @Test
+    fun `failure summary keeps the actionable tar error instead of its footer`() {
+        val summary =
+            ProotTarExtractor.diagnosticSummary(
+                exitCode = 1,
+                stderrLines =
+                    listOf(
+                        "tar: etc/ca-certificates/extracted/cadir/link: Permission denied",
+                        "tar: had errors",
+                    ),
+            )
+
+        assertEquals(
+            "PRoot tar failed (1): " +
+                "tar: etc/ca-certificates/extracted/cadir/link: Permission denied",
+            summary,
+        )
     }
 }
