@@ -23,7 +23,7 @@ the app's **About** page.
 
 | Area | What is supported |
 | --- | --- |
-| Linux installation | Search Ubuntu, Debian, Arch Linux, Alpine Linux, and Void Linux images; review an image before downloading; resume transfers; verify checksums; and retain validated archives across installation retries. |
+| Linux installation | Search uDroid and PRoot-Distro archives alongside official Docker Hub operating-system images. Choose a compatible OCI tag, review its architecture and compressed size, resume transfers, verify SHA-256 digests, and retain validated data across retries. |
 | Multiple systems | Keep multiple distributions installed. Selecting an installed system opens its own status and controls page instead of immediately starting a terminal. |
 | Terminal | Use the bundled Termux terminal emulator and persistent, service-owned PTY without installing Termux separately. Each terminal action targets the selected rootfs. |
 | Linux applications | Discover freedesktop `.desktop` entries, launch graphical or terminal applications, publish dynamic shortcuts, and pin selected applications to the Android home screen. |
@@ -52,6 +52,7 @@ the app's **About** page.
   production-level desktop compatibility remain incomplete.
 
 See the [distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md),
+[OCI image architecture](docs/OCI_IMAGES.md),
 [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md),
 [X11 runtime architecture](docs/X11_RUNTIME_ARCHITECTURE.md),
 [performance notes](docs/PERFORMANCE.md), and

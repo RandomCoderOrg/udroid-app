@@ -41,18 +41,20 @@ was marked broken on Android 15 and newer. An image is not shown merely because
 an archive exists; its architecture, checksum, extraction layout, and PRoot
 startup must be understood first.
 
-## Upstream v5 and registry search
+## Official container images
 
-Current `termux/proot-distro` v5 installs OCI images instead of maintaining a
-small fixed distro list. That makes registry-backed discovery possible, but a
-raw registry search is not yet suitable for one-tap installation in uDroid.
-Search results still need trust metadata, immutable digest pinning,
-architecture filtering, size information, rootfs compatibility checks, and a
-clear distinction between tested and community images.
+The same searchable list also includes active operating-system repositories
+from Docker Hub's official `library` namespace. Selecting one opens a version
+page containing only tags that publish an image for the phone's OCI platform.
+The review page records the selected platform, compressed size, tag, and
+immutable manifest digest before installation begins.
 
-The present catalogue therefore combines live uDroid metadata with a small
-pinned PRoot-Distro archive set. OCI discovery can be added as a separate
-provider without weakening the verified-install contract.
+Container images follow a separate verified OCI pipeline; they are not passed
+to Docker, containerd, or a daemon. uDroid resolves the manifest, downloads and
+verifies each referenced blob, applies ordered filesystem layers and OCI
+whiteouts in app-private staging storage, adds Android/PRoot compatibility
+files, executes the standard rootfs health probe, and only then activates the
+installation. See [OCI image architecture](OCI_IMAGES.md).
 
 ## Visual identity
 
