@@ -78,6 +78,10 @@ import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
+import org.randomcoder.udroid.oci.OciHubCatalogueState
+import org.randomcoder.udroid.oci.OciHubRepository
+import org.randomcoder.udroid.oci.OciHubTagPlatform
+import org.randomcoder.udroid.oci.OciHubTagsState
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.DesktopConfiguration
@@ -112,6 +116,9 @@ fun UdroidApp(
     capabilities: List<CapabilityResult>,
     journalLines: List<String>,
     catalogueState: DistroCatalogState,
+    ociCatalogueState: OciHubCatalogueState,
+    selectedOciRepository: OciHubRepository?,
+    ociTagsState: OciHubTagsState,
     installProgress: InstallProgress?,
     updateState: AppUpdateState,
     installedRootfsName: String?,
@@ -131,6 +138,10 @@ fun UdroidApp(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSelectOciRepository: (OciHubRepository) -> Unit,
+    onRetryOciTags: () -> Unit,
+    onBackFromOciRepository: () -> Unit,
+    onSelectOciTag: (OciHubRepository, OciHubTagPlatform) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
@@ -227,6 +238,9 @@ fun UdroidApp(
                         capabilities = capabilities,
                         journalLines = journalLines,
                         catalogueState = catalogueState,
+                        ociCatalogueState = ociCatalogueState,
+                        selectedOciRepository = selectedOciRepository,
+                        ociTagsState = ociTagsState,
                         installProgress = installProgress,
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
@@ -245,6 +259,10 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onSelectOciRepository = onSelectOciRepository,
+                        onRetryOciTags = onRetryOciTags,
+                        onBackFromOciRepository = onBackFromOciRepository,
+                        onSelectOciTag = onSelectOciTag,
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
@@ -278,6 +296,9 @@ fun UdroidApp(
                         capabilities = capabilities,
                         journalLines = journalLines,
                         catalogueState = catalogueState,
+                        ociCatalogueState = ociCatalogueState,
+                        selectedOciRepository = selectedOciRepository,
+                        ociTagsState = ociTagsState,
                         installProgress = installProgress,
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
@@ -296,6 +317,10 @@ fun UdroidApp(
                         onRefresh = onRefresh,
                         onReloadCatalogue = onReloadCatalogue,
                         onPreviewInstall = onPreviewInstall,
+                        onSelectOciRepository = onSelectOciRepository,
+                        onRetryOciTags = onRetryOciTags,
+                        onBackFromOciRepository = onBackFromOciRepository,
+                        onSelectOciTag = onSelectOciTag,
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
@@ -343,6 +368,9 @@ private fun ManagementPane(
     capabilities: List<CapabilityResult>,
     journalLines: List<String>,
     catalogueState: DistroCatalogState,
+    ociCatalogueState: OciHubCatalogueState,
+    selectedOciRepository: OciHubRepository?,
+    ociTagsState: OciHubTagsState,
     installProgress: InstallProgress?,
     updateState: AppUpdateState,
     installedRootfsName: String?,
@@ -361,6 +389,10 @@ private fun ManagementPane(
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSelectOciRepository: (OciHubRepository) -> Unit,
+    onRetryOciTags: () -> Unit,
+    onBackFromOciRepository: () -> Unit,
+    onSelectOciTag: (OciHubRepository, OciHubTagPlatform) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
@@ -446,18 +478,29 @@ private fun ManagementPane(
                                 onToggleTerminal = onToggleInstallTerminal,
                                 onBack = onCloseInstall,
                                 onOpenTerminal = {
-                                    onOpenRootfsTerminal(it.distro.internalName)
+                                    onOpenRootfsTerminal(it.installationName)
                                 },
                                 onStartDownload = onStartDownload,
                                 onPauseDownload = onPauseDownload,
                                 onRetryDownload = onRetryDownload,
                             )
+                        } ?: selectedOciRepository?.let { repository ->
+                            OciTagCataloguePage(
+                                repository = repository,
+                                state = ociTagsState,
+                                installedRootfses = installedRootfses,
+                                onBack = onBackFromOciRepository,
+                                onRetry = onRetryOciTags,
+                                onSelectTag = { tag -> onSelectOciTag(repository, tag) },
+                            )
                         } ?: DistroCataloguePage(
                             state = catalogueState,
+                            ociState = ociCatalogueState,
                             installedRootfses = installedRootfses,
                             activeRootfsName = installedRootfsName,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
+                            onSelectOciRepository = onSelectOciRepository,
                             onOpenInstalledSystem = onOpenInstalledSystem,
                         )
                     UdroidDestination.SYSTEM -> {

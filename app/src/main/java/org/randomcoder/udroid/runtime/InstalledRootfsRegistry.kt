@@ -35,8 +35,7 @@ class InstalledRootfsRegistry(context: Context) {
             (appContext as? UdroidApplication)
                 ?.installState
                 ?.current()
-                ?.distro
-                ?.internalName
+                ?.installationName
         val selected =
             installed.firstOrNull { it.name == legacyPreferredName }
                 ?: installed.first()

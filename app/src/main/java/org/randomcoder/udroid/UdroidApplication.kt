@@ -45,12 +45,14 @@ class UdroidApplication : Application() {
                     stage = InstallStage.PAUSED,
                     stageProgress = interrupted.overallProgress,
                     currentDetail =
-                        if (interrupted.stage == InstallStage.EXTRACTING ||
-                            interrupted.stage == InstallStage.CONFIGURING
-                        ) {
-                            "Verified archive saved; incomplete setup can restart"
-                        } else {
-                            "Previous operation stopped; saved data can resume"
+                        when {
+                            interrupted.work is
+                                org.randomcoder.udroid.install.InstallerWorkRequest.Oci ->
+                                "Partial verified image data saved; setup can resume"
+                            interrupted.stage == InstallStage.EXTRACTING ||
+                                interrupted.stage == InstallStage.CONFIGURING ->
+                                "Verified archive saved; incomplete setup can restart"
+                            else -> "Previous operation stopped; saved data can resume"
                         },
                     terminalLines =
                         interrupted.terminalLines +

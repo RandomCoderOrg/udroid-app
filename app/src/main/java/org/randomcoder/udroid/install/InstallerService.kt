@@ -15,8 +15,12 @@ import androidx.core.content.ContextCompat
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.catalog.DistroVariant
-import org.randomcoder.udroid.catalog.DistroProvider
-import org.randomcoder.udroid.catalog.LinuxDistribution
+import org.randomcoder.udroid.oci.OciImageReference
+import org.randomcoder.udroid.oci.OciInstallEvent
+import org.randomcoder.udroid.oci.OciInstallStage
+import org.randomcoder.udroid.oci.OciPlatform
+import org.randomcoder.udroid.oci.OciRootfsInstallRequest
+import org.randomcoder.udroid.oci.OciRootfsInstaller
 import java.io.File
 import java.io.InterruptedIOException
 import java.net.URL
@@ -24,12 +28,18 @@ import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
 class InstallerService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
-    private val activeTask = AtomicReference<Future<*>?>(null)
+    private val operationLock = Any()
+    private var activeOperation: ActiveOperation? = null
+
+    private class ActiveOperation(
+        val work: InstallerWorkRequest,
+        var startId: Int,
+        var future: Future<*>? = null,
+    )
 
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -46,19 +56,40 @@ class InstallerService : Service() {
     ): Int {
         return when (intent?.action) {
             ACTION_START -> {
-                val distro = distroFromIntent(intent) ?: app.installState.current()?.distro
-                if (distro == null) {
+                val encodedWork = intent.getStringExtra(EXTRA_WORK_REQUEST)
+                val work =
+                    if (encodedWork == null) {
+                        app.installState.current()?.work
+                    } else {
+                        runCatching { InstallerWorkRequestCodec.decode(encodedWork) }
+                            .getOrElse { error ->
+                                app.journal.append(
+                                    component = "installer",
+                                    severity = "error",
+                                    event = "work_rejected",
+                                    message = error.message ?: "Invalid installer work request",
+                                    bootId = null,
+                                    fields = mapOf("exception" to error.javaClass.name),
+                                )
+                                stopSelf(startId)
+                                return START_NOT_STICKY
+                            }
+                    }
+                if (work == null) {
                     stopSelf(startId)
                     START_NOT_STICKY
                 } else {
-                    startForeground(NOTIFICATION_ID, notification("Preparing download", null))
-                    startArtifactOperation(distro)
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification("Preparing ${work.displayName}", null),
+                    )
+                    startWork(work, startId)
                     START_REDELIVER_INTENT
                 }
             }
 
             ACTION_PAUSE -> {
-                pauseArtifactOperation()
+                pauseWorkOperation(startId)
                 START_NOT_STICKY
             }
 
@@ -69,7 +100,7 @@ class InstallerService : Service() {
                         NOTIFICATION_ID,
                         notification("Recovering download", persisted.percentage),
                     )
-                    startArtifactOperation(persisted.distro)
+                    startWork(persisted.work, startId)
                     START_REDELIVER_INTENT
                 } else {
                     stopSelf(startId)
@@ -86,17 +117,35 @@ class InstallerService : Service() {
         super.onDestroy()
     }
 
-    private fun startArtifactOperation(distro: DistroVariant) {
-        if (activeTask.get()?.isDone == false) return
+    private fun startWork(
+        work: InstallerWorkRequest,
+        startId: Int,
+    ) {
+        val operation = claimOperation(work, startId) ?: return
+        try {
+            when (work) {
+                is InstallerWorkRequest.Archive ->
+                    startArtifactOperation(work, operation)
 
+                is InstallerWorkRequest.Oci ->
+                    startOciOperation(work, operation)
+            }
+        } catch (error: Throwable) {
+            completeOperation(operation)
+            throw error
+        }
+    }
+
+    private fun startArtifactOperation(
+        work: InstallerWorkRequest.Archive,
+        operation: ActiveOperation,
+    ) {
+        val distro = work.distro
         val previous = app.installState.current()
-        val operationId =
-            previous?.operationId
-                ?.takeIf { previous.distro.id == distro.id }
-                ?: UUID.randomUUID().toString()
+        val operationId = work.operationId
         val startingLines =
             previous?.terminalLines
-                ?.takeIf { previous.distro.id == distro.id }
+                ?.takeIf { previous.archiveDistro?.id == distro.id }
                 .orEmpty()
                 .plus(
                     if (previous?.stage == InstallStage.PAUSED) {
@@ -107,13 +156,12 @@ class InstallerService : Service() {
                 )
         publish(
             InstallProgress(
-                distro = distro,
+                work = work,
                 stage = InstallStage.CHECKING,
                 stageProgress = 0f,
                 currentDetail = "Preparing secure download storage",
                 terminalLines = startingLines,
                 previewOnly = false,
-                operationId = operationId,
                 completedBytes = previous?.completedBytes ?: 0L,
                 totalBytes = previous?.totalBytes ?: -1L,
                 cancellable = true,
@@ -134,29 +182,29 @@ class InstallerService : Service() {
 
         val future =
             worker.submit {
-                runArtifactOperation(distro, operationId)
+                runArtifactOperation(work, operation)
             }
-        activeTask.set(future)
+        attachFuture(operation, future)
     }
 
     private fun runArtifactOperation(
-        distro: DistroVariant,
-        operationId: String,
+        work: InstallerWorkRequest.Archive,
+        operation: ActiveOperation,
     ) {
+        val distro = work.distro
+        val operationId = work.operationId
         val rootfsDirectory = File(filesDir, "rootfs")
         val installedRootfs = File(rootfsDirectory, distro.internalName)
         if (File(installedRootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
-            publishCompleted(distro, operationId, installedRootfs, reused = true)
-            activeTask.set(null)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            publishCompleted(work, installedRootfs, reused = true)
+            finishOperation(operation)
             return
         }
         val cacheDirectory = File(filesDir, "artifacts").apply { mkdirs() }
         val suffix = artifactSuffix(distro.downloadUrl)
         val finalFile = File(cacheDirectory, "${distro.internalName}$suffix")
         val stagingFile = File(cacheDirectory, "${distro.internalName}$suffix.part")
-        val progressPublisher = ProgressPublisher(distro, operationId)
+        val progressPublisher = ProgressPublisher(work)
 
         try {
             val result =
@@ -174,7 +222,7 @@ class InstallerService : Service() {
             val previous = app.installState.current()
             publish(
                 InstallProgress(
-                    distro = distro,
+                    work = work,
                     stage = InstallStage.ARCHIVE_READY,
                     stageProgress = 1f,
                     currentDetail = "${formatBytes(result.byteCount)} verified; preparing extraction",
@@ -186,7 +234,6 @@ class InstallerService : Service() {
                                 "[ok] sha256 verified · ${result.file.name}"
                             },
                     previewOnly = false,
-                    operationId = operationId,
                     completedBytes = result.byteCount,
                     totalBytes = result.byteCount,
                     cancellable = true,
@@ -206,7 +253,7 @@ class InstallerService : Service() {
                         "reused" to result.reusedVerifiedFile,
                     ),
             )
-            installRootfs(distro, operationId, result.file, rootfsDirectory, progressPublisher)
+            installRootfs(work, result.file, rootfsDirectory, progressPublisher)
         } catch (error: Throwable) {
             val previous = app.installState.current()
             val interrupted =
@@ -216,7 +263,7 @@ class InstallerService : Service() {
             val next =
                 if (interrupted) {
                     InstallProgress(
-                        distro = distro,
+                        work = work,
                         stage = InstallStage.PAUSED,
                         stageProgress = previous?.overallProgress ?: 0f,
                         currentDetail = pauseDetail(previous),
@@ -228,14 +275,13 @@ class InstallerService : Service() {
                                     "[paused] partial archive retained"
                                 },
                         previewOnly = false,
-                        operationId = operationId,
                         completedBytes = previous?.completedBytes ?: 0L,
                         totalBytes = previous?.totalBytes ?: -1L,
                         cancellable = false,
                     )
                 } else {
                     InstallProgress(
-                        distro = distro,
+                        work = work,
                         stage = InstallStage.FAILED,
                         stageProgress = 0f,
                         currentDetail = error.message ?: error.javaClass.simpleName,
@@ -243,7 +289,6 @@ class InstallerService : Service() {
                             previous?.terminalLines.orEmpty() +
                                 "[error] ${error.message ?: error.javaClass.simpleName}",
                         previewOnly = false,
-                        operationId = operationId,
                         completedBytes = previous?.completedBytes ?: 0L,
                         totalBytes = previous?.totalBytes ?: -1L,
                         cancellable = false,
@@ -267,19 +312,135 @@ class InstallerService : Service() {
                 next.percentage,
             )
         } finally {
-            activeTask.set(null)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            finishOperation(operation)
+        }
+    }
+
+    private fun startOciOperation(
+        work: InstallerWorkRequest.Oci,
+        operation: ActiveOperation,
+    ) {
+        val previous =
+            app.installState.current()
+                ?.takeIf { it.operationId == work.operationId }
+        publish(
+            InstallProgress(
+                work = work,
+                stage = InstallStage.CHECKING,
+                stageProgress = 0f,
+                currentDetail = "Preparing secure OCI image storage",
+                terminalLines =
+                    previous?.terminalLines.orEmpty() +
+                        if (previous?.stage == InstallStage.PAUSED) {
+                            "[resume] continuing ${work.reference} from verified image data"
+                        } else {
+                            "\$ udroid install ${work.reference}"
+                        },
+                previewOnly = false,
+                completedBytes = previous?.completedBytes ?: 0L,
+                totalBytes = previous?.totalBytes ?: -1L,
+                cancellable = true,
+            ),
+        )
+        app.journal.append(
+            component = "installer",
+            severity = "info",
+            event = "oci_requested",
+            message = "OCI rootfs installation requested",
+            bootId = work.operationId,
+            fields =
+                mapOf(
+                    "reference" to work.reference.toString(),
+                    "platform" to
+                        listOfNotNull(
+                            work.platform.os,
+                            work.platform.architecture,
+                            work.platform.variant,
+                        ).joinToString("/"),
+                    "installation" to work.installationName,
+                ),
+        )
+        val future = worker.submit { runOciOperation(work, operation) }
+        attachFuture(operation, future)
+    }
+
+    private fun runOciOperation(
+        work: InstallerWorkRequest.Oci,
+        operation: ActiveOperation,
+    ) {
+        val progress = OciForegroundProgress(work)
+        try {
+            val result =
+                OciRootfsInstaller(this).install(
+                    request =
+                        OciRootfsInstallRequest(
+                            reference = work.reference,
+                            platform = work.platform,
+                            rootfsDirectory = File(filesDir, "rootfs"),
+                            blobCacheDirectory = File(filesDir, "artifacts/oci-blobs"),
+                            installationName = work.installationName,
+                            operationId = work.operationId,
+                        ),
+                    onEvent = progress::publish,
+                )
+            app.rootfsRegistry.setActiveIfNone(result.rootfs.name)
+            progress.complete(result.reusedInstallation)
+            app.journal.append(
+                component = "installer",
+                severity = "info",
+                event = "rootfs_ready",
+                message = "OCI rootfs installation is ready",
+                bootId = work.operationId,
+                fields =
+                    mapOf(
+                        "source" to "oci",
+                        "reference" to work.reference.toString(),
+                        "manifest" to result.manifestDigest,
+                        "path" to result.rootfs.absolutePath,
+                        "compressed_bytes" to result.compressedBytes,
+                        "reused" to result.reusedInstallation,
+                    ),
+            )
+        } catch (error: Throwable) {
+            val interrupted =
+                error is InterruptedIOException ||
+                    error is InterruptedException ||
+                    Thread.currentThread().isInterrupted
+            progress.fail(error, interrupted)
+            val title =
+                if (interrupted) {
+                    "OCI installation paused"
+                } else {
+                    "OCI installation needs attention"
+                }
+            app.journal.append(
+                component = "installer",
+                severity = if (interrupted) "info" else "error",
+                event = if (interrupted) "oci_paused" else "oci_failed",
+                message = error.message ?: error.javaClass.simpleName,
+                bootId = work.operationId,
+                fields =
+                    mapOf(
+                        "source" to "oci",
+                        "reference" to work.reference.toString(),
+                        "installation" to work.installationName,
+                        "exception" to error.javaClass.name,
+                    ),
+            )
+            updateNotification(title, progress.percentage)
+        } finally {
+            finishOperation(operation)
         }
     }
 
     private fun installRootfs(
-        distro: DistroVariant,
-        operationId: String,
+        work: InstallerWorkRequest.Archive,
         archive: File,
         rootfsDirectory: File,
         progressPublisher: ProgressPublisher,
     ) {
+        val distro = work.distro
+        val operationId = work.operationId
         RootfsInstallationPipeline.clearInterruptedInstallation(
             rootfsDirectory = rootfsDirectory,
             installationName = distro.internalName,
@@ -336,20 +497,21 @@ class InstallerService : Service() {
                     )
                 },
             )
-        publishCompleted(distro, operationId, result.rootfs, result.reusedInstallation)
+        publishCompleted(work, result.rootfs, result.reusedInstallation)
     }
 
     private fun publishCompleted(
-        distro: DistroVariant,
-        operationId: String,
+        work: InstallerWorkRequest.Archive,
         rootfs: File,
         reused: Boolean,
     ) {
+        val distro = work.distro
+        val operationId = work.operationId
         app.rootfsRegistry.setActiveIfNone(rootfs.name)
         val previous = app.installState.current()
         val completed =
             InstallProgress(
-                distro = distro,
+                work = work,
                 stage = InstallStage.COMPLETE,
                 stageProgress = 1f,
                 currentDetail = "Installed at ${rootfs.name}",
@@ -361,7 +523,6 @@ class InstallerService : Service() {
                             "[complete] health check passed · marked ${rootfs.name} ready"
                         },
                 previewOnly = false,
-                operationId = operationId,
                 completedBytes = previous?.totalBytes ?: 0L,
                 totalBytes = previous?.totalBytes ?: -1L,
                 cancellable = false,
@@ -392,22 +553,89 @@ class InstallerService : Service() {
             "${formatBytes(previous?.completedBytes ?: 0L)} saved for resume"
         }
 
-    private fun pauseArtifactOperation() {
+    private fun pauseWorkOperation(startId: Int) {
+        val operation =
+            synchronized(operationLock) {
+                activeOperation.also { activeOperation = null }
+            }
+        val work = operation?.work
         val current = app.installState.current()
-        if (current?.cancellable == true) {
+        if (work != null && current?.operationId == work.operationId && current.cancellable) {
             publish(
                 current.copy(
                     stage = InstallStage.PAUSED,
                     stageProgress = current.overallProgress,
-                    currentDetail = "${formatBytes(current.completedBytes)} saved for resume",
+                    currentDetail =
+                        when (work) {
+                            is InstallerWorkRequest.Archive ->
+                                "${formatBytes(current.completedBytes)} saved for resume"
+                            is InstallerWorkRequest.Oci ->
+                                "Partial verified image data saved for resume"
+                        },
                     terminalLines = current.terminalLines + "[paused] pause requested",
                     cancellable = false,
                 ),
             )
         }
-        activeTask.getAndSet(null)?.cancel(true)
+        if (work is InstallerWorkRequest.Oci) {
+            app.journal.append(
+                component = "installer",
+                severity = "info",
+                event = "oci_pause_requested",
+                message = "Pause requested; partial verified blobs will be retained",
+                bootId = work.operationId,
+                fields =
+                    mapOf(
+                        "source" to "oci",
+                        "reference" to work.reference.toString(),
+                        "installation" to work.installationName,
+                ),
+            )
+        }
+        operation?.future?.cancel(true)
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopSelfResult(startId)
+    }
+
+    private fun claimOperation(
+        work: InstallerWorkRequest,
+        startId: Int,
+    ): ActiveOperation? =
+        synchronized(operationLock) {
+            activeOperation?.let { current ->
+                current.startId = startId
+                return@synchronized null
+            }
+            ActiveOperation(work, startId).also { activeOperation = it }
+        }
+
+    private fun attachFuture(
+        operation: ActiveOperation,
+        future: Future<*>,
+    ) {
+        val shouldCancel =
+            synchronized(operationLock) {
+                operation.future = future
+                activeOperation !== operation
+            }
+        if (shouldCancel) future.cancel(true)
+    }
+
+    private fun completeOperation(operation: ActiveOperation): Boolean =
+        synchronized(operationLock) {
+            if (activeOperation === operation) {
+                activeOperation = null
+                true
+            } else {
+                false
+            }
+        }
+
+    private fun finishOperation(operation: ActiveOperation) {
+        if (completeOperation(operation)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
+        stopSelfResult(operation.startId)
     }
 
     private fun publish(progress: InstallProgress) {
@@ -486,10 +714,227 @@ class InstallerService : Service() {
         }
     }
 
-    private inner class ProgressPublisher(
-        private val distro: DistroVariant,
-        private val operationId: String,
+    private inner class OciForegroundProgress(
+        private val work: InstallerWorkRequest.Oci,
     ) {
+        var percentage: Int = 0
+            private set
+
+        private var lastStage: OciInstallStage? = null
+        private var lastPublishedAt = 0L
+        private var lastNotificationAt = 0L
+        private var lastSpeedAt = System.currentTimeMillis()
+        private var lastSpeedBytes =
+            app.installState.current()
+                ?.takeIf { it.operationId == work.operationId }
+                ?.completedBytes
+                ?: 0L
+        private var lastTerminalBucket = -1
+
+        fun publish(event: OciInstallEvent) {
+            val now = System.currentTimeMillis()
+            val rawStageChanged = event.stage != lastStage
+            val mapped = OciInstallProgressMapping.map(event)
+            percentage =
+                maxOf(
+                    percentage,
+                    mapped.percentage,
+                )
+            if (rawStageChanged) {
+                lastStage = event.stage
+                app.journal.append(
+                    component = "installer",
+                    severity = "info",
+                    event = "oci_${event.stage.name.lowercase(Locale.US)}",
+                    message = event.detail,
+                    bootId = work.operationId,
+                    fields =
+                        mapOf(
+                            "source" to "oci",
+                            "reference" to work.reference.toString(),
+                            "installation" to work.installationName,
+                            "completed_bytes" to event.completedBytes,
+                            "total_bytes" to event.totalBytes,
+                            "resumed" to event.resumed,
+                        ),
+                )
+            }
+            val terminalLine =
+                if (rawStageChanged) {
+                    "[${event.stage.terminalLabel()}] ${event.detail}"
+                } else if (
+                    event.totalBytes > 0L &&
+                    event.stage == OciInstallStage.DOWNLOADING
+                ) {
+                    val bucket =
+                        ((event.completedBytes.toDouble() / event.totalBytes.toDouble()) * 10.0)
+                            .roundToInt()
+                    if (bucket > lastTerminalBucket) {
+                        lastTerminalBucket = bucket
+                        "[download] ${formatBytes(event.completedBytes)} / " +
+                            formatBytes(event.totalBytes) +
+                            if (event.resumed) " · resumed" else ""
+                    } else {
+                        null
+                    }
+                } else {
+                    null
+                }
+            val finished = event.stage == OciInstallStage.READY
+            if (
+                rawStageChanged ||
+                finished ||
+                now - lastPublishedAt >= PROGRESS_PERSIST_INTERVAL_MS
+            ) {
+                val previous =
+                    app.installState.current()
+                        ?.takeIf { it.operationId == work.operationId }
+                val elapsed = (now - lastSpeedAt).coerceAtLeast(1L)
+                val speed =
+                    if (event.stage == OciInstallStage.DOWNLOADING) {
+                        ((event.completedBytes - lastSpeedBytes).coerceAtLeast(0L) * 1_000L) /
+                            elapsed
+                    } else {
+                        0L
+                    }
+                if (event.stage == OciInstallStage.DOWNLOADING) {
+                    lastSpeedAt = now
+                    lastSpeedBytes = event.completedBytes
+                }
+                val previousFraction =
+                    previous
+                        ?.takeIf { it.stage == mapped.stage }
+                        ?.stageProgress
+                        ?: 0f
+                val next =
+                    InstallProgress(
+                        work = work,
+                        stage = mapped.stage,
+                        stageProgress = maxOf(previousFraction, mapped.stageProgress),
+                        currentDetail = event.detail,
+                        terminalLines =
+                            previous?.terminalLines.orEmpty() + listOfNotNull(terminalLine),
+                        previewOnly = false,
+                        completedBytes =
+                            if (event.totalBytes > 0L || event.completedBytes > 0L) {
+                                event.completedBytes
+                            } else {
+                                previous?.completedBytes ?: 0L
+                            },
+                        totalBytes =
+                            if (event.totalBytes > 0L) {
+                                event.totalBytes
+                            } else {
+                                previous?.totalBytes ?: -1L
+                            },
+                        bytesPerSecond = speed,
+                        cancellable = !finished,
+                    )
+                this@InstallerService.publish(next)
+                percentage = maxOf(percentage, next.percentage)
+                lastPublishedAt = now
+            }
+            if (
+                rawStageChanged ||
+                finished ||
+                now - lastNotificationAt >= NOTIFICATION_INTERVAL_MS
+            ) {
+                lastNotificationAt = now
+                updateNotification(event.detail, percentage)
+            }
+        }
+
+        fun complete(reused: Boolean) {
+            percentage = 100
+            val previous =
+                app.installState.current()
+                    ?.takeIf { it.operationId == work.operationId }
+            this@InstallerService.publish(
+                InstallProgress(
+                    work = work,
+                    stage = InstallStage.COMPLETE,
+                    stageProgress = 1f,
+                    currentDetail =
+                        if (reused) {
+                            "Reused healthy ${work.installationName}"
+                        } else {
+                            "Installed at ${work.installationName}"
+                        },
+                    terminalLines =
+                        previous?.terminalLines.orEmpty() +
+                            if (reused) {
+                                "[complete] reused healthy ${work.installationName}"
+                            } else {
+                                "[complete] health check passed · activated ${work.installationName}"
+                            },
+                    previewOnly = false,
+                    completedBytes = previous?.completedBytes ?: 0L,
+                    totalBytes = previous?.totalBytes ?: -1L,
+                    cancellable = false,
+                ),
+            )
+            updateNotification(
+                if (reused) {
+                    "Reused healthy ${work.displayName}"
+                } else {
+                    "${work.displayName} is ready"
+                },
+                percentage,
+            )
+        }
+
+        fun fail(
+            error: Throwable,
+            interrupted: Boolean,
+        ) {
+            val previous =
+                app.installState.current()
+                    ?.takeIf { it.operationId == work.operationId }
+            if (interrupted && previous?.stage == InstallStage.PAUSED) return
+            this@InstallerService.publish(
+                InstallProgress(
+                    work = work,
+                    stage = if (interrupted) InstallStage.PAUSED else InstallStage.FAILED,
+                    stageProgress = previous?.overallProgress ?: 0f,
+                    currentDetail =
+                        if (interrupted) {
+                            "Partial verified image data saved for resume"
+                        } else {
+                            error.message ?: error.javaClass.simpleName
+                        },
+                    terminalLines =
+                        previous?.terminalLines.orEmpty() +
+                            if (interrupted) {
+                                "[paused] verified OCI blobs retained"
+                            } else {
+                                "[error] ${error.message ?: error.javaClass.simpleName}"
+                            },
+                    previewOnly = false,
+                    completedBytes = previous?.completedBytes ?: 0L,
+                    totalBytes = previous?.totalBytes ?: -1L,
+                    cancellable = false,
+                ),
+            )
+        }
+
+        private fun OciInstallStage.terminalLabel(): String =
+            when (this) {
+                OciInstallStage.RESOLVING -> "resolve"
+                OciInstallStage.DOWNLOADING -> "download"
+                OciInstallStage.VERIFYING -> "verify"
+                OciInstallStage.ASSEMBLING -> "extract"
+                OciInstallStage.CONFIGURING -> "configure"
+                OciInstallStage.HEALTH_CHECKING -> "probe"
+                OciInstallStage.ACTIVATING -> "activate"
+                OciInstallStage.READY -> "complete"
+            }
+    }
+
+    private inner class ProgressPublisher(
+        private val work: InstallerWorkRequest.Archive,
+    ) {
+        private val distro = work.distro
+        private val operationId = work.operationId
         private var lastPublishedAt = 0L
         private var lastSpeedAt = System.currentTimeMillis()
         private var lastSpeedBytes = app.installState.current()?.completedBytes ?: 0L
@@ -528,7 +973,7 @@ class InstallerService : Service() {
                 }
             val next =
                 InstallProgress(
-                    distro = distro,
+                    work = work,
                     stage = InstallStage.DOWNLOADING,
                     stageProgress = fraction.coerceIn(0f, 1f),
                     currentDetail =
@@ -540,7 +985,6 @@ class InstallerService : Service() {
                         },
                     terminalLines = previous?.terminalLines.orEmpty() + listOfNotNull(line),
                     previewOnly = false,
-                    operationId = operationId,
                     completedBytes = progress.completedBytes,
                     totalBytes = progress.totalBytes,
                     bytesPerSecond = speed,
@@ -570,7 +1014,7 @@ class InstallerService : Service() {
             val previous = app.installState.current()
             val next =
                 InstallProgress(
-                    distro = distro,
+                    work = work,
                     stage = InstallStage.VERIFYING,
                     stageProgress = fraction.coerceIn(0f, 1f),
                     currentDetail =
@@ -583,7 +1027,6 @@ class InstallerService : Service() {
                             previous.terminalLines
                         },
                     previewOnly = false,
-                    operationId = operationId,
                     completedBytes = progress.completedBytes,
                     totalBytes = progress.totalBytes,
                     cancellable = true,
@@ -616,14 +1059,13 @@ class InstallerService : Service() {
                 }
             val next =
                 InstallProgress(
-                    distro = distro,
+                    work = work,
                     stage = InstallStage.EXTRACTING,
                     stageProgress = fraction.coerceIn(0f, 1f),
                     currentDetail =
                         "Unpacked ${formatBytes(completedBytes)} of ${formatBytes(totalBytes)}",
                     terminalLines = previous?.terminalLines.orEmpty() + listOfNotNull(line),
                     previewOnly = false,
-                    operationId = operationId,
                     completedBytes = completedBytes,
                     totalBytes = totalBytes,
                     cancellable = true,
@@ -643,7 +1085,7 @@ class InstallerService : Service() {
             val previous = app.installState.current()
             val next =
                 InstallProgress(
-                    distro = distro,
+                    work = work,
                     stage = InstallStage.CONFIGURING,
                     stageProgress = fraction,
                     currentDetail = detail,
@@ -654,7 +1096,6 @@ class InstallerService : Service() {
                             previous?.terminalLines.orEmpty() + terminalLine
                         },
                     previewOnly = false,
-                    operationId = operationId,
                     completedBytes = previous?.completedBytes ?: 0L,
                     totalBytes = previous?.totalBytes ?: -1L,
                     cancellable = true,
@@ -676,40 +1117,58 @@ class InstallerService : Service() {
         private const val MAX_TERMINAL_LINES = 160
         private const val PROGRESS_PERSIST_INTERVAL_MS = 300L
         private const val NOTIFICATION_INTERVAL_MS = 1_000L
-
-        private const val EXTRA_SUITE = "suite"
-        private const val EXTRA_VARIANT = "variant"
-        private const val EXTRA_INTERNAL_NAME = "internal-name"
-        private const val EXTRA_FRIENDLY_NAME = "friendly-name"
-        private const val EXTRA_ARCHITECTURE = "architecture"
-        private const val EXTRA_DOWNLOAD_URL = "download-url"
-        private const val EXTRA_SHA256 = "sha256"
-        private const val EXTRA_DISTRIBUTION = "distribution"
-        private const val EXTRA_PROVIDER = "provider"
-        private const val EXTRA_RELEASE_LABEL = "release-label"
-        private const val EXTRA_ARCHIVE_STRIP_COMPONENTS = "archive-strip-components"
+        private const val EXTRA_WORK_REQUEST = "work-request"
 
         fun start(
             context: Context,
             distro: DistroVariant,
         ) {
+            val previous = InstallStateStore(context).current()
+            val operationId =
+                previous?.operationId
+                    ?.takeIf { previous.archiveDistro?.id == distro.id }
+                    ?: UUID.randomUUID().toString()
+            start(
+                context,
+                InstallerWorkRequest.Archive(
+                    distro = distro,
+                    operationId = operationId,
+                ),
+            )
+        }
+
+        internal fun startOci(
+            context: Context,
+            reference: OciImageReference,
+            platform: OciPlatform,
+            installationName: String,
+            displayName: String,
+            architecture: String,
+        ) {
+            start(
+                context,
+                InstallerWorkRequest.Oci(
+                    reference = reference,
+                    platform = platform,
+                    installationName = installationName,
+                    displayName = displayName,
+                    architecture = architecture,
+                    operationId = UUID.randomUUID().toString(),
+                ),
+            )
+        }
+
+        internal fun start(
+            context: Context,
+            work: InstallerWorkRequest,
+        ) {
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, InstallerService::class.java)
                     .setAction(ACTION_START)
-                    .putExtra(EXTRA_SUITE, distro.suite)
-                    .putExtra(EXTRA_VARIANT, distro.variant)
-                    .putExtra(EXTRA_INTERNAL_NAME, distro.internalName)
-                    .putExtra(EXTRA_FRIENDLY_NAME, distro.friendlyName)
-                    .putExtra(EXTRA_ARCHITECTURE, distro.architecture)
-                    .putExtra(EXTRA_DOWNLOAD_URL, distro.downloadUrl)
-                    .putExtra(EXTRA_SHA256, distro.sha256)
-                    .putExtra(EXTRA_DISTRIBUTION, distro.distribution.id)
-                    .putExtra(EXTRA_PROVIDER, distro.provider.name)
-                    .putExtra(EXTRA_RELEASE_LABEL, distro.releaseLabel)
                     .putExtra(
-                        EXTRA_ARCHIVE_STRIP_COMPONENTS,
-                        distro.archiveStripComponents,
+                        EXTRA_WORK_REQUEST,
+                        InstallerWorkRequestCodec.encode(work),
                     ),
             )
         }
@@ -717,30 +1176,6 @@ class InstallerService : Service() {
         fun pause(context: Context) {
             context.startService(
                 Intent(context, InstallerService::class.java).setAction(ACTION_PAUSE),
-            )
-        }
-
-        private fun distroFromIntent(intent: Intent): DistroVariant? {
-            val suite = intent.getStringExtra(EXTRA_SUITE) ?: return null
-            return DistroVariant(
-                suite = suite,
-                variant = intent.getStringExtra(EXTRA_VARIANT) ?: return null,
-                internalName = intent.getStringExtra(EXTRA_INTERNAL_NAME) ?: return null,
-                friendlyName = intent.getStringExtra(EXTRA_FRIENDLY_NAME) ?: return null,
-                architecture = intent.getStringExtra(EXTRA_ARCHITECTURE) ?: return null,
-                downloadUrl = intent.getStringExtra(EXTRA_DOWNLOAD_URL) ?: return null,
-                sha256 = intent.getStringExtra(EXTRA_SHA256) ?: return null,
-                distribution =
-                    intent.getStringExtra(EXTRA_DISTRIBUTION)
-                        ?.let { id -> LinuxDistribution.entries.firstOrNull { it.id == id } }
-                        ?: LinuxDistribution.UBUNTU,
-                provider =
-                    intent.getStringExtra(EXTRA_PROVIDER)
-                        ?.let { name -> DistroProvider.entries.firstOrNull { it.name == name } }
-                        ?: DistroProvider.UDROID,
-                releaseLabel = intent.getStringExtra(EXTRA_RELEASE_LABEL),
-                archiveStripComponents =
-                    intent.getIntExtra(EXTRA_ARCHIVE_STRIP_COMPONENTS, 0),
             )
         }
 

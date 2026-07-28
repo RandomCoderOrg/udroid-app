@@ -183,6 +183,40 @@ class ArtifactPipelineTest {
         assertArrayEquals(bytes, final.readBytes())
     }
 
+    @Test
+    fun `sensitive request headers never follow a cross-origin redirect`() {
+        val bytes = payload()
+        val target =
+            startServer { headers ->
+                assertEquals(null, headers["authorization"])
+                TinyResponse(status = 200, body = bytes)
+            }
+        val redirect =
+            startServer { headers ->
+                assertEquals("Bearer registry-token", headers["authorization"])
+                TinyResponse(
+                    status = 302,
+                    headers = mapOf("Location" to target),
+                    body = byteArrayOf(),
+                )
+            }
+        val directory = tempDirectory()
+        val staging = File(directory, "layer.part")
+        val final = File(directory, "layer.tar.gz")
+
+        pipeline().execute(
+            ArtifactRequest(
+                url = redirect,
+                expectedSha256 = sha256(bytes),
+                stagingFile = staging,
+                finalFile = final,
+                requestHeaders = mapOf("Authorization" to "Bearer registry-token"),
+            ),
+        )
+
+        assertArrayEquals(bytes, final.readBytes())
+    }
+
     private fun pipeline() =
         ResumableArtifactPipeline(minimumFreeHeadroomBytes = 0L)
 

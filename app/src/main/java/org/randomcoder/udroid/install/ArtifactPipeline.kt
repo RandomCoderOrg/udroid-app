@@ -15,6 +15,7 @@ data class ArtifactRequest(
     val expectedSha256: String,
     val stagingFile: File,
     val finalFile: File,
+    val requestHeaders: Map<String, String> = emptyMap(),
 )
 
 data class ByteProgress(
@@ -105,7 +106,12 @@ class ResumableArtifactPipeline(
     ): Boolean {
         checkInterrupted()
         val existingBytes = request.stagingFile.length().coerceAtLeast(0L)
-        val connection = openFollowingRedirects(request.url, existingBytes)
+        val connection =
+            openFollowingRedirects(
+                initialUrl = request.url,
+                existingBytes = existingBytes,
+                requestHeaders = request.requestHeaders,
+            )
 
         return try {
             val responseCode = connection.responseCode
@@ -206,9 +212,11 @@ class ResumableArtifactPipeline(
     private fun openFollowingRedirects(
         initialUrl: String,
         existingBytes: Long,
+        requestHeaders: Map<String, String>,
     ): HttpURLConnection {
-        val initialProtocol = URL(initialUrl).protocol
-        var currentUrl = URL(initialUrl)
+        val initial = URL(initialUrl)
+        val initialProtocol = initial.protocol
+        var currentUrl = initial
         repeat(MAX_REDIRECTS + 1) { redirectCount ->
             val connection =
                 connectionFactory(currentUrl).apply {
@@ -220,6 +228,9 @@ class ResumableArtifactPipeline(
                     setRequestProperty("User-Agent", "uDroid-Android/0.1")
                     if (existingBytes > 0L) {
                         setRequestProperty("Range", "bytes=$existingBytes-")
+                    }
+                    if (sameOrigin(initial, currentUrl)) {
+                        requestHeaders.forEach(::setRequestProperty)
                     }
                 }
             val responseCode = connection.responseCode
@@ -241,6 +252,17 @@ class ResumableArtifactPipeline(
         }
         throw IOException("Artifact redirect resolution failed")
     }
+
+    private fun sameOrigin(
+        left: URL,
+        right: URL,
+    ): Boolean =
+        left.protocol.equals(right.protocol, ignoreCase = true) &&
+            left.host.equals(right.host, ignoreCase = true) &&
+            effectivePort(left) == effectivePort(right)
+
+    private fun effectivePort(url: URL): Int =
+        if (url.port >= 0) url.port else url.defaultPort
 
     /*
      * Download planning stays below this boundary so callers see only byte
@@ -280,6 +302,17 @@ class ResumableArtifactPipeline(
         }
         require(request.stagingFile.absolutePath != request.finalFile.absolutePath) {
             "Staging and final artifact paths must differ"
+        }
+        request.requestHeaders.forEach { (name, value) ->
+            require(SAFE_REQUEST_HEADER.matches(name)) {
+                "Invalid artifact request header name"
+            }
+            require(name.lowercase() !in RESERVED_REQUEST_HEADERS) {
+                "Artifact request header $name is controlled by uDroid"
+            }
+            require('\r' !in value && '\n' !in value) {
+                "Invalid artifact request header value"
+            }
         }
     }
 
@@ -349,5 +382,8 @@ class ResumableArtifactPipeline(
         val SHA256 = Regex("^[0-9a-fA-F]{64}$")
         val CONTENT_RANGE = Regex("^bytes (\\d+)-(\\d+)/(\\d+)$")
         val UNSATISFIED_RANGE = Regex("^bytes \\*/(\\d+)$")
+        val SAFE_REQUEST_HEADER = Regex("[A-Za-z0-9-]+")
+        val RESERVED_REQUEST_HEADERS =
+            setOf("host", "range", "accept-encoding", "content-length", "user-agent")
     }
 }

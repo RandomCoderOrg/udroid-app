@@ -80,6 +80,7 @@ class ProotTarExtractor(
     private val context: Context,
     private val runtime: ProotRuntime,
     private val stripComponents: Int = 0,
+    private val excludeOciWhiteouts: Boolean = false,
     private val onDiagnostic: (String) -> Unit = {},
 ) : RootfsExtractor {
     override fun extract(
@@ -118,6 +119,7 @@ class ProotTarExtractor(
                 tarExecutablePath = runtime.tarExecutable.absolutePath,
                 tarMountPath = "/$RUNTIME_MOUNT_DIRECTORY/${tarMount.name}",
                 stripComponents = stripComponents,
+                excludeOciWhiteouts = excludeOciWhiteouts,
             )
         val command =
             AndroidExecutableCommand.create(
@@ -243,6 +245,7 @@ class ProotTarExtractor(
             tarExecutablePath: String,
             tarMountPath: String,
             stripComponents: Int,
+            excludeOciWhiteouts: Boolean = false,
         ): List<String> =
             buildList {
                 add("--link2symlink")
@@ -272,6 +275,11 @@ class ProotTarExtractor(
                 // /dev is an Android bind mount, not an archive-owned directory.
                 add("--exclude=dev")
                 add("--exclude=$RUNTIME_MOUNT_DIRECTORY")
+                if (excludeOciWhiteouts) {
+                    add("--wildcards")
+                    add("--exclude=.wh.*")
+                    add("--exclude=*/.wh.*")
+                }
             }
 
         private const val RUNTIME_MOUNT_DIRECTORY = ".udroid-extract"

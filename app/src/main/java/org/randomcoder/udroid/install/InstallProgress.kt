@@ -1,6 +1,8 @@
 package org.randomcoder.udroid.install
 
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
+import java.util.UUID
 
 enum class InstallStage(
     val normalTitle: String,
@@ -71,18 +73,32 @@ enum class InstallStage(
 }
 
 data class InstallProgress(
-    val distro: DistroVariant,
+    val work: InstallerWorkRequest,
     val stage: InstallStage,
     val stageProgress: Float,
     val currentDetail: String,
     val terminalLines: List<String>,
     val previewOnly: Boolean,
-    val operationId: String? = null,
     val completedBytes: Long = 0L,
     val totalBytes: Long = -1L,
     val bytesPerSecond: Long = 0L,
     val cancellable: Boolean = false,
 ) {
+    val operationId: String = work.operationId
+    val installationName: String = work.installationName
+    val displayName: String = work.displayName
+    val architecture: String = work.architecture
+    val archiveDistro: DistroVariant? = (work as? InstallerWorkRequest.Archive)?.distro
+    val distribution: LinuxDistribution? = archiveDistro?.distribution
+    val experienceName: String =
+        archiveDistro?.experienceName
+            ?: "Official container image"
+    val sourceIdentity: String =
+        when (work) {
+            is InstallerWorkRequest.Archive -> work.distro.id
+            is InstallerWorkRequest.Oci -> work.reference.toString()
+        }
+
     val overallProgress: Float =
         when (stage) {
             InstallStage.READY -> 0f
@@ -101,7 +117,11 @@ data class InstallProgress(
 object InstallationSelection {
     fun initial(distro: DistroVariant): InstallProgress =
         InstallProgress(
-            distro = distro,
+            work =
+                InstallerWorkRequest.Archive(
+                    distro = distro,
+                    operationId = UUID.randomUUID().toString(),
+                ),
             stage = InstallStage.READY,
             stageProgress = 0f,
             currentDetail = "SHA-256 metadata is available for ${distro.architecture}",
@@ -209,7 +229,11 @@ object InstallationUxPreview {
 
     fun initial(distro: DistroVariant): InstallProgress =
         InstallProgress(
-            distro = distro,
+            work =
+                InstallerWorkRequest.Archive(
+                    distro = distro,
+                    operationId = UUID.randomUUID().toString(),
+                ),
             stage = InstallStage.CHECKING,
             stageProgress = 0f,
             currentDetail = "Preparing an installation UX preview",

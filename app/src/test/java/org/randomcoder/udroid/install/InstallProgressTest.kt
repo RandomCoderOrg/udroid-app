@@ -16,12 +16,17 @@ class InstallProgressTest {
             downloadUrl = "https://example.test/jammy.tar.gz",
             sha256 = "abc",
         )
+    private val work =
+        InstallerWorkRequest.Archive(
+            distro = distro,
+            operationId = "test-operation",
+        )
 
     @Test
     fun `download progress is mapped into its weighted overall segment`() {
         val progress =
             InstallProgress(
-                distro = distro,
+                work = work,
                 stage = InstallStage.DOWNLOADING,
                 stageProgress = 0.5f,
                 currentDetail = "Downloading",
@@ -41,10 +46,10 @@ class InstallProgressTest {
         assertTrue(steps.all { it.terminalLine.isNotBlank() })
         assertTrue(steps.zipWithNext().all { (left, right) ->
             val leftOverall =
-                InstallProgress(distro, left.stage, left.stageProgress, "", emptyList(), true)
+                InstallProgress(work, left.stage, left.stageProgress, "", emptyList(), true)
                     .overallProgress
             val rightOverall =
-                InstallProgress(distro, right.stage, right.stageProgress, "", emptyList(), true)
+                InstallProgress(work, right.stage, right.stageProgress, "", emptyList(), true)
                     .overallProgress
             rightOverall >= leftOverall
         })

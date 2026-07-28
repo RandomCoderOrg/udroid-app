@@ -43,21 +43,33 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
+import org.randomcoder.udroid.install.InstallerWorkRequest
+import org.randomcoder.udroid.install.OciInstallationSelection
+import org.randomcoder.udroid.oci.OciHubCatalogueState
+import org.randomcoder.udroid.oci.OciHubRepository
+import org.randomcoder.udroid.oci.OciHubTagPlatform
+import org.randomcoder.udroid.oci.OciHubTagsState
+import org.randomcoder.udroid.oci.OciPlatform
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import java.util.Locale
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun DistroCataloguePage(
     state: DistroCatalogState,
+    ociState: OciHubCatalogueState,
     installedRootfses: List<InstalledRootfs>,
     activeRootfsName: String?,
     onRetry: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
+    onSelectOciRepository: (OciHubRepository) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
 ) {
     when (state) {
@@ -110,6 +122,8 @@ fun DistroCataloguePage(
 
         is DistroCatalogState.Ready -> {
             val catalogue = state.catalog
+            val ociReady = ociState as? OciHubCatalogueState.Ready
+            val ociRepositories = ociReady?.snapshot?.repositories.orEmpty()
             val installedNames =
                 remember(installedRootfses) {
                     installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name)
@@ -146,6 +160,21 @@ fun DistroCataloguePage(
                         }
                     }
                 }
+            val visibleOciRepositories by
+                remember(ociRepositories, searchQuery) {
+                    derivedStateOf {
+                        val terms = searchTerms(searchQuery)
+                        if (terms.isEmpty()) {
+                            ociRepositories
+                        } else {
+                            ociRepositories.filter { repository ->
+                                terms.all(repository.searchableText()::contains)
+                            }
+                        }
+                    }
+                }
+            val visibleCount = visibleVariants.size + visibleOciRepositories.size
+            val totalCount = catalogue.variants.size + ociRepositories.size
 
             LazyColumn(
                 modifier =
@@ -159,10 +188,10 @@ fun DistroCataloguePage(
                         title = "Linux systems",
                         subtitle =
                             if (installedRootfses.isEmpty()) {
-                                "${catalogue.variants.size} compatible systems"
+                                "$totalCount compatible systems"
                             } else {
                                 "${installedRootfses.size} installed · " +
-                                    "${catalogue.variants.size} compatible"
+                                    "$totalCount compatible"
                             },
                         modifier = Modifier.padding(top = 18.dp, bottom = 7.dp),
                     )
@@ -173,7 +202,7 @@ fun DistroCataloguePage(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search Ubuntu, Debian, Arch…") },
+                        placeholder = { Text("Search Ubuntu, Debian, Fedora…") },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Outlined.Search,
@@ -203,14 +232,17 @@ fun DistroCataloguePage(
                         text =
                             when {
                                 searchQuery.isBlank() -> "All systems"
-                                visibleVariants.size == 1 -> "1 matching system"
-                                else -> "${visibleVariants.size} matching systems"
+                                visibleCount == 1 -> "1 matching system"
+                                else -> "$visibleCount matching systems"
                             },
                         modifier = Modifier.padding(top = 4.dp, bottom = 1.dp),
                     )
                 }
 
-                if (visibleVariants.isEmpty()) {
+                if (
+                    visibleCount == 0 &&
+                    ociState !is OciHubCatalogueState.Loading
+                ) {
                     item(key = "empty-search") {
                         Surface(
                             color = UdroidRaised,
@@ -231,7 +263,15 @@ fun DistroCataloguePage(
                             }
                         }
                     }
-                } else {
+                }
+
+                if (visibleVariants.isNotEmpty()) {
+                    item(key = "archive-sources") {
+                        UdroidSectionLabel(
+                            text = "uDroid and proot-distro",
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
                     items(
                         items = visibleVariants,
                         key = { it.id },
@@ -250,6 +290,61 @@ fun DistroCataloguePage(
                                 }
                             },
                         )
+                    }
+                }
+
+                if (
+                    searchQuery.isBlank() ||
+                    visibleOciRepositories.isNotEmpty() ||
+                    ociState !is OciHubCatalogueState.Ready
+                ) {
+                    item(key = "oci-source") {
+                        UdroidSectionLabel(
+                            text = "Official container images",
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+                when (ociState) {
+                    OciHubCatalogueState.Loading -> {
+                        item(key = "oci-loading") {
+                            InlineCatalogueStatus(
+                                loading = true,
+                                title = "Finding compatible official images",
+                                detail = "This does not block the standard Linux images above.",
+                            )
+                        }
+                    }
+
+                    is OciHubCatalogueState.Failed -> {
+                        item(key = "oci-failed") {
+                            InlineCatalogueStatus(
+                                loading = false,
+                                title = "Official images are unavailable",
+                                detail = ociState.message,
+                                actionLabel = "Retry",
+                                onAction = onRetry,
+                            )
+                        }
+                    }
+
+                    is OciHubCatalogueState.Ready -> {
+                        items(
+                            items = visibleOciRepositories,
+                            key = { "oci:${it.name}" },
+                            contentType = { "oci-repository-card" },
+                        ) { repository ->
+                            val installed =
+                                installedNames.any {
+                                    it.startsWith("oci-${repository.name}-")
+                                }
+                            OciRepositoryCard(
+                                repository = repository,
+                                architecture = ociState.platform.displayArchitecture(),
+                                installed = installed,
+                                onSelect = { onSelectOciRepository(repository) },
+                            )
+                        }
                     }
                 }
 
@@ -348,6 +443,405 @@ private fun DistroCard(
 }
 
 @Composable
+private fun OciRepositoryCard(
+    repository: OciHubRepository,
+    architecture: String,
+    installed: Boolean,
+    onSelect: () -> Unit,
+) {
+    val title = OciInstallationSelection.displayName(repository)
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSelect),
+        color = UdroidRaised,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = RoundedCornerShape(11.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OciRepositoryMark(repository)
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (installed) {
+                        Spacer(Modifier.size(8.dp))
+                        UdroidStatusBadge(
+                            label = "Installed",
+                            color = UdroidForest,
+                            background = UdroidSoftGreen,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "Official image · $architecture · Choose version",
+                    color = UdroidMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = "Choose a $title version",
+                tint = UdroidFaint,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OciRepositoryMark(repository: OciHubRepository) {
+    val distribution =
+        when (repository.name) {
+            "ubuntu" -> LinuxDistribution.UBUNTU
+            "debian" -> LinuxDistribution.DEBIAN
+            "alpine" -> LinuxDistribution.ALPINE
+            "archlinux" -> LinuxDistribution.ARCH
+            else -> null
+        }
+    if (distribution != null) {
+        DistroMark(distribution = distribution, size = 42)
+    } else {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            color = UdroidWarm,
+            shape = RoundedCornerShape(11.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    repository.name.take(2).uppercase(Locale.US),
+                    color = UdroidForest,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineCatalogueStatus(
+    loading: Boolean,
+    title: String,
+    detail: String,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {},
+) {
+    Surface(
+        color = UdroidRaised,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = RoundedCornerShape(11.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.size(12.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    detail,
+                    color = UdroidMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            actionLabel?.let {
+                Spacer(Modifier.size(8.dp))
+                Button(
+                    onClick = onAction,
+                    shape = RoundedCornerShape(9.dp),
+                ) {
+                    Text(it)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+fun OciTagCataloguePage(
+    repository: OciHubRepository,
+    state: OciHubTagsState,
+    installedRootfses: List<InstalledRootfs>,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onSelectTag: (OciHubTagPlatform) -> Unit,
+) {
+    val title = OciInstallationSelection.displayName(repository)
+    val installedNames =
+        remember(installedRootfses) {
+            installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name)
+        }
+    var searchQuery by remember(repository.name) { mutableStateOf("") }
+    val readyTags = (state as? OciHubTagsState.Ready)?.snapshot?.tags.orEmpty()
+    val visibleTags by
+        remember(readyTags, searchQuery) {
+            derivedStateOf {
+                val terms = searchTerms(searchQuery)
+                if (terms.isEmpty()) {
+                    readyTags
+                } else {
+                    readyTags.filter { tag ->
+                        val searchable =
+                            listOf(
+                                tag.tag,
+                                tag.platform.os,
+                                tag.platform.architecture,
+                                tag.platform.variant.orEmpty(),
+                            ).joinToString(" ").lowercase(Locale.US)
+                        terms.all(searchable::contains)
+                    }
+                }
+            }
+        }
+
+    LazyColumn(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        item(key = "back") {
+            Text(
+                "‹  Linux systems",
+                modifier =
+                    Modifier
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onBack)
+                        .padding(vertical = 8.dp, horizontal = 2.dp),
+                color = UdroidForest,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        item(key = "header") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OciRepositoryMark(repository)
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "Official image · choose a compatible version",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+
+        when (state) {
+            OciHubTagsState.Idle,
+            OciHubTagsState.Loading
+            -> {
+                item(key = "loading") {
+                    InlineCatalogueStatus(
+                        loading = true,
+                        title = "Loading versions",
+                        detail = "Checking this phone’s architecture against available tags.",
+                    )
+                }
+            }
+
+            is OciHubTagsState.Failed -> {
+                item(key = "failed") {
+                    InlineCatalogueStatus(
+                        loading = false,
+                        title = "Versions are unavailable",
+                        detail = state.message,
+                        actionLabel = "Retry",
+                        onAction = onRetry,
+                    )
+                }
+            }
+
+            is OciHubTagsState.Ready -> {
+                item(key = "tag-search") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search versions") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingIcon =
+                            if (searchQuery.isBlank()) {
+                                null
+                            } else {
+                                {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Clear version search",
+                                        )
+                                    }
+                                }
+                            },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+                item(key = "tag-count") {
+                    UdroidSectionLabel(
+                        text =
+                            if (visibleTags.size == 1) {
+                                "1 compatible version"
+                            } else {
+                                "${visibleTags.size} compatible versions"
+                            },
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                if (visibleTags.isEmpty()) {
+                    item(key = "empty-tags") {
+                        InlineCatalogueStatus(
+                            loading = false,
+                            title = "No matching version",
+                            detail = "Try a release number, codename, or latest.",
+                        )
+                    }
+                } else {
+                    items(
+                        items = visibleTags,
+                        key = { it.tag },
+                        contentType = { "oci-tag-card" },
+                    ) { tag ->
+                        val installationName =
+                            OciInstallationSelection.installationName(
+                                repository.name,
+                                tag.tag,
+                            )
+                        OciTagCard(
+                            tag = tag,
+                            installed = installationName in installedNames,
+                            onSelect = { onSelectTag(tag) },
+                        )
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(28.dp)) }
+    }
+}
+
+@Composable
+private fun OciTagCard(
+    tag: OciHubTagPlatform,
+    installed: Boolean,
+    onSelect: () -> Unit,
+) {
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSelect),
+        color = UdroidRaised,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = RoundedCornerShape(11.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(tag.tag, style = MaterialTheme.typography.titleMedium)
+                    if (installed) {
+                        Spacer(Modifier.size(8.dp))
+                        UdroidStatusBadge(
+                            label = "Installed",
+                            color = UdroidForest,
+                            background = UdroidSoftGreen,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "${formatCompactBytes(tag.compressedBytes)} compressed · " +
+                        tag.platform.displayLabel(),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            if (installed) {
+                Text(
+                    "Open",
+                    color = UdroidForest,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Spacer(Modifier.size(2.dp))
+            }
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = if (installed) "Open ${tag.tag}" else "Review ${tag.tag}",
+                tint = if (installed) UdroidForest else UdroidFaint,
+            )
+        }
+    }
+}
+
+private fun searchTerms(query: String): List<String> =
+    query
+        .trim()
+        .lowercase(Locale.US)
+        .split(Regex("\\s+"))
+        .filter(String::isNotBlank)
+
+private fun OciHubRepository.searchableText(): String =
+    listOf(
+        name,
+        OciInstallationSelection.displayName(this),
+        description,
+        "official container image docker hub OCI",
+    ).joinToString(" ").lowercase(Locale.US)
+
+private fun OciPlatform.displayArchitecture(): String =
+    when (architecture) {
+        "arm64" -> "aarch64"
+        "arm" -> "armhf"
+        else -> architecture
+    }
+
+private fun OciPlatform.displayLabel(): String =
+    listOfNotNull(os, displayArchitecture(), variant).joinToString("/")
+
+private fun formatCompactBytes(bytes: Long): String =
+    when {
+        bytes >= 1024L * 1024L * 1024L ->
+            String.format(Locale.US, "%.2f GiB", bytes / (1024.0 * 1024.0 * 1024.0))
+        bytes >= 1024L * 1024L ->
+            String.format(Locale.US, "%.1f MiB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024L -> String.format(Locale.US, "%.1f KiB", bytes / 1024.0)
+        else -> "$bytes B"
+    }
+
+@Composable
 fun InstallExperiencePage(
     progress: InstallProgress,
     showTerminal: Boolean,
@@ -372,6 +866,8 @@ fun InstallExperiencePage(
                     Text(
                         if (progress.stage == InstallStage.COMPLETE) {
                             "‹  Workspace"
+                        } else if (progress.work is InstallerWorkRequest.Oci) {
+                            "‹  Versions"
                         } else {
                             "‹  Linux images"
                         },
@@ -390,14 +886,28 @@ fun InstallExperiencePage(
 
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    DistroMark(distribution = progress.distro.distribution, size = 48)
+                    progress.distribution?.let { distribution ->
+                        DistroMark(distribution = distribution, size = 48)
+                    } ?: Surface(
+                        modifier = Modifier.size(48.dp),
+                        color = UdroidWarm,
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                "OCI",
+                                color = UdroidForest,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
                     Column(modifier = Modifier.padding(start = 12.dp)) {
                         Text(
-                            progress.distro.releaseName,
+                            progress.displayName,
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
-                            "${progress.distro.experienceName} · ${progress.distro.architecture}",
+                            "${progress.experienceName} · ${progress.architecture}",
                             color = UdroidMuted,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -601,11 +1111,11 @@ fun InstallExperiencePage(
                         progress.cancellable ->
                             "You can leave this screen. The foreground service keeps installing."
                         progress.stage == InstallStage.PAUSED ->
-                            "Partial downloads or the verified archive remain available for retry."
+                            "Partial downloads and verified data remain available for retry."
                         progress.stage == InstallStage.ARCHIVE_READY ->
                             "The archive is cached safely while rootfs setup begins."
                         progress.stage == InstallStage.COMPLETE ->
-                            "The verified archive was removed after the rootfs passed its checks."
+                            "Downloaded image data was removed after the rootfs passed its checks."
                         else ->
                             "Open the terminal for exact operation details."
                     },
@@ -645,7 +1155,7 @@ fun InstallExperiencePage(
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             Text(
-                                progress.distro.id,
+                                progress.sourceIdentity,
                                 color = Color(0xFF8EA99A),
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.labelSmall,
@@ -715,8 +1225,8 @@ private val InstallStage.stepLabel: String
         return when (this) {
             InstallStage.READY -> "DOWNLOAD PLAN"
             InstallStage.ARCHIVE_READY -> "STEP 3 OF 5"
-            InstallStage.PAUSED -> "DOWNLOAD PAUSED"
-            InstallStage.FAILED -> "DOWNLOAD STOPPED"
+            InstallStage.PAUSED -> "INSTALLATION PAUSED"
+            InstallStage.FAILED -> "INSTALLATION STOPPED"
             else -> "STEP $index OF 5"
         }
     }

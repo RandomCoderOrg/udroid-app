@@ -28,6 +28,7 @@ kotlin {
 android {
     namespace = "org.randomcoder.udroid"
     compileSdk = 36
+    testBuildType = "probe"
 
     defaultConfig {
         applicationId = "org.randomcoder.udroid"
@@ -79,6 +80,11 @@ android {
                 "proguard-rules.pro",
             )
         }
+        create("probe") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".ociprobe"
+            matchingFallbacks += "debug"
+        }
     }
 
     buildFeatures {
@@ -126,4 +132,7 @@ dependencies {
     baselineProfile(project(":baseline-profile"))
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit-ktx:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
