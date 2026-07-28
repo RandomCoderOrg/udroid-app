@@ -72,9 +72,15 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
-        <receiver
-            android:name=".update.UpdateInstallReceiver"
-            android:exported="false" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.update-files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
 
         <service
             android:name=".runtime.RuntimeSupervisorService"

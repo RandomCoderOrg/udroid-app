@@ -769,16 +769,7 @@ class MainActivity : ComponentActivity() {
             UpdateInstallResult.Submitted -> {
                 updateState =
                     app.updateState.update {
-                        it.copy(message = "Waiting for Android installation confirmation")
-                    }
-            }
-            UpdateInstallResult.PermissionRequested -> {
-                updateState =
-                    app.updateState.update {
-                        it.copy(
-                            phase = AppUpdatePhase.READY,
-                            message = "Allow uDroid to install unknown apps, then tap Install",
-                        )
+                        it.copy(message = "Android installer opened")
                     }
             }
             is UpdateInstallResult.Failed -> {

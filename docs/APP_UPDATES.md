@@ -21,11 +21,16 @@ endpoint.
    exact filename entry in `SHA256SUMS`.
 8. Before installation, uDroid verifies the APK package name, Android version
    code, and signing certificate.
-9. Android's PackageInstaller displays the final system confirmation.
+9. The foreground Activity grants Android's PackageInstaller temporary,
+   read-only access to that single APK through a private FileProvider.
+10. Android displays the unknown-source permission flow when required and the
+    final system confirmation.
 
-The listener never installs silently. On Android versions that gate unknown-app
-installation per source, uDroid opens the relevant system settings page and
-asks the user to return before submitting the verified package.
+The listener never installs silently. uDroid starts Android's package
+installation UI directly from the user's button press; the system owns the
+permission, verification, cancellation, and confirmation screens. The
+FileProvider exposes only `files/updates/`, remains non-exported, and grants
+read access only for the launched intent.
 
 ## Release selection
 
