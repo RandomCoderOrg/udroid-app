@@ -17,15 +17,18 @@ import java.io.InputStreamReader
 import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
 import kotlin.math.max
 
 data class ProotRuntime(
     val executable: File,
     val loader: File,
+    val tarExecutable: File,
 )
 
 object ProotRuntimeInstaller {
     private const val PROOT_VERSION = "5.1.107.86-1"
+    private const val TAR_VERSION = "1.35-1"
     private val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
     fun install(context: Context): ProotRuntime {
@@ -36,32 +39,40 @@ object ProotRuntimeInstaller {
         val runtimeDirectory =
             File(context.filesDir, "runtime/proot-$PROOT_VERSION-$abi").apply {
                 mkdirs()
-            }
+        }
         val destination = File(runtimeDirectory, "proot")
+        val tarDestination = File(runtimeDirectory, "tar-$TAR_VERSION")
         val loader = File(context.applicationInfo.nativeLibraryDir, "libproot-loader.so")
         check(loader.isFile && loader.canExecute()) {
             "Packaged PRoot loader is unavailable"
         }
-        if (destination.isFile && destination.canExecute()) {
-            return ProotRuntime(destination, loader)
-        }
+        installExecutable(context, "runtime/$abi/proot", destination, "PRoot")
+        installExecutable(context, "runtime/$abi/tar", tarDestination, "GNU tar")
+        return ProotRuntime(destination, loader, tarDestination)
+    }
 
-        val staging = File(runtimeDirectory, "proot.staging")
+    private fun installExecutable(
+        context: Context,
+        assetPath: String,
+        destination: File,
+        label: String,
+    ) {
+        if (destination.isFile && destination.canExecute()) return
+        val staging = File(destination.parentFile, "${destination.name}.staging")
         staging.delete()
-        context.assets.open("runtime/$abi/proot").use { input ->
+        context.assets.open(assetPath).use { input ->
             FileOutputStream(staging).use { output ->
                 input.copyTo(output)
                 output.fd.sync()
             }
         }
-        check(staging.setReadable(true, true)) { "Could not make PRoot readable" }
-        check(staging.setWritable(true, true)) { "Could not make PRoot writable" }
-        check(staging.setExecutable(true, true)) { "Could not make PRoot executable" }
+        check(staging.setReadable(true, true)) { "Could not make $label readable" }
+        check(staging.setWritable(true, true)) { "Could not make $label writable" }
+        check(staging.setExecutable(true, true)) { "Could not make $label executable" }
         if (destination.exists()) check(destination.delete()) {
-            "Could not replace the previous PRoot runtime"
+            "Could not replace the previous $label runtime"
         }
-        check(staging.renameTo(destination)) { "Could not atomically activate PRoot" }
-        return ProotRuntime(destination, loader)
+        check(staging.renameTo(destination)) { "Could not atomically activate $label" }
     }
 }
 
@@ -77,8 +88,12 @@ class ProotTarExtractor(
         onProgress: (completedBytes: Long, totalBytes: Long) -> Unit,
     ) {
         val xzCompressed = archive.name.endsWith(".tar.xz", ignoreCase = true)
+        val gzipCompressed = archive.name.endsWith(".tar.gz", ignoreCase = true)
         check(!archive.name.endsWith(".tar.zst", ignoreCase = true)) {
             "Zstandard rootfs archives are not supported yet"
+        }
+        check(xzCompressed || gzipCompressed || archive.name.endsWith(".tar", ignoreCase = true)) {
+            "Unsupported rootfs archive: ${archive.name}"
         }
         require(stripComponents in 0..4) {
             "Unsafe archive strip depth: $stripComponents"
@@ -86,37 +101,24 @@ class ProotTarExtractor(
         check(File(destination, "linkerconfig").mkdirs()) {
             "Could not prepare Android linker configuration mount"
         }
-        val prootArguments =
-            mutableListOf(
-                "--link2symlink",
-                "--rootfs=${ProotPathContract.rootfsPath(context, destination)}",
-                "-b",
-                "/system",
-                "-b",
-                "/apex",
-                "-b",
-                "/dev",
-                "-b",
-                "/linkerconfig/ld.config.txt",
-                "--cwd=/",
-                "/system/bin/tar",
-            ).apply {
-                if (stripComponents > 0) {
-                    add("--strip-components=$stripComponents")
+        val runtimeMount =
+            File(destination, RUNTIME_MOUNT_DIRECTORY).apply {
+                check(mkdirs() || isDirectory) {
+                    "Could not prepare the rootfs extraction runtime mount"
                 }
-                addAll(
-                    listOf(
-                        // Android device paths are bind-mounted into the PRoot. Restoring a
-                        // rootfs archive's directory mtimes can therefore attempt to mutate
-                        // Android's /dev and fail the whole extraction. Toybox tar's -m keeps
-                        // archive contents while leaving those mount-point mtimes alone.
-                        if (xzCompressed) "-xopmf" else "-xzopmf",
-                        "-",
-                        "-C",
-                        "/",
-                    ),
-                )
             }
+        val tarMount = File(runtimeMount, "tar").apply {
+            if (!exists()) {
+                check(createNewFile()) { "Could not prepare the GNU tar mount target" }
+            }
+        }
+        val prootArguments =
+            buildArguments(
+                rootfsPath = ProotPathContract.rootfsPath(context, destination),
+                tarExecutablePath = runtime.tarExecutable.absolutePath,
+                tarMountPath = "/$RUNTIME_MOUNT_DIRECTORY/${tarMount.name}",
+                stripComponents = stripComponents,
+            )
         val command =
             AndroidExecutableCommand.create(
                 runtime.executable,
@@ -161,7 +163,11 @@ class ProotTarExtractor(
         try {
             val compressedInput = CountingInputStream(archive.inputStream().buffered())
             val archiveInput: InputStream =
-                if (xzCompressed) XZInputStream(compressedInput) else compressedInput
+                when {
+                    xzCompressed -> XZInputStream(compressedInput)
+                    gzipCompressed -> GZIPInputStream(compressedInput)
+                    else -> compressedInput
+                }
             archiveInput.use { input ->
                 process.outputStream.buffered().use { output ->
                     val buffer = ByteArray(COPY_BUFFER_BYTES)
@@ -191,6 +197,9 @@ class ProotTarExtractor(
                 process.destroyForcibly()
             }
             throw error
+        } finally {
+            tarMount.delete()
+            runtimeMount.delete()
         }
     }
 
@@ -213,7 +222,44 @@ class ProotTarExtractor(
             }
     }
 
-    private companion object {
+    companion object {
+        internal fun buildArguments(
+            rootfsPath: String,
+            tarExecutablePath: String,
+            tarMountPath: String,
+            stripComponents: Int,
+        ): List<String> =
+            buildList {
+                add("--link2symlink")
+                add("--rootfs=$rootfsPath")
+                add("-b")
+                add("/system")
+                add("-b")
+                add("/apex")
+                add("-b")
+                add("/dev")
+                add("-b")
+                add("/linkerconfig/ld.config.txt")
+                add("-b")
+                add("$tarExecutablePath:$tarMountPath")
+                add("--cwd=/")
+                add(tarMountPath)
+                add("--warning=no-unknown-keyword")
+                add("--delay-directory-restore")
+                add("--preserve-permissions")
+                if (stripComponents > 0) {
+                    add("--strip-components=$stripComponents")
+                }
+                add("-xf")
+                add("-")
+                add("-C")
+                add("/")
+                // /dev is an Android bind mount, not an archive-owned directory.
+                add("--exclude=dev")
+                add("--exclude=$RUNTIME_MOUNT_DIRECTORY")
+            }
+
+        private const val RUNTIME_MOUNT_DIRECTORY = ".udroid-extract"
         const val COPY_BUFFER_BYTES = 64 * 1024
         const val MAX_DIAGNOSTIC_LINES = 40
         const val DIAGNOSTIC_JOIN_MS = 1_000L
