@@ -20,11 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
@@ -35,7 +39,12 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,6 +75,9 @@ fun LinuxSystemPage(
     configuration: DesktopConfiguration,
     scanLoading: Boolean,
     scanMessage: String?,
+    resetAvailable: Boolean,
+    maintenanceInProgress: Boolean,
+    maintenanceMessage: String?,
     onBack: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenApps: () -> Unit,
@@ -76,8 +88,13 @@ fun LinuxSystemPage(
     onStartDesktop: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
+    onResetFilesystem: () -> Unit,
+    onDeleteFilesystem: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    var confirmation by remember(rootfs.name) {
+        mutableStateOf<FilesystemConfirmation?>(null)
+    }
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
             ?: environments.firstOrNull()
@@ -92,6 +109,26 @@ fun LinuxSystemPage(
         desktop.phase == DesktopSessionPhase.STARTING ||
             desktop.phase == DesktopSessionPhase.STOPPING
     val desktopRunning = desktopOwnsSystem && desktop.phase == DesktopSessionPhase.RUNNING
+    val runtimeBlocksMaintenance =
+        snapshot.rootfsName == rootfs.name &&
+            snapshot.phase in
+            setOf(
+                RuntimePhase.STARTING,
+                RuntimePhase.RUNNING,
+                RuntimePhase.STOPPING,
+            )
+    val desktopBlocksMaintenance =
+        desktop.rootfsName == rootfs.name &&
+            desktop.phase in
+            setOf(
+                DesktopSessionPhase.STARTING,
+                DesktopSessionPhase.RUNNING,
+                DesktopSessionPhase.STOPPING,
+            )
+    val maintenanceEnabled =
+        !maintenanceInProgress &&
+            !runtimeBlocksMaintenance &&
+            !desktopBlocksMaintenance
 
     LazyColumn(
         modifier =
@@ -329,8 +366,157 @@ fun LinuxSystemPage(
             }
         }
 
+        item(key = "filesystem-label") {
+            UdroidSectionLabel(
+                text = "Filesystem",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "filesystem-actions") {
+            Surface(
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, UdroidLine),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        "Manage the installed Linux files",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        when {
+                            maintenanceInProgress ->
+                                maintenanceMessage ?: "Changing the filesystem…"
+                            runtimeBlocksMaintenance || desktopBlocksMaintenance ->
+                                "Stop the terminal and desktop before changing this filesystem."
+                            !resetAvailable ->
+                                "The original source is unavailable for this legacy install. " +
+                                    "You can still delete it."
+                            else ->
+                                "Reset reinstalls the original image. Delete removes this system."
+                        },
+                        modifier = Modifier.padding(top = 4.dp),
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (maintenanceInProgress) {
+                        CircularProgressIndicator(
+                            modifier =
+                                Modifier
+                                    .padding(top = 14.dp)
+                                    .size(22.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = maintenanceEnabled && resetAvailable,
+                                onClick = {
+                                    confirmation = FilesystemConfirmation.RESET
+                                },
+                            ) {
+                                Icon(Icons.Outlined.RestartAlt, contentDescription = null)
+                                Text("Reset", modifier = Modifier.padding(start = 6.dp))
+                            }
+                            TextButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = maintenanceEnabled,
+                                colors =
+                                    ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error,
+                                    ),
+                                onClick = {
+                                    confirmation = FilesystemConfirmation.DELETE
+                                },
+                            ) {
+                                Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
+                                Text("Delete", modifier = Modifier.padding(start = 6.dp))
+                            }
+                        }
+                    }
+                    maintenanceMessage
+                        ?.takeIf { !maintenanceInProgress }
+                        ?.let { message ->
+                            Text(
+                                message,
+                                modifier = Modifier.padding(top = 8.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                }
+            }
+        }
+
         item { Spacer(Modifier.height(28.dp)) }
     }
+
+    confirmation?.let { action ->
+        AlertDialog(
+            onDismissRequest = { confirmation = null },
+            title = {
+                Text(
+                    if (action == FilesystemConfirmation.RESET) {
+                        "Reset this filesystem?"
+                    } else {
+                        "Delete this filesystem?"
+                    },
+                )
+            },
+            text = {
+                Text(
+                    if (action == FilesystemConfirmation.RESET) {
+                        "All packages, settings, and files added to ${rootfs.name} will be " +
+                            "permanently erased. uDroid will immediately reinstall the original image."
+                    } else {
+                        "This permanently removes ${rootfs.name}, including its packages, " +
+                            "settings, and files. This cannot be undone."
+                    },
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmation = null }) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    colors =
+                        ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    onClick = {
+                        confirmation = null
+                        if (action == FilesystemConfirmation.RESET) {
+                            onResetFilesystem()
+                        } else {
+                            onDeleteFilesystem()
+                        }
+                    },
+                ) {
+                    Text(
+                        if (action == FilesystemConfirmation.RESET) {
+                            "Erase and reinstall"
+                        } else {
+                            "Delete permanently"
+                        },
+                    )
+                }
+            },
+        )
+    }
+}
+
+private enum class FilesystemConfirmation {
+    RESET,
+    DELETE,
 }
 
 @Composable

@@ -32,7 +32,9 @@ import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallationSelection
 import org.randomcoder.udroid.install.InstallerService
+import org.randomcoder.udroid.install.InstallerWorkRequest
 import org.randomcoder.udroid.install.OciInstallationSelection
+import org.randomcoder.udroid.install.ResetInstallationSelection
 import org.randomcoder.udroid.linuxapps.DesktopApplicationScanner
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
@@ -52,7 +54,9 @@ import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopConfigurationStore
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
+import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.ui.UdroidApp
@@ -68,6 +72,7 @@ import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateScheduler
 import org.randomcoder.udroid.update.AppUpdateState
 import org.randomcoder.udroid.update.UpdateInstallResult
+import java.util.UUID
 
 private data class PendingLinuxApplication(
     val application: LinuxApplication,
@@ -97,7 +102,10 @@ class MainActivity : ComponentActivity() {
     private var updateState by mutableStateOf(AppUpdateState())
     private var installedRootfsName by mutableStateOf<String?>(null)
     private var installedRootfses by mutableStateOf<List<InstalledRootfs>>(emptyList())
+    private var resettableRootfsNames by mutableStateOf<Set<String>>(emptySet())
     private var selectedSystemRootfsName by mutableStateOf<String?>(null)
+    private var rootfsMaintenanceName by mutableStateOf<String?>(null)
+    private var rootfsMaintenanceMessage by mutableStateOf<String?>(null)
     private var desktopEnvironments by mutableStateOf<List<DesktopEnvironment>>(emptyList())
     private var desktopConfiguration by
         mutableStateOf(DesktopConfiguration(null, compositingEnabled = false, touchScaleEnabled = true))
@@ -177,7 +185,10 @@ class MainActivity : ComponentActivity() {
                     updateState = updateState,
                     installedRootfsName = installedRootfsName,
                     installedRootfses = installedRootfses,
+                    resettableRootfsNames = resettableRootfsNames,
                     selectedSystemRootfsName = selectedSystemRootfsName,
+                    rootfsMaintenanceName = rootfsMaintenanceName,
+                    rootfsMaintenanceMessage = rootfsMaintenanceMessage,
                     desktopEnvironments = desktopEnvironments,
                     desktopConfiguration = desktopConfiguration,
                     desktopScanLoading = desktopScanLoading,
@@ -207,6 +218,10 @@ class MainActivity : ComponentActivity() {
                     onOpenInstalledSystem = { openSystemDetails(it) },
                     onOpenRootfsTerminal = { openRootfsTerminal(it) },
                     onOpenRootfsApps = { openRootfsApps(it) },
+                    onResetRootfs = { rootfsName, fallback ->
+                        resetRootfs(rootfsName, fallback)
+                    },
+                    onDeleteRootfs = { deleteRootfs(it) },
                     onSelectDesktopEnvironment = { selectDesktopEnvironment(it) },
                     onCompositingChanged = { updateCompositing(it) },
                     onTouchScaleChanged = { updateTouchScale(it) },
@@ -346,6 +361,18 @@ class MainActivity : ComponentActivity() {
         updateState = app.updateState.current()
         installedRootfses = app.rootfsRegistry.all()
         installedRootfsName = app.rootfsRegistry.active()?.name
+        resettableRootfsNames =
+            installedRootfses
+                .mapNotNull { rootfs ->
+                    rootfs.name.takeIf {
+                        runCatching {
+                            app.rootfsInstallSources.loadOrRecover(
+                                installationName = rootfs.name,
+                                rootfs = rootfs.directory,
+                            )
+                        }.getOrNull() != null
+                    }
+                }.toSet()
         if (selectedSystemRootfsName !in installedRootfses.map(InstalledRootfs::name)) {
             selectedSystemRootfsName = installedRootfsName
         }
@@ -566,8 +593,163 @@ class MainActivity : ComponentActivity() {
     private fun openSystemDetails(rootfsName: String) {
         if (installedRootfses.none { it.name == rootfsName }) return
         selectedSystemRootfsName = rootfsName
+        rootfsMaintenanceMessage = null
         selectDestination(UdroidDestination.SYSTEM)
     }
+
+    private fun deleteRootfs(rootfsName: String) {
+        maintainRootfs(rootfsName, resetWork = null)
+    }
+
+    private fun resetRootfs(
+        rootfsName: String,
+        fallbackDistro: DistroVariant?,
+    ) {
+        val previousWork =
+            runCatching { app.rootfsInstallSources.load(rootfsName) }
+                .getOrNull()
+                ?: fallbackDistro
+                    ?.takeIf { it.internalName == rootfsName }
+                    ?.let {
+                        InstallerWorkRequest.Archive(
+                            distro = it,
+                            operationId = UUID.randomUUID().toString(),
+                        )
+                    }
+        if (previousWork == null) {
+            rootfsMaintenanceMessage =
+                "The original image source was not recorded for this legacy install. " +
+                "Delete it and install the image again."
+            return
+        }
+        maintainRootfs(
+            rootfsName = rootfsName,
+            resetWork = ResetInstallationSelection.initial(previousWork),
+        )
+    }
+
+    private fun maintainRootfs(
+        rootfsName: String,
+        resetWork: InstallProgress?,
+    ) {
+        rootfsMaintenanceBlockReason(rootfsName)?.let {
+            rootfsMaintenanceMessage = it
+            return
+        }
+        if (installedRootfses.none { it.name == rootfsName }) {
+            rootfsMaintenanceMessage = "Linux system $rootfsName is no longer installed"
+            return
+        }
+
+        rootfsMaintenanceName = rootfsName
+        rootfsMaintenanceMessage =
+            if (resetWork == null) {
+                "Deleting the Linux filesystem…"
+            } else {
+                "Removing the old filesystem before reinstalling…"
+            }
+        lifecycleScope.launch {
+            val deletion =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        app.rootfsRegistry.delete(rootfsName)
+                    }
+                }
+            if (deletion.isFailure) {
+                rootfsMaintenanceName = null
+                rootfsMaintenanceMessage =
+                    deletion.exceptionOrNull()?.message
+                        ?: "The Linux filesystem could not be removed"
+                return@launch
+            }
+
+            val cleanupWarnings = mutableListOf<String>()
+            runCatching { desktopConfigurationStore.remove(rootfsName) }
+                .exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "desktop settings" }
+            runCatching {
+                LinuxApplicationShortcutPublisher(this@MainActivity)
+                    .disableForRootfs(rootfsName)
+            }.exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
+
+            if (resetWork == null) {
+                runCatching { app.rootfsInstallSources.remove(rootfsName) }
+                    .exceptionOrNull()
+                    ?.let { cleanupWarnings += it.message ?: "install source" }
+                app.installState
+                    .current()
+                    ?.takeIf { it.installationName == rootfsName }
+                    ?.let { app.installState.clear() }
+            } else {
+                app.installState.clear()
+                app.rootfsInstallSources.save(resetWork.work)
+                installProgress = app.installState.save(resetWork)
+            }
+
+            app.journal.append(
+                component = "rootfs",
+                severity = if (cleanupWarnings.isEmpty()) "info" else "warning",
+                event = if (resetWork == null) "rootfs_deleted" else "rootfs_reset",
+                message =
+                    if (resetWork == null) {
+                        "Linux filesystem deleted"
+                    } else {
+                        "Linux filesystem removed; reinstall started"
+                    },
+                bootId = resetWork?.operationId ?: UUID.randomUUID().toString(),
+                fields =
+                    buildMap {
+                        put("installation", rootfsName)
+                        put("cleanup_warnings", cleanupWarnings.joinToString("; "))
+                    },
+            )
+
+            pendingLinuxApplication = null
+            pendingDesktopStart = null
+            pendingTerminalRootfsName = null
+            linuxApplicationsLoadGeneration++
+            desktopScanGeneration++
+            rootfsMaintenanceName = null
+            rootfsMaintenanceMessage = null
+            selectedSystemRootfsName = null
+            refreshFromDisk()
+            selectDestination(UdroidDestination.DISTROS)
+            if (resetWork != null) {
+                ensureNotificationPermission()
+                InstallerService.start(this@MainActivity, resetWork.work)
+            }
+        }
+    }
+
+    private fun rootfsMaintenanceBlockReason(rootfsName: String): String? =
+        when {
+            rootfsMaintenanceName != null ->
+                "Another filesystem operation is already running"
+            installProgress?.cancellable == true ->
+                "Wait for the current Linux installation to stop"
+            runtimeService?.currentTerminalSession()?.let {
+                it.isRunning && it.mSessionName == rootfsName
+            } == true ->
+                "Stop this Linux terminal before changing its filesystem"
+            snapshot.rootfsName == rootfsName &&
+                snapshot.phase in
+                setOf(
+                    RuntimePhase.STARTING,
+                    RuntimePhase.RUNNING,
+                    RuntimePhase.STOPPING,
+                ) ->
+                "Stop this Linux terminal before changing its filesystem"
+            snapshot.desktop.rootfsName == rootfsName &&
+                snapshot.desktop.phase in
+                setOf(
+                    DesktopSessionPhase.STARTING,
+                    DesktopSessionPhase.RUNNING,
+                    DesktopSessionPhase.STOPPING,
+                ) ->
+                "Stop this desktop session before changing its filesystem"
+            else -> null
+        }
 
     private fun loadDesktopEnvironments(rootfsName: String) {
         val generation = ++desktopScanGeneration

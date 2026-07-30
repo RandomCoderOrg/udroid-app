@@ -129,7 +129,10 @@ fun UdroidApp(
     updateState: AppUpdateState,
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
+    resettableRootfsNames: Set<String>,
     selectedSystemRootfsName: String?,
+    rootfsMaintenanceName: String?,
+    rootfsMaintenanceMessage: String?,
     desktopEnvironments: List<DesktopEnvironment>,
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
@@ -151,6 +154,8 @@ fun UdroidApp(
     onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
+    onResetRootfs: (String, DistroVariant?) -> Unit,
+    onDeleteRootfs: (String) -> Unit,
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
@@ -251,7 +256,10 @@ fun UdroidApp(
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
+                        resettableRootfsNames = resettableRootfsNames,
                         selectedSystemRootfsName = selectedSystemRootfsName,
+                        rootfsMaintenanceName = rootfsMaintenanceName,
+                        rootfsMaintenanceMessage = rootfsMaintenanceMessage,
                         desktopEnvironments = desktopEnvironments,
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
@@ -272,6 +280,8 @@ fun UdroidApp(
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onResetRootfs = onResetRootfs,
+                        onDeleteRootfs = onDeleteRootfs,
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
@@ -309,7 +319,10 @@ fun UdroidApp(
                         updateState = updateState,
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
+                        resettableRootfsNames = resettableRootfsNames,
                         selectedSystemRootfsName = selectedSystemRootfsName,
+                        rootfsMaintenanceName = rootfsMaintenanceName,
+                        rootfsMaintenanceMessage = rootfsMaintenanceMessage,
                         desktopEnvironments = desktopEnvironments,
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
@@ -330,6 +343,8 @@ fun UdroidApp(
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onResetRootfs = onResetRootfs,
+                        onDeleteRootfs = onDeleteRootfs,
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
@@ -381,7 +396,10 @@ private fun ManagementPane(
     updateState: AppUpdateState,
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
+    resettableRootfsNames: Set<String>,
     selectedSystemRootfsName: String?,
+    rootfsMaintenanceName: String?,
+    rootfsMaintenanceMessage: String?,
     desktopEnvironments: List<DesktopEnvironment>,
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
@@ -402,6 +420,8 @@ private fun ManagementPane(
     onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
+    onResetRootfs: (String, DistroVariant?) -> Unit,
+    onDeleteRootfs: (String) -> Unit,
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
@@ -530,6 +550,17 @@ private fun ManagementPane(
                                 configuration = desktopConfiguration,
                                 scanLoading = desktopScanLoading,
                                 scanMessage = desktopScanMessage,
+                                resetAvailable =
+                                    selectedRootfs.name in resettableRootfsNames ||
+                                        selectedDistro != null,
+                                maintenanceInProgress =
+                                    rootfsMaintenanceName == selectedRootfs.name,
+                                maintenanceMessage =
+                                    rootfsMaintenanceMessage
+                                        ?.takeIf {
+                                            rootfsMaintenanceName == null ||
+                                                rootfsMaintenanceName == selectedRootfs.name
+                                        },
                                 onBack = {
                                     onDestinationSelected(UdroidDestination.DISTROS)
                                 },
@@ -548,6 +579,12 @@ private fun ManagementPane(
                                 onStartDesktop = onStartDesktop,
                                 onStopDesktop = onStopDesktop,
                                 onRestartDesktop = onRestartDesktop,
+                                onResetFilesystem = {
+                                    onResetRootfs(selectedRootfs.name, selectedDistro)
+                                },
+                                onDeleteFilesystem = {
+                                    onDeleteRootfs(selectedRootfs.name)
+                                },
                             )
                         }
                     }
