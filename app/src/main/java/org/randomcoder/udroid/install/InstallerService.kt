@@ -384,6 +384,7 @@ class InstallerService : Service() {
                     onEvent = progress::publish,
                 )
             app.rootfsRegistry.setActiveIfNone(result.rootfs.name)
+            rememberInstallSource(work)
             progress.complete(result.reusedInstallation)
             app.journal.append(
                 component = "installer",
@@ -508,6 +509,7 @@ class InstallerService : Service() {
         val distro = work.distro
         val operationId = work.operationId
         app.rootfsRegistry.setActiveIfNone(rootfs.name)
+        rememberInstallSource(work)
         val previous = app.installState.current()
         val completed =
             InstallProgress(
@@ -542,6 +544,22 @@ class InstallerService : Service() {
                 ),
         )
         updateNotification("Linux system is ready", 100)
+    }
+
+    private fun rememberInstallSource(work: InstallerWorkRequest) {
+        runCatching { app.rootfsInstallSources.save(work) }
+            .onFailure { error ->
+                app.journal.append(
+                    component = "installer",
+                    severity = "warning",
+                    event = "install_source_not_saved",
+                    message =
+                        error.message
+                            ?: "The install source could not be remembered for reset",
+                    bootId = work.operationId,
+                    fields = mapOf("installation" to work.installationName),
+                )
+            }
     }
 
     private fun pauseDetail(previous: InstallProgress?): String =

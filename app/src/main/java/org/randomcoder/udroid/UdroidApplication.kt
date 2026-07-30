@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallStateStore
+import org.randomcoder.udroid.install.InstalledRootfsSourceStore
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.InstalledRootfsRegistry
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
@@ -22,6 +23,9 @@ class UdroidApplication : Application() {
     lateinit var installState: InstallStateStore
         private set
 
+    lateinit var rootfsInstallSources: InstalledRootfsSourceStore
+        private set
+
     lateinit var updateState: AppUpdateStateStore
         private set
 
@@ -33,6 +37,7 @@ class UdroidApplication : Application() {
         runtimeState = RuntimeStateStore(this)
         journal = EventJournal(this)
         installState = InstallStateStore(this)
+        rootfsInstallSources = InstalledRootfsSourceStore(this)
         updateState = AppUpdateStateStore(this)
         rootfsRegistry = InstalledRootfsRegistry(this)
         if (!isMainProcess()) return

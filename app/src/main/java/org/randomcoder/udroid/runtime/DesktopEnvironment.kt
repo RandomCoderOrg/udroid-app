@@ -118,6 +118,17 @@ class DesktopConfigurationStore(context: Context) {
         return configuration
     }
 
+    fun remove(rootfsName: String) {
+        val prefix = "$rootfsName:"
+        val editor = preferences.edit()
+        preferences.all.keys
+            .filter { it.startsWith(prefix) }
+            .forEach(editor::remove)
+        check(editor.commit()) {
+            "Could not clear desktop settings for $rootfsName"
+        }
+    }
+
     private fun key(
         rootfsName: String,
         setting: String,

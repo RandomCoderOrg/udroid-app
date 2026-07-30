@@ -2,6 +2,7 @@ package org.randomcoder.udroid.linuxapps
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ShortcutManager
 import android.graphics.BitmapFactory
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -35,6 +36,23 @@ class LinuxApplicationShortcutPublisher(
                 dynamicPublished = dynamicPublished,
             )
         }
+
+    fun disableForRootfs(rootfsName: String) {
+        val manager = context.getSystemService(ShortcutManager::class.java) ?: return
+        val shortcutIds =
+            (manager.dynamicShortcuts + manager.pinnedShortcuts)
+                .asSequence()
+                .map { it.id }
+                .filter { LinuxApplicationShortcutContract.belongsToRootfs(it, rootfsName) }
+                .distinct()
+                .toList()
+        if (shortcutIds.isEmpty()) return
+        manager.disableShortcuts(
+            shortcutIds,
+            "The Linux system for this shortcut was removed",
+        )
+        manager.removeDynamicShortcuts(shortcutIds)
+    }
 
     private fun buildShortcut(
         application: LinuxApplication,
@@ -83,6 +101,11 @@ object LinuxApplicationShortcutContract {
         "org.randomcoder.udroid.extra.ROOTFS_NAME"
 
     private const val SHORTCUT_ID_PREFIX = "linux-application:"
+
+    fun belongsToRootfs(
+        shortcutId: String,
+        rootfsName: String,
+    ): Boolean = shortcutId.startsWith("$SHORTCUT_ID_PREFIX$rootfsName:")
 
     fun shortcutId(
         rootfsName: String,

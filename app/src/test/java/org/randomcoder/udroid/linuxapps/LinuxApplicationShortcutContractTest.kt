@@ -1,7 +1,9 @@
 package org.randomcoder.udroid.linuxapps
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LinuxApplicationShortcutContractTest {
@@ -24,5 +26,27 @@ class LinuxApplicationShortcutContractTest {
         assertThrows(IllegalArgumentException::class.java) {
             LinuxApplicationShortcutContract.shortcutId(" ", "org.blender.Blender")
         }
+    }
+
+    @Test
+    fun matchesOnlyShortcutsOwnedByTheSelectedRootfs() {
+        val shortcut =
+            LinuxApplicationShortcutContract.shortcutId(
+                "oci-alpine-3.22",
+                "org.example.Editor",
+            )
+
+        assertTrue(
+            LinuxApplicationShortcutContract.belongsToRootfs(
+                shortcut,
+                "oci-alpine-3.22",
+            ),
+        )
+        assertFalse(
+            LinuxApplicationShortcutContract.belongsToRootfs(
+                shortcut,
+                "oci-alpine",
+            ),
+        )
     }
 }

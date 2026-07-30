@@ -67,6 +67,19 @@ class InstalledRootfsRegistry(context: Context) {
             setActive(name).directory
         }
 
+    @Synchronized
+    fun delete(name: String) {
+        val installed =
+            all().firstOrNull { it.name == name }
+                ?: error("Linux system $name is not installed or is not ready")
+        RootfsTreeDeleter.delete(rootfsDirectory.toPath(), installed.name)
+        if (preferences.getString(KEY_ACTIVE_ROOTFS, null) == installed.name) {
+            check(preferences.edit().remove(KEY_ACTIVE_ROOTFS).commit()) {
+                "Failed to clear the active Linux system"
+            }
+        }
+    }
+
     private fun persistActive(name: String) {
         check(preferences.edit().putString(KEY_ACTIVE_ROOTFS, name).commit()) {
             "Failed to save the active Linux system"
