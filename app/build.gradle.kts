@@ -38,8 +38,8 @@ android {
         // following the execution bridge merged into official termux-exec.
         targetSdk = 36
 
-        versionCode = 8
-        versionName = "0.0.8"
+        versionCode = 9
+        versionName = "0.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
