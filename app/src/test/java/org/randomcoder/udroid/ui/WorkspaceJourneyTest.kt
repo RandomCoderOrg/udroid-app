@@ -45,6 +45,7 @@ class WorkspaceJourneyTest {
         assertTrue(journey.destinations.contains(UdroidDestination.TERMINAL))
         assertTrue(journey.destinations.contains(UdroidDestination.APPS))
         assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
+        assertFalse(journey.destinations.contains(UdroidDestination.INSTALL))
         assertFalse(journey.destinations.contains(UdroidDestination.DESKTOP))
     }
 
@@ -101,5 +102,57 @@ class WorkspaceJourneyTest {
 
         assertEquals(WorkspaceStage.SETTING_UP, journey.stage)
         assertEquals(UdroidDestination.HOME, journey.destination)
+    }
+
+    @Test
+    fun `installation is a nested route and never a navigation tab`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.INSTALL,
+                hasInstalledLinux = true,
+                hasInstallation = true,
+                compactNavigation = true,
+            )
+
+        assertEquals(UdroidDestination.INSTALL, journey.destination)
+        assertFalse(journey.destinations.contains(UdroidDestination.INSTALL))
+        assertTrue(journey.destinations.contains(UdroidDestination.DISTROS))
+    }
+
+    @Test
+    fun `stale installation route returns to the Linux catalogue`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.INSTALL,
+                hasInstalledLinux = true,
+                hasInstallation = false,
+                compactNavigation = true,
+            )
+
+        assertEquals(UdroidDestination.DISTROS, journey.destination)
+    }
+
+    @Test
+    fun `nested Linux pages use directional motion`() {
+        assertEquals(
+            NavigationMotion.FORWARD,
+            navigationMotion(UdroidDestination.DISTROS, UdroidDestination.SYSTEM),
+        )
+        assertEquals(
+            NavigationMotion.FORWARD,
+            navigationMotion(UdroidDestination.DISTROS, UdroidDestination.INSTALL),
+        )
+        assertEquals(
+            NavigationMotion.BACK,
+            navigationMotion(UdroidDestination.SYSTEM, UdroidDestination.DISTROS),
+        )
+    }
+
+    @Test
+    fun `top level destinations use a compact fade`() {
+        assertEquals(
+            NavigationMotion.FADE,
+            navigationMotion(UdroidDestination.HOME, UdroidDestination.DISTROS),
+        )
     }
 }

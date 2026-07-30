@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +66,8 @@ fun InteractiveTerminalPage(
     onExit: () -> Unit,
 ) {
     val session = service?.currentTerminalSession()
+    var stopRequested by remember(session) { mutableStateOf(false) }
+    val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
     Column(
         modifier =
             modifier
@@ -74,11 +77,20 @@ fun InteractiveTerminalPage(
         TerminalSessionBar(
             snapshot = snapshot,
             session = session,
+            stopping = stopping,
             onExit = onExit,
-            onStop = onStop,
+            onStop = {
+                stopRequested = true
+                onStop()
+            },
         )
 
-        if (session == null || !session.isRunning) {
+        if (stopping) {
+            StoppingTerminalState(
+                modifier = Modifier.weight(1f),
+                snapshot = snapshot,
+            )
+        } else if (session == null || !session.isRunning) {
             EmptyTerminalState(
                 modifier = Modifier.weight(1f),
                 snapshot = snapshot,
@@ -98,10 +110,11 @@ fun InteractiveTerminalPage(
 private fun TerminalSessionBar(
     snapshot: RuntimeSnapshot,
     session: TerminalSession?,
+    stopping: Boolean,
     onExit: () -> Unit,
     onStop: () -> Unit,
 ) {
-    val running = session?.isRunning == true
+    val running = session?.isRunning == true && !stopping
     Row(
         modifier =
             Modifier
@@ -146,10 +159,10 @@ private fun TerminalSessionBar(
                         maxLines = 1,
                     )
                     Text(
-                        if (running) {
-                            "root  •  aarch64  •  PID ${session?.pid}"
-                        } else {
-                            snapshot.message
+                        when {
+                            stopping -> "Stopping terminal…"
+                            running -> "root  •  aarch64  •  PID ${session?.pid}"
+                            else -> snapshot.message
                         },
                         color = UdroidTerminalMuted,
                         style = MaterialTheme.typography.labelSmall,
@@ -158,7 +171,18 @@ private fun TerminalSessionBar(
                 }
             }
         }
-        if (running) {
+        if (stopping) {
+            Box(
+                modifier = Modifier.size(48.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = UdroidTerminalGreen,
+                    strokeWidth = 2.dp,
+                )
+            }
+        } else if (running) {
             IconButton(onClick = onStop) {
                 Icon(
                     imageVector = Icons.Filled.StopCircle,
@@ -168,6 +192,44 @@ private fun TerminalSessionBar(
             }
         } else {
             Spacer(Modifier.width(48.dp))
+        }
+    }
+}
+
+@Composable
+private fun StoppingTerminalState(
+    modifier: Modifier = Modifier,
+    snapshot: RuntimeSnapshot,
+) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(UdroidTerminal),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(38.dp),
+                color = UdroidTerminalGreen,
+                strokeWidth = 3.dp,
+            )
+            Spacer(Modifier.height(18.dp))
+            Text(
+                "Stopping terminal…",
+                color = UdroidTerminalText,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(7.dp))
+            Text(
+                snapshot.message.takeIf { snapshot.phase == RuntimePhase.STOPPING }
+                    ?: "Waiting for the supervised Linux process to exit.",
+                color = UdroidTerminalMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

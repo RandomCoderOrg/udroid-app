@@ -198,6 +198,7 @@ class MainActivity : ComponentActivity() {
                     showInstallTerminal = showInstallTerminal,
                     runtimeService = runtimeService,
                     onDestinationSelected = ::selectDestination,
+                    onPrimaryDestinationSelected = ::selectPrimaryDestination,
                     onStart = {
                         ensureNotificationPermission()
                         RuntimeSupervisorService.start(this, installedRootfsName)
@@ -234,7 +235,9 @@ class MainActivity : ComponentActivity() {
                         showInstallTerminal = !showInstallTerminal
                     },
                     onCloseInstall = {
-                        if (installProgress?.cancellable != true) {
+                        if (installProgress?.cancellable == true) {
+                            selectDestination(UdroidDestination.DISTROS)
+                        } else {
                             val completed = installProgress?.stage == InstallStage.COMPLETE
                             app.installState.clear()
                             installProgress = null
@@ -242,6 +245,8 @@ class MainActivity : ComponentActivity() {
                             if (completed) {
                                 closeOciRepository()
                                 selectDestination(UdroidDestination.HOME)
+                            } else {
+                                selectDestination(UdroidDestination.DISTROS)
                             }
                         }
                     },
@@ -325,6 +330,13 @@ class MainActivity : ComponentActivity() {
         if (resolvedDestination == UdroidDestination.SYSTEM) {
             selectedSystemRootfsName?.let(::loadDesktopEnvironments)
         }
+    }
+
+    private fun selectPrimaryDestination(destination: UdroidDestination) {
+        if (destination == UdroidDestination.DISTROS) {
+            closeOciRepository()
+        }
+        selectDestination(destination)
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
@@ -480,9 +492,9 @@ class MainActivity : ComponentActivity() {
             openSystemDetails(distro.internalName)
             return
         }
-        selectDestination(UdroidDestination.DISTROS)
         showInstallTerminal = false
         installProgress = app.installState.save(InstallationSelection.initial(distro))
+        selectDestination(UdroidDestination.INSTALL)
     }
 
     private fun selectOciRepository(
@@ -548,7 +560,6 @@ class MainActivity : ComponentActivity() {
                     "arm" -> "armhf"
                     else -> tag.platform.architecture
                 }
-        selectDestination(UdroidDestination.DISTROS)
         showInstallTerminal = false
         installProgress =
             app.installState.save(
@@ -558,6 +569,7 @@ class MainActivity : ComponentActivity() {
                     displayArchitecture = displayArchitecture,
                 ),
             )
+        selectDestination(UdroidDestination.INSTALL)
     }
 
     private fun startSelectedDownload() {
@@ -714,10 +726,12 @@ class MainActivity : ComponentActivity() {
             rootfsMaintenanceMessage = null
             selectedSystemRootfsName = null
             refreshFromDisk()
-            selectDestination(UdroidDestination.DISTROS)
             if (resetWork != null) {
+                selectDestination(UdroidDestination.INSTALL)
                 ensureNotificationPermission()
                 InstallerService.start(this@MainActivity, resetWork.work)
+            } else {
+                selectDestination(UdroidDestination.DISTROS)
             }
         }
     }

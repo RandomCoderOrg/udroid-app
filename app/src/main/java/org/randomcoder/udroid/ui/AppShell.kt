@@ -5,6 +5,14 @@ import android.content.ClipboardManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -107,6 +115,7 @@ enum class UdroidDestination(
 ) {
     HOME("Home", Icons.Outlined.Home, Icons.Filled.Home),
     DISTROS("Linux", Icons.Outlined.Storage, Icons.Filled.Storage),
+    INSTALL("Install", Icons.Outlined.Storage, Icons.Filled.Storage),
     SYSTEM("System", Icons.Outlined.Storage, Icons.Filled.Storage),
     TERMINAL("Terminal", Icons.Outlined.Terminal, Icons.Filled.Terminal),
     APPS("Apps", Icons.Outlined.Apps, Icons.Filled.Apps),
@@ -114,6 +123,34 @@ enum class UdroidDestination(
     DEVICE("Device", Icons.Outlined.Memory, Icons.Filled.Memory),
     ABOUT("About", Icons.Outlined.Info, Icons.Filled.Info),
 }
+
+internal enum class NavigationMotion {
+    FORWARD,
+    BACK,
+    FADE,
+}
+
+internal fun navigationMotion(
+    initial: UdroidDestination,
+    target: UdroidDestination,
+): NavigationMotion {
+    val initialDepth = initial.navigationDepth
+    val targetDepth = target.navigationDepth
+    return when {
+        targetDepth > initialDepth -> NavigationMotion.FORWARD
+        targetDepth < initialDepth -> NavigationMotion.BACK
+        else -> NavigationMotion.FADE
+    }
+}
+
+private val UdroidDestination.navigationDepth: Int
+    get() =
+        when (this) {
+            UdroidDestination.INSTALL,
+            UdroidDestination.SYSTEM,
+            -> 1
+            else -> 0
+        }
 
 @Composable
 fun UdroidApp(
@@ -142,6 +179,7 @@ fun UdroidApp(
     showInstallTerminal: Boolean,
     runtimeService: RuntimeSupervisorService?,
     onDestinationSelected: (UdroidDestination) -> Unit,
+    onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRefresh: () -> Unit,
@@ -185,6 +223,13 @@ fun UdroidApp(
             compactNavigation = false,
         )
     val activeDestination = requestedJourney.destination
+    val navigationDestination =
+        when (activeDestination) {
+            UdroidDestination.INSTALL,
+            UdroidDestination.SYSTEM,
+            -> UdroidDestination.DISTROS
+            else -> activeDestination
+        }
 
     if (activeDestination == UdroidDestination.DESKTOP) {
         DesktopPage(
@@ -234,9 +279,9 @@ fun UdroidApp(
             if (useRail) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     WorkspaceNavigationRail(
-                        selected = activeDestination,
+                        selected = navigationDestination,
                         destinations = requestedJourney.destinations,
-                        onSelected = onDestinationSelected,
+                        onSelected = onPrimaryDestinationSelected,
                     )
                     Divider(
                         modifier = Modifier.fillMaxHeight().width(1.dp),
@@ -268,6 +313,7 @@ fun UdroidApp(
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
                         onDestinationSelected = onDestinationSelected,
+                        onPrimaryDestinationSelected = onPrimaryDestinationSelected,
                         onStart = onStart,
                         onStop = onStop,
                         onRefresh = onRefresh,
@@ -331,6 +377,7 @@ fun UdroidApp(
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
                         onDestinationSelected = onDestinationSelected,
+                        onPrimaryDestinationSelected = onPrimaryDestinationSelected,
                         onStart = onStart,
                         onStop = onStop,
                         onRefresh = onRefresh,
@@ -366,7 +413,7 @@ fun UdroidApp(
                         onOpenUpdateRelease = onOpenUpdateRelease,
                     )
                     WorkspaceNavigationBar(
-                        selected = activeDestination,
+                        selected = navigationDestination,
                         destinations =
                             workspaceJourney(
                                 requestedDestination = activeDestination,
@@ -374,7 +421,7 @@ fun UdroidApp(
                                 hasInstallation = installProgress != null,
                                 compactNavigation = true,
                             ).destinations,
-                        onSelected = onDestinationSelected,
+                        onSelected = onPrimaryDestinationSelected,
                     )
                 }
             }
@@ -408,6 +455,7 @@ private fun ManagementPane(
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
     onDestinationSelected: (UdroidDestination) -> Unit,
+    onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onRefresh: () -> Unit,
@@ -461,7 +509,73 @@ private fun ManagementPane(
                         .fillMaxSize()
                         .widthIn(max = 900.dp),
             ) {
-                when (destination) {
+                AnimatedContent(
+                    targetState = destination,
+                    transitionSpec = {
+                        when (navigationMotion(initialState, targetState)) {
+                            NavigationMotion.FORWARD ->
+                                (
+                                    slideInHorizontally(
+                                        animationSpec =
+                                            tween(
+                                                durationMillis = 190,
+                                                easing = FastOutSlowInEasing,
+                                            ),
+                                        initialOffsetX = { width -> width / 10 },
+                                    ) +
+                                        fadeIn(
+                                            animationSpec =
+                                                tween(
+                                                    durationMillis = 150,
+                                                    delayMillis = 25,
+                                                ),
+                                        )
+                                ).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 150),
+                                        targetOffsetX = { width -> -width / 24 },
+                                    ) +
+                                        fadeOut(animationSpec = tween(durationMillis = 110)),
+                                )
+                            NavigationMotion.BACK ->
+                                (
+                                    slideInHorizontally(
+                                        animationSpec =
+                                            tween(
+                                                durationMillis = 190,
+                                                easing = FastOutSlowInEasing,
+                                            ),
+                                        initialOffsetX = { width -> -width / 10 },
+                                    ) +
+                                        fadeIn(
+                                            animationSpec =
+                                                tween(
+                                                    durationMillis = 150,
+                                                    delayMillis = 25,
+                                                ),
+                                        )
+                                ).togetherWith(
+                                    slideOutHorizontally(
+                                        animationSpec = tween(durationMillis = 150),
+                                        targetOffsetX = { width -> width / 24 },
+                                    ) +
+                                        fadeOut(animationSpec = tween(durationMillis = 110)),
+                                )
+                            NavigationMotion.FADE ->
+                                fadeIn(
+                                    animationSpec =
+                                        tween(
+                                            durationMillis = 150,
+                                            delayMillis = 35,
+                                        ),
+                                ).togetherWith(
+                                    fadeOut(animationSpec = tween(durationMillis = 100)),
+                                )
+                        }
+                    },
+                    label = "workspace-page",
+                ) { animatedDestination ->
+                    when (animatedDestination) {
                     UdroidDestination.HOME -> {
                         val installedDistro =
                             (catalogueState as? DistroCatalogState.Ready)
@@ -479,8 +593,7 @@ private fun ManagementPane(
                                 onDestinationSelected(UdroidDestination.TERMINAL)
                             },
                             onOpenLinux = {
-                                installedRootfsName?.let(onOpenInstalledSystem)
-                                    ?: onDestinationSelected(UdroidDestination.DISTROS)
+                                onPrimaryDestinationSelected(UdroidDestination.DISTROS)
                             },
                             onOpenDevice = {
                                 onDestinationSelected(UdroidDestination.DEVICE)
@@ -497,20 +610,7 @@ private fun ManagementPane(
                         )
                     }
                     UdroidDestination.DISTROS ->
-                        installProgress?.let {
-                            InstallExperiencePage(
-                                progress = it,
-                                showTerminal = showInstallTerminal,
-                                onToggleTerminal = onToggleInstallTerminal,
-                                onBack = onCloseInstall,
-                                onOpenTerminal = {
-                                    onOpenRootfsTerminal(it.installationName)
-                                },
-                                onStartDownload = onStartDownload,
-                                onPauseDownload = onPauseDownload,
-                                onRetryDownload = onRetryDownload,
-                            )
-                        } ?: selectedOciRepository?.let { repository ->
+                        selectedOciRepository?.let { repository ->
                             OciTagCataloguePage(
                                 repository = repository,
                                 state = ociTagsState,
@@ -529,6 +629,21 @@ private fun ManagementPane(
                             onSelectOciRepository = onSelectOciRepository,
                             onOpenInstalledSystem = onOpenInstalledSystem,
                         )
+                    UdroidDestination.INSTALL ->
+                        installProgress?.let {
+                            InstallExperiencePage(
+                                progress = it,
+                                showTerminal = showInstallTerminal,
+                                onToggleTerminal = onToggleInstallTerminal,
+                                onBack = onCloseInstall,
+                                onOpenTerminal = {
+                                    onOpenRootfsTerminal(it.installationName)
+                                },
+                                onStartDownload = onStartDownload,
+                                onPauseDownload = onPauseDownload,
+                                onRetryDownload = onRetryDownload,
+                            )
+                        }
                     UdroidDestination.SYSTEM -> {
                         val rootfsName = selectedSystemRootfsName ?: installedRootfsName
                         val selectedRootfs =
@@ -618,6 +733,7 @@ private fun ManagementPane(
                         )
                     UdroidDestination.TERMINAL -> Unit
                     UdroidDestination.DESKTOP -> Unit
+                    }
                 }
             }
         }

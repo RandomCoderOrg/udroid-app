@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -590,6 +591,7 @@ fun OciTagCataloguePage(
     onRetry: () -> Unit,
     onSelectTag: (OciHubTagPlatform) -> Unit,
 ) {
+    BackHandler(onBack = onBack)
     val title = OciInstallationSelection.displayName(repository)
     val installedNames =
         remember(installedRootfses) {
@@ -852,6 +854,7 @@ fun InstallExperiencePage(
     onPauseDownload: () -> Unit,
     onRetryDownload: () -> Unit,
 ) {
+    BackHandler(onBack = onBack)
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier =
