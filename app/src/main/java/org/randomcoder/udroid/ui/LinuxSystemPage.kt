@@ -86,6 +86,7 @@ fun LinuxSystemPage(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
+    onStopTerminal: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
     onResetFilesystem: () -> Unit,
@@ -407,6 +408,39 @@ fun LinuxSystemPage(
                                     .size(22.dp),
                             strokeWidth = 2.dp,
                         )
+                    } else if (runtimeBlocksMaintenance || desktopBlocksMaintenance) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (runtimeBlocksMaintenance) {
+                                OutlinedButton(
+                                    modifier = Modifier.weight(1f),
+                                    onClick = onStopTerminal,
+                                ) {
+                                    Icon(Icons.Outlined.Stop, contentDescription = null)
+                                    Text(
+                                        "Stop terminal",
+                                        modifier = Modifier.padding(start = 6.dp),
+                                    )
+                                }
+                            }
+                            if (desktopBlocksMaintenance) {
+                                OutlinedButton(
+                                    modifier = Modifier.weight(1f),
+                                    onClick = onStopDesktop,
+                                ) {
+                                    Icon(Icons.Outlined.Stop, contentDescription = null)
+                                    Text(
+                                        "Stop desktop",
+                                        modifier = Modifier.padding(start = 6.dp),
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         Row(
                             modifier =

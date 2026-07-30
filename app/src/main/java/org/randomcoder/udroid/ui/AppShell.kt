@@ -577,6 +577,7 @@ private fun ManagementPane(
                                 onCompositingChanged = onCompositingChanged,
                                 onTouchScaleChanged = onTouchScaleChanged,
                                 onStartDesktop = onStartDesktop,
+                                onStopTerminal = onStop,
                                 onStopDesktop = onStopDesktop,
                                 onRestartDesktop = onRestartDesktop,
                                 onResetFilesystem = {
