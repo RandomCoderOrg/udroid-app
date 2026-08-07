@@ -89,6 +89,7 @@ import org.json.JSONObject
 import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
@@ -174,6 +175,8 @@ fun UdroidApp(
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
     desktopScanMessage: String?,
+    audioConfiguration: AudioConfiguration,
+    audioConfigurationMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -197,6 +200,8 @@ fun UdroidApp(
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onAudioOutputChanged: (Boolean) -> Unit,
+    onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
@@ -309,6 +314,8 @@ fun UdroidApp(
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
                         desktopScanMessage = desktopScanMessage,
+                        audioConfiguration = audioConfiguration,
+                        audioConfigurationMessage = audioConfigurationMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -331,6 +338,8 @@ fun UdroidApp(
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
+                        onAudioOutputChanged = onAudioOutputChanged,
+                        onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
                         onStopDesktop = onStopDesktop,
                         onRestartDesktop = onRestartDesktop,
@@ -373,6 +382,8 @@ fun UdroidApp(
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
                         desktopScanMessage = desktopScanMessage,
+                        audioConfiguration = audioConfiguration,
+                        audioConfigurationMessage = audioConfigurationMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -395,6 +406,8 @@ fun UdroidApp(
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
+                        onAudioOutputChanged = onAudioOutputChanged,
+                        onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
                         onStopDesktop = onStopDesktop,
                         onRestartDesktop = onRestartDesktop,
@@ -451,6 +464,8 @@ private fun ManagementPane(
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
     desktopScanMessage: String?,
+    audioConfiguration: AudioConfiguration,
+    audioConfigurationMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -473,6 +488,8 @@ private fun ManagementPane(
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onAudioOutputChanged: (Boolean) -> Unit,
+    onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
@@ -665,6 +682,8 @@ private fun ManagementPane(
                                 configuration = desktopConfiguration,
                                 scanLoading = desktopScanLoading,
                                 scanMessage = desktopScanMessage,
+                                audioConfiguration = audioConfiguration,
+                                audioConfigurationMessage = audioConfigurationMessage,
                                 resetAvailable =
                                     selectedRootfs.name in resettableRootfsNames ||
                                         selectedDistro != null,
@@ -691,6 +710,8 @@ private fun ManagementPane(
                                 onSelectEnvironment = onSelectDesktopEnvironment,
                                 onCompositingChanged = onCompositingChanged,
                                 onTouchScaleChanged = onTouchScaleChanged,
+                                onAudioOutputChanged = onAudioOutputChanged,
+                                onMicrophoneChanged = onMicrophoneChanged,
                                 onStartDesktop = onStartDesktop,
                                 onStopTerminal = onStop,
                                 onStopDesktop = onStopDesktop,

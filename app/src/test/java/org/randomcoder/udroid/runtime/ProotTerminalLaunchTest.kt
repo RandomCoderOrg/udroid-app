@@ -102,6 +102,33 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `authenticated loopback audio is exported to the guest`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                audioAuthDirectory = "/data/user/0/udroid/files/audio/transport",
+            )
+
+        assertTrue(
+            arguments
+                .toList()
+                .windowed(2)
+                .contains(
+                    listOf(
+                        "-b",
+                        "/data/user/0/udroid/files/audio/transport:/tmp/.udroid-pulse",
+                    ),
+                ),
+        )
+        assertTrue("PULSE_SERVER=tcp:127.0.0.1:4713" in arguments)
+        assertTrue("PULSE_COOKIE=/tmp/.udroid-pulse/cookie" in arguments)
+    }
+
+    @Test
     fun `proot loader and temporary storage stay app private`() {
         val environment =
             ProotTerminalLaunchBuilder.buildEnvironment(

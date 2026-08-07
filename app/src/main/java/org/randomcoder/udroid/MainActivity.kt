@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,6 +26,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.randomcoder.udroid.audio.AudioConfiguration
+import org.randomcoder.udroid.audio.AudioConfigurationStore
 import org.randomcoder.udroid.catalog.DistroCatalogRepository
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
@@ -111,6 +114,8 @@ class MainActivity : ComponentActivity() {
         mutableStateOf(DesktopConfiguration(null, compositingEnabled = false, touchScaleEnabled = true))
     private var desktopScanLoading by mutableStateOf(false)
     private var desktopScanMessage by mutableStateOf<String?>(null)
+    private var audioConfiguration by mutableStateOf(AudioConfiguration())
+    private var audioConfigurationMessage by mutableStateOf<String?>(null)
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
@@ -119,6 +124,7 @@ class MainActivity : ComponentActivity() {
     private var pendingDesktopStart: PendingDesktopStart? = null
     private var pendingShortcutRootfsName: String? = null
     private var pendingTerminalRootfsName: String? = null
+    private var pendingMicrophoneRootfsName: String? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
     private var ociCatalogueLoadGeneration = 0L
@@ -128,8 +134,32 @@ class MainActivity : ComponentActivity() {
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
     private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
+    private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
     private val ociHubCatalogueRepository by lazy { OciHubCatalogRepository(this) }
     private val ociHubTagRepository by lazy { OciHubTagRepository(this) }
+
+    private val microphonePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val rootfsName = pendingMicrophoneRootfsName
+            pendingMicrophoneRootfsName = null
+            if (rootfsName == null) return@registerForActivityResult
+            if (granted) {
+                val current = audioConfigurationStore.load(rootfsName)
+                saveAudioConfiguration(
+                    rootfsName,
+                    current.copy(microphoneEnabled = true),
+                )
+            } else {
+                if (selectedSystemRootfsName == rootfsName) {
+                    audioConfiguration =
+                        audioConfigurationStore
+                            .load(rootfsName)
+                            .copy(microphoneEnabled = false)
+                    audioConfigurationMessage =
+                        "Microphone access was not granted. Linux input remains off."
+                }
+            }
+        }
 
     private val runtimeServiceConnection =
         object : ServiceConnection {
@@ -193,6 +223,8 @@ class MainActivity : ComponentActivity() {
                     desktopConfiguration = desktopConfiguration,
                     desktopScanLoading = desktopScanLoading,
                     desktopScanMessage = desktopScanMessage,
+                    audioConfiguration = audioConfiguration,
+                    audioConfigurationMessage = audioConfigurationMessage,
                     linuxApplicationsState = linuxApplicationsState,
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
@@ -226,6 +258,8 @@ class MainActivity : ComponentActivity() {
                     onSelectDesktopEnvironment = { selectDesktopEnvironment(it) },
                     onCompositingChanged = { updateCompositing(it) },
                     onTouchScaleChanged = { updateTouchScale(it) },
+                    onAudioOutputChanged = { updateAudioOutput(it) },
+                    onMicrophoneChanged = { updateMicrophone(it) },
                     onStartDesktop = { startSelectedDesktop() },
                     onStopDesktop = { runtimeService?.stopDesktop() },
                     onRestartDesktop = { restartSelectedDesktop() },
@@ -606,6 +640,7 @@ class MainActivity : ComponentActivity() {
         if (installedRootfses.none { it.name == rootfsName }) return
         selectedSystemRootfsName = rootfsName
         rootfsMaintenanceMessage = null
+        loadAudioConfiguration(rootfsName)
         selectDestination(UdroidDestination.SYSTEM)
     }
 
@@ -679,6 +714,9 @@ class MainActivity : ComponentActivity() {
             runCatching { desktopConfigurationStore.remove(rootfsName) }
                 .exceptionOrNull()
                 ?.let { cleanupWarnings += it.message ?: "desktop settings" }
+            runCatching { audioConfigurationStore.remove(rootfsName) }
+                .exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "audio settings" }
             runCatching {
                 LinuxApplicationShortcutPublisher(this@MainActivity)
                     .disableForRootfs(rootfsName)
@@ -848,6 +886,86 @@ class MainActivity : ComponentActivity() {
             rootfsName,
             desktopConfiguration.copy(touchScaleEnabled = enabled),
         )
+    }
+
+    private fun loadAudioConfiguration(rootfsName: String) {
+        runCatching { audioConfigurationStore.load(rootfsName) }
+            .onSuccess {
+                audioConfiguration = it
+                audioConfigurationMessage = null
+            }.onFailure {
+                audioConfiguration = AudioConfiguration()
+                audioConfigurationMessage = it.message ?: "Could not load audio settings"
+            }
+    }
+
+    private fun updateAudioOutput(enabled: Boolean) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        saveAudioConfiguration(
+            rootfsName,
+            audioConfiguration.copy(outputEnabled = enabled),
+        )
+    }
+
+    private fun updateMicrophone(enabled: Boolean) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        if (!enabled) {
+            pendingMicrophoneRootfsName = null
+            saveAudioConfiguration(
+                rootfsName,
+                audioConfiguration.copy(microphoneEnabled = false),
+            )
+            return
+        }
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            saveAudioConfiguration(
+                rootfsName,
+                audioConfiguration.copy(microphoneEnabled = true),
+            )
+            return
+        }
+        pendingMicrophoneRootfsName = rootfsName
+        audioConfigurationMessage = "Allow microphone access to send input to Linux."
+        microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    private fun saveAudioConfiguration(
+        rootfsName: String,
+        configuration: AudioConfiguration,
+    ) {
+        runCatching { audioConfigurationStore.save(rootfsName, configuration) }
+            .onSuccess { saved ->
+                val service = runtimeService
+                val runningThisRootfs =
+                    service?.currentTerminalSession()?.isRunning == true &&
+                        service.currentTerminalSession()?.mSessionName == rootfsName
+                if (selectedSystemRootfsName == rootfsName) {
+                    audioConfiguration = saved
+                    audioConfigurationMessage =
+                        if (runningThisRootfs) {
+                            "Applying audio settings to the running Linux system…"
+                        } else {
+                            "Audio settings will apply when this Linux system starts."
+                        }
+                }
+                if (runningThisRootfs) {
+                    service.applyAudioConfiguration(rootfsName, saved) { result ->
+                        if (selectedSystemRootfsName != rootfsName) return@applyAudioConfiguration
+                        audioConfigurationMessage =
+                            result.fold(
+                                onSuccess = { it.message },
+                                onFailure = {
+                                    it.message ?: "Could not apply audio settings"
+                                },
+                            )
+                    }
+                }
+            }.onFailure {
+                audioConfigurationMessage = it.message ?: "Could not save audio settings"
+            }
     }
 
     private fun saveDesktopConfiguration(

@@ -30,6 +30,7 @@ the app's **About** page.
 | Embedded X11 | Use the bundled Termux:X11 server and uDroid display surface without installing the separate Termux:X11 application. Keyboard, direct-pointer, trackpad-style, native multi-touch, and display settings are available inside uDroid. |
 | Desktop environments | Detect installed X11 sessions from standard `xsessions` directories. Start, stop, or restart the selected desktop while uDroid reports which rootfs and desktop own `DISPLAY :0`. |
 | Compositing | Enable or disable compositing for supported XFCE, Plasma, and MATE sessions, then apply the setting through a supervised desktop restart. GNOME is treated as compositor-required. |
+| Audio | Play Linux audio through Android with an app-owned PulseAudio/OpenSL ES bridge. Enable microphone input per Linux system with Android runtime consent; guest traffic stays on authenticated device-local loopback. |
 
 ### Current limitations
 
@@ -48,13 +49,15 @@ the app's **About** page.
 - The embedded display is functional, but general-purpose GPU acceleration is
   not yet a supported app contract. Desktop responsiveness depends on the
   device, resolution, applications, and compositor choice.
-- Audio integration, background desktop recovery, multiple displays, and
-  production-level desktop compatibility remain incomplete.
+- Background desktop recovery, multiple displays, and production-level desktop
+  compatibility remain incomplete. Audio currently targets PulseAudio clients;
+  direct ALSA-only applications may require a PulseAudio compatibility plugin.
 
 See the [distribution catalogue](docs/DISTRIBUTION_CATALOGUE.md),
 [OCI image architecture](docs/OCI_IMAGES.md),
 [Linux application launcher](docs/LINUX_APPLICATION_LAUNCHER.md),
 [X11 runtime architecture](docs/X11_RUNTIME_ARCHITECTURE.md),
+[audio runtime](docs/AUDIO_RUNTIME.md),
 [performance notes](docs/PERFORMANCE.md), and
 [app updates](docs/APP_UPDATES.md) for current behavior and technical details.
 
@@ -104,6 +107,7 @@ export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
 ./app/src/main/cpp/build-runtime-probe.sh
 ./tools/build-proot-assets.sh
 ./tools/build-gnu-tar-assets.sh
+./tools/build-pulseaudio-assets.sh
 ./gradlew :app:assembleRelease
 ```
 
