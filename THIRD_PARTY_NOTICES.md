@@ -75,6 +75,23 @@ retain their existing MIT grants and may also be distributed under GPLv3 as
 part of the combined application. Complete corresponding source includes this
 repository and all recursively pinned Termux:X11 submodules.
 
+## PulseAudio and Termux runtime libraries
+
+- PulseAudio project: <https://www.freedesktop.org/wiki/Software/PulseAudio/>
+- PulseAudio version: `17.0`, Termux package revision `3`
+- Binary package repository: <https://packages.termux.dev/apt/termux-main/>
+- Package versions and SHA-256 values: `tools/pulseaudio-packages.tsv`
+- Repackaging script: `tools/build-pulseaudio-assets.sh`
+- PulseAudio license: GNU Lesser General Public License version 2.1 or later
+
+The APK contains a compact relocation of the official Termux PulseAudio
+runtime. It includes only the daemon, native TCP protocol, OpenSL ES
+sink/source modules, and their required shared libraries. uDroid does not
+expose PulseAudio beyond authenticated device-local loopback. The pinned
+manifest records every input package, version, repository path, and archive
+checksum used for all supported ABIs.
+The individual dependency packages retain their upstream licenses.
+
 ## PRoot-Distro rootfs recipes
 
 - Project: <https://github.com/termux/proot-distro>

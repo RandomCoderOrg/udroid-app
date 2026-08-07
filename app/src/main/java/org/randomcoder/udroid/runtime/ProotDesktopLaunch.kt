@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
@@ -13,6 +14,7 @@ object ProotDesktopLaunchBuilder {
         x11SocketDirectory: File,
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
+        audioEndpoint: AudioEndpoint? = null,
     ): ProotApplicationLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -27,6 +29,7 @@ object ProotDesktopLaunchBuilder {
                 guestHome = guestHome,
                 environment = environment,
                 configuration = configuration,
+                audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -65,6 +68,7 @@ object ProotDesktopLaunchBuilder {
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
         hasDbusRunSession: Boolean,
+        audioAuthDirectory: String? = null,
     ): List<String> =
         buildList {
             add(prootPath)
@@ -75,6 +79,10 @@ object ProotDesktopLaunchBuilder {
             addAndroidProotBindMounts()
             add("-b")
             add("$x11SocketDirectory:/tmp/.X11-unix")
+            if (audioAuthDirectory != null) {
+                add("-b")
+                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
+            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
@@ -85,6 +93,10 @@ object ProotDesktopLaunchBuilder {
             add("LANG=C.UTF-8")
             add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             add("DISPLAY=:0")
+            if (audioAuthDirectory != null) {
+                add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
+                add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
+            }
             add("XDG_SESSION_TYPE=x11")
             add("XDG_CURRENT_DESKTOP=${environment.kind.desktopName}")
             add("DESKTOP_SESSION=${environment.id}")

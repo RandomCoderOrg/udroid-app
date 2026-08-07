@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
@@ -75,6 +76,8 @@ fun LinuxSystemPage(
     configuration: DesktopConfiguration,
     scanLoading: Boolean,
     scanMessage: String?,
+    audioConfiguration: AudioConfiguration,
+    audioConfigurationMessage: String?,
     resetAvailable: Boolean,
     maintenanceInProgress: Boolean,
     maintenanceMessage: String?,
@@ -85,6 +88,8 @@ fun LinuxSystemPage(
     onSelectEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onAudioOutputChanged: (Boolean) -> Unit,
+    onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopTerminal: () -> Unit,
     onStopDesktop: () -> Unit,
@@ -216,6 +221,22 @@ fun LinuxSystemPage(
                     onClick = onOpenDisplay,
                 )
             }
+        }
+
+        item(key = "audio-label") {
+            UdroidSectionLabel(
+                text = "Audio",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "audio-settings") {
+            AudioSettingsPanel(
+                configuration = audioConfiguration,
+                runtimeRunning = runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
+                message = audioConfigurationMessage,
+                onOutputChanged = onAudioOutputChanged,
+                onMicrophoneChanged = onMicrophoneChanged,
+            )
         }
 
         item(key = "desktop-label") {
@@ -551,6 +572,55 @@ fun LinuxSystemPage(
 private enum class FilesystemConfirmation {
     RESET,
     DELETE,
+}
+
+@Composable
+private fun AudioSettingsPanel(
+    configuration: AudioConfiguration,
+    runtimeRunning: Boolean,
+    message: String?,
+    onOutputChanged: (Boolean) -> Unit,
+    onMicrophoneChanged: (Boolean) -> Unit,
+) {
+    Surface(
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column {
+            SettingRow(
+                title = "Device speaker",
+                detail =
+                    if (runtimeRunning) {
+                        "Play Linux audio through Android. Changes apply to this session."
+                    } else {
+                        "Play Linux audio through Android when this system starts."
+                    },
+                checked = configuration.outputEnabled,
+                enabled = true,
+                onCheckedChange = onOutputChanged,
+            )
+            Divider(color = UdroidLine)
+            SettingRow(
+                title = "Device microphone",
+                detail =
+                    "Off by default. Android asks before Linux can receive microphone input " +
+                        "and shows its privacy indicator while active.",
+                checked = configuration.microphoneEnabled,
+                enabled = true,
+                onCheckedChange = onMicrophoneChanged,
+            )
+            message?.let {
+                Divider(color = UdroidLine)
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }
 
 @Composable

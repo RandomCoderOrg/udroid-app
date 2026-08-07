@@ -79,9 +79,13 @@ class DesktopEnvironmentScannerTest {
                         touchScaleEnabled = true,
                     ),
                 hasDbusRunSession = true,
+                audioAuthDirectory = "/data/audio/transport",
             )
 
         assertTrue(arguments.contains("/usr/bin/dbus-run-session"))
+        assertTrue(arguments.contains("/data/audio/transport:/tmp/.udroid-pulse"))
+        assertTrue(arguments.contains("PULSE_SERVER=tcp:127.0.0.1:4713"))
+        assertTrue(arguments.contains("PULSE_COOKIE=/tmp/.udroid-pulse/cookie"))
         assertTrue(arguments.contains("GDK_SCALE=2"))
         val script = arguments[arguments.indexOf("-lc") + 1]
         assertTrue(script.contains("-s false"))

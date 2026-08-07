@@ -11,6 +11,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
@@ -21,6 +23,7 @@ import android.system.Os
 import android.system.OsConstants
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.termux.terminal.TerminalColors
 import com.termux.terminal.TerminalSession
@@ -28,6 +31,10 @@ import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
+import org.randomcoder.udroid.audio.AudioConfiguration
+import org.randomcoder.udroid.audio.AudioConfigurationStore
+import org.randomcoder.udroid.audio.AudioServerController
+import org.randomcoder.udroid.audio.AudioSessionSnapshot
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.x11.X11ServerController
@@ -52,6 +59,10 @@ class RuntimeSupervisorService : Service() {
     private val applicationProcesses = ConcurrentHashMap<String, Process>()
     private val applicationExecutor = Executors.newCachedThreadPool()
     private val x11Controller by lazy { X11ServerController(this, app.journal) }
+    private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
+    private val audioController by lazy {
+        AudioServerController(this, app.journal, applicationExecutor)
+    }
 
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -189,8 +200,10 @@ class RuntimeSupervisorService : Service() {
 
         return when {
             action == ACTION_START_RUNTIME -> {
-                startForeground(NOTIFICATION_ID, notification("Starting Linux terminal…"))
-                startRuntime(intent.getStringExtra(EXTRA_ROOTFS_NAME))
+                val rootfsName = intent.getStringExtra(EXTRA_ROOTFS_NAME)
+                val configuration = effectiveAudioConfiguration(rootfsName, allowMicrophone = true)
+                startRuntimeForeground("Starting Linux terminal…", configuration)
+                startRuntime(rootfsName, configuration)
                 START_STICKY
             }
 
@@ -200,7 +213,9 @@ class RuntimeSupervisorService : Service() {
             }
 
             action == null && persisted.desiredRunning -> {
-                startForeground(NOTIFICATION_ID, notification("Recovering Linux terminal…"))
+                val configuration =
+                    effectiveAudioConfiguration(persisted.rootfsName, allowMicrophone = false)
+                startRuntimeForeground("Recovering Linux terminal…", configuration)
                 app.journal.append(
                     component = "supervisor",
                     severity = "warning",
@@ -208,7 +223,7 @@ class RuntimeSupervisorService : Service() {
                     message = "Android recreated the desired Linux terminal session",
                     bootId = persisted.bootId,
                 )
-                startRuntime()
+                startRuntime(persisted.rootfsName, configuration)
                 START_STICKY
             }
 
@@ -228,6 +243,7 @@ class RuntimeSupervisorService : Service() {
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
         stopApplicationProcesses()
+        audioController.stop(app.runtimeState.current().bootId)
         applicationExecutor.shutdownNow()
         val snapshot = app.runtimeState.current()
         app.journal.append(
@@ -244,6 +260,67 @@ class RuntimeSupervisorService : Service() {
     fun currentTerminalSession(): TerminalSession? = ownedSession.get()
 
     fun currentDesktopSession(): DesktopSessionSnapshot = app.runtimeState.current().desktop
+
+    fun currentAudioSession(): AudioSessionSnapshot = audioController.current()
+
+    fun applyAudioConfiguration(
+        rootfsName: String,
+        configuration: AudioConfiguration,
+        callback: (Result<AudioSessionSnapshot>) -> Unit,
+    ) {
+        val session = ownedSession.get()
+        if (session?.isRunning != true || session.mSessionName != rootfsName) {
+            callback(
+                Result.failure(
+                    IllegalStateException("$rootfsName is not the running Linux system"),
+                ),
+            )
+            return
+        }
+        val effective =
+            if (
+                configuration.microphoneEnabled &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                configuration.copy(microphoneEnabled = false)
+            } else {
+                configuration
+            }
+        startRuntimeForeground("Applying Linux audio settings…", effective)
+        val bootId = app.runtimeState.current().bootId
+        applicationExecutor.execute {
+            runCatching { audioController.apply(effective, bootId) }
+                .onSuccess {
+                    mainHandler.post {
+                        updateNotification(
+                            if (it.microphoneEnabled) {
+                                "Linux audio and microphone are connected"
+                            } else if (it.outputEnabled) {
+                                "Linux audio is connected"
+                            } else {
+                                "Linux terminal is running"
+                            },
+                        )
+                        publishState(app.runtimeState.current())
+                        callback(Result.success(it))
+                    }
+                }.onFailure { error ->
+                    app.journal.append(
+                        component = "audio",
+                        severity = "error",
+                        event = "configuration_failed",
+                        message = error.message ?: "Could not apply Linux audio settings",
+                        bootId = bootId,
+                        fields = mapOf("exception" to error.javaClass.name),
+                    )
+                    mainHandler.post {
+                        publishState(app.runtimeState.current())
+                        callback(Result.failure(error))
+                    }
+                }
+        }
+    }
 
     fun attachTerminalView(view: TerminalView) {
         check(Looper.myLooper() == Looper.getMainLooper()) {
@@ -378,6 +455,7 @@ class RuntimeSupervisorService : Service() {
                                 rootfs = rootfs,
                                 x11SocketDirectory = socketDirectory,
                                 application = application,
+                                audioEndpoint = audioController.endpoint(),
                             )
                         val process =
                             ProcessBuilder(launch.command)
@@ -516,6 +594,7 @@ class RuntimeSupervisorService : Service() {
                             x11SocketDirectory = socketDirectory,
                             environment = request.environment,
                             configuration = request.configuration,
+                            audioEndpoint = audioController.endpoint(),
                         )
                     val pidFile =
                         File(cacheDir, "desktop-process-$launchToken.pid").apply {
@@ -825,7 +904,11 @@ class RuntimeSupervisorService : Service() {
         if (signal == OsConstants.SIGKILL) owned.pidFile.delete()
     }
 
-    private fun startRuntime(requestedRootfsName: String? = null) {
+    private fun startRuntime(
+        requestedRootfsName: String? = null,
+        audioConfiguration: AudioConfiguration =
+            effectiveAudioConfiguration(requestedRootfsName, allowMicrophone = false),
+    ) {
         val existing = ownedSession.get()
         if (existing?.isRunning == true && existing.pid > 0) {
             if (requestedRootfsName != null && existing.mSessionName != requestedRootfsName) {
@@ -879,12 +962,24 @@ class RuntimeSupervisorService : Service() {
         runCatching {
             val runtime = ProotRuntimeInstaller.install(this)
             val rootfs = InstalledRootfsResolver.resolve(this, requestedRootfsName)
+            runCatching { audioController.apply(audioConfiguration, bootId) }
+                .onFailure { error ->
+                    app.journal.append(
+                        component = "audio",
+                        severity = "error",
+                        event = "server_start_failed",
+                        message = error.message ?: "PulseAudio failed to start",
+                        bootId = bootId,
+                        fields = mapOf("exception" to error.javaClass.name),
+                    )
+                }
             val x11SocketDirectory = x11Controller.start(rootfs, bootId)
             ProotTerminalLaunchBuilder.create(
                 context = this,
                 runtime = runtime,
                 rootfs = rootfs,
                 x11SocketDirectory = x11SocketDirectory,
+                audioEndpoint = audioController.endpoint(),
             )
         }.mapCatching { launch ->
             configureTerminalColors()
@@ -994,6 +1089,7 @@ class RuntimeSupervisorService : Service() {
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
         stopApplicationProcesses()
         x11Controller.stop(beforeExit.bootId)
+        audioController.stop(beforeExit.bootId)
         publishState(next)
         app.journal.append(
             component = "terminal",
@@ -1016,6 +1112,7 @@ class RuntimeSupervisorService : Service() {
         stopDesktopProcess(restarting = false)
         stopApplicationProcesses()
         x11Controller.stop(current.bootId)
+        audioController.stop(current.bootId)
         val stopping =
             app.runtimeState.update {
                 it.copy(
@@ -1205,6 +1302,67 @@ class RuntimeSupervisorService : Service() {
                     description = "Linux runtime and desktop lifecycle"
                 },
             )
+    }
+
+    private fun effectiveAudioConfiguration(
+        rootfsName: String?,
+        allowMicrophone: Boolean,
+    ): AudioConfiguration {
+        val resolvedName =
+            rootfsName
+                ?: runCatching { app.rootfsRegistry.active()?.name }.getOrNull()
+                ?: return AudioConfiguration()
+        val saved = audioConfigurationStore.load(resolvedName)
+        val microphoneGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        return saved.copy(
+            microphoneEnabled =
+                saved.microphoneEnabled && allowMicrophone && microphoneGranted,
+        )
+    }
+
+    private fun startRuntimeForeground(
+        text: String,
+        configuration: AudioConfiguration,
+    ) {
+        val type =
+            when {
+                Build.VERSION.SDK_INT >= 34 -> {
+                    var value = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    if (configuration.outputEnabled) {
+                        value = value or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    }
+                    if (configuration.microphoneEnabled) {
+                        value = value or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
+                    value
+                }
+                Build.VERSION.SDK_INT >= 30 -> {
+                    var value = 0
+                    if (configuration.outputEnabled) {
+                        value = value or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    }
+                    if (configuration.microphoneEnabled) {
+                        value = value or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
+                    value
+                }
+                Build.VERSION.SDK_INT >= 29 -> {
+                    if (configuration.outputEnabled) {
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    } else {
+                        0
+                    }
+                }
+                else -> 0
+            }
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            notification(text),
+            type,
+        )
     }
 
     private fun notification(text: String): Notification {

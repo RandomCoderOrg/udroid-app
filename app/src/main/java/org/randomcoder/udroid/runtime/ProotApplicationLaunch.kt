@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import java.io.File
@@ -18,6 +19,7 @@ object ProotApplicationLaunchBuilder {
         rootfs: File,
         x11SocketDirectory: File,
         application: LinuxApplication,
+        audioEndpoint: AudioEndpoint? = null,
     ): ProotApplicationLaunch {
         require(application.executable.isNotBlank()) { "Application executable is empty" }
         require(x11SocketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
@@ -35,6 +37,7 @@ object ProotApplicationLaunchBuilder {
                 guestWorkingDirectory = guestWorkingDirectory,
                 applicationArguments =
                     listOf(application.executable) + application.arguments,
+                audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
             )
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -69,6 +72,7 @@ object ProotApplicationLaunchBuilder {
         guestHome: String,
         guestWorkingDirectory: String,
         applicationArguments: List<String>,
+        audioAuthDirectory: String? = null,
     ): List<String> {
         require(applicationArguments.isNotEmpty())
         return buildList {
@@ -80,6 +84,10 @@ object ProotApplicationLaunchBuilder {
             addAndroidProotBindMounts()
             add("-b")
             add("$x11SocketDirectory:/tmp/.X11-unix")
+            if (audioAuthDirectory != null) {
+                add("-b")
+                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
+            }
             add("--cwd=$guestWorkingDirectory")
             add("/usr/bin/env")
             add("-i")
@@ -90,6 +98,10 @@ object ProotApplicationLaunchBuilder {
             add("LANG=C.UTF-8")
             add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             add("DISPLAY=:0")
+            if (audioAuthDirectory != null) {
+                add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
+                add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
+            }
             add("XDG_CURRENT_DESKTOP=UDROID")
             add("GDK_BACKEND=x11")
             add("QT_QPA_PLATFORM=xcb")

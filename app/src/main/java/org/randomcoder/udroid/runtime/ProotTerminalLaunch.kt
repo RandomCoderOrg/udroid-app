@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
@@ -27,6 +28,7 @@ object ProotTerminalLaunchBuilder {
         runtime: ProotRuntime,
         rootfs: File = InstalledRootfsResolver.resolve(context),
         x11SocketDirectory: File? = null,
+        audioEndpoint: AudioEndpoint? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -56,6 +58,7 @@ object ProotTerminalLaunchBuilder {
                 guestHome = guestHome,
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
+                audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
             )
         val environment =
             buildEnvironment(
@@ -80,6 +83,7 @@ object ProotTerminalLaunchBuilder {
         guestHome: String,
         guestShell: String,
         x11SocketDirectory: String? = null,
+        audioAuthDirectory: String? = null,
     ): Array<String> =
         buildList {
             // TerminalSession passes this complete vector to execvp(), including argv[0].
@@ -94,6 +98,10 @@ object ProotTerminalLaunchBuilder {
                 add("-b")
                 add("$x11SocketDirectory:/tmp/.X11-unix")
             }
+            if (audioAuthDirectory != null) {
+                add("-b")
+                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
+            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
@@ -106,6 +114,10 @@ object ProotTerminalLaunchBuilder {
             add("LANG=C.UTF-8")
             add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             if (x11SocketDirectory != null) add("DISPLAY=:0")
+            if (audioAuthDirectory != null) {
+                add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
+                add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
+            }
             add(guestShell)
             if (guestShell.endsWith("bash")) add("--login")
         }.toTypedArray()
