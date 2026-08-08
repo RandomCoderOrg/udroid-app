@@ -51,7 +51,10 @@ import java.util.concurrent.atomic.AtomicReference
 class RuntimeSupervisorService : Service() {
     private val binder = RuntimeBinder()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val ownedSession = AtomicReference<TerminalSession?>(null)
+    private val terminalTabs = TerminalTabRegistry<TerminalSession>()
+    private val closingTerminalIds = mutableSetOf<String>()
+    private var nextTerminalNumber = 1
+    private var terminalCreationInFlight = false
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val desktopLaunchToken = AtomicReference<String?>(null)
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
@@ -239,6 +242,8 @@ class RuntimeSupervisorService : Service() {
     override fun onDestroy() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
+        terminalTabs.clear().forEach { it.value.finishIfRunning() }
+        closingTerminalIds.clear()
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
@@ -257,7 +262,131 @@ class RuntimeSupervisorService : Service() {
         super.onDestroy()
     }
 
-    fun currentTerminalSession(): TerminalSession? = ownedSession.get()
+    fun currentTerminalSession(): TerminalSession? = terminalTabs.active()?.value
+
+    fun terminalTabSnapshots(): List<TerminalTabSnapshot> =
+        terminalTabs.all().map { tab ->
+            TerminalTabSnapshot(
+                id = tab.id,
+                title = tab.title,
+                rootfsName = tab.rootfsName,
+                pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
+                running = tab.value.isRunning,
+                active = tab.id == terminalTabs.activeId,
+            )
+        }
+
+    fun createTerminalTab(onComplete: (Result<String>) -> Unit) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "Terminal tabs must be created from the main thread"
+        }
+        if (terminalCreationInFlight) {
+            onComplete(Result.failure(IllegalStateException("A terminal is already opening")))
+            return
+        }
+        val snapshot = app.runtimeState.current()
+        val rootfsName = snapshot.rootfsName
+        if (snapshot.phase != RuntimePhase.RUNNING || rootfsName == null) {
+            onComplete(Result.failure(IllegalStateException("Start Linux before opening another terminal")))
+            return
+        }
+        terminalCreationInFlight = true
+        val x11SocketDirectory = x11Controller.activeSocketDirectory()
+        val audioEndpoint = audioController.endpoint()
+        applicationExecutor.execute {
+            val prepared =
+                runCatching {
+                    val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
+                    ProotTerminalLaunchBuilder.create(
+                        context = this,
+                        runtime = ProotRuntimeInstaller.install(this),
+                        rootfs = rootfs,
+                        x11SocketDirectory = x11SocketDirectory,
+                        audioEndpoint = audioEndpoint,
+                    )
+                }
+            mainHandler.post {
+                val result =
+                    prepared.mapCatching { launch ->
+                        val current = app.runtimeState.current()
+                        check(
+                            current.phase == RuntimePhase.RUNNING &&
+                                current.rootfsName == rootfsName,
+                        ) {
+                            "Linux stopped while the terminal was opening"
+                        }
+                        val tab = createTerminalSession(launch)
+                        attachActiveTerminalToViews()
+                        publishTerminalTabState("${tab.title} is ready")
+                        app.journal.append(
+                            component = "terminal",
+                            severity = "info",
+                            event = "tab_created",
+                            message = "Created ${tab.title}",
+                            bootId = current.bootId,
+                            fields =
+                                mapOf(
+                                    "tab_id" to tab.id,
+                                    "pid" to tab.value.pid,
+                                    "rootfs" to tab.rootfsName,
+                                ),
+                        )
+                        tab.id
+                    }.onFailure { error ->
+                        app.journal.append(
+                            component = "terminal",
+                            severity = "error",
+                            event = "tab_create_failed",
+                            message = error.message ?: "Could not create terminal tab",
+                            bootId = app.runtimeState.current().bootId,
+                            fields = mapOf("exception" to error.javaClass.name),
+                        )
+                    }
+                terminalCreationInFlight = false
+                onComplete(result)
+            }
+        }
+    }
+
+    fun selectTerminalTab(id: String): Boolean {
+        val tab = terminalTabs.select(id) ?: return false
+        attachedViews.forEach { view ->
+            if (view.mTermSession !== tab.value) view.attachSession(tab.value)
+            view.onScreenUpdated()
+        }
+        publishTerminalTabState("${tab.title} selected")
+        return true
+    }
+
+    fun renameTerminalTab(
+        id: String,
+        requestedTitle: String,
+    ): Boolean {
+        val title = requestedTitle.trim().take(MAX_TERMINAL_TITLE_CHARS)
+        if (title.isBlank()) return false
+        val tab = terminalTabs.rename(id, title) ?: return false
+        publishTerminalTabState("Renamed terminal to ${tab.title}")
+        app.journal.append(
+            component = "terminal",
+            severity = "info",
+            event = "tab_renamed",
+            message = "Renamed terminal tab",
+            bootId = app.runtimeState.current().bootId,
+            fields = mapOf("tab_id" to id, "title" to title),
+        )
+        return true
+    }
+
+    fun closeTerminalTab(id: String): Boolean {
+        val tab = terminalTabs.get(id) ?: return false
+        if (terminalTabs.size() == 1) {
+            stopRuntime(userRequested = true)
+            return true
+        }
+        closingTerminalIds += id
+        terminateTerminalTab(tab)
+        return true
+    }
 
     fun currentDesktopSession(): DesktopSessionSnapshot = app.runtimeState.current().desktop
 
@@ -268,7 +397,7 @@ class RuntimeSupervisorService : Service() {
         configuration: AudioConfiguration,
         callback: (Result<AudioSessionSnapshot>) -> Unit,
     ) {
-        val session = ownedSession.get()
+        val session = currentTerminalSession()
         if (session?.isRunning != true || session.mSessionName != rootfsName) {
             callback(
                 Result.failure(
@@ -327,7 +456,7 @@ class RuntimeSupervisorService : Service() {
             "Terminal views must attach on the main thread"
         }
         attachedViews += view
-        ownedSession.get()?.let { session ->
+        currentTerminalSession()?.let { session ->
             if (view.mTermSession !== session) {
                 view.attachSession(session)
             }
@@ -340,7 +469,7 @@ class RuntimeSupervisorService : Service() {
     }
 
     fun writeToTerminal(text: String) {
-        ownedSession.get()?.takeIf(TerminalSession::isRunning)?.write(text)
+        currentTerminalSession()?.takeIf(TerminalSession::isRunning)?.write(text)
     }
 
     fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
@@ -392,12 +521,12 @@ class RuntimeSupervisorService : Service() {
         val snapshot = app.runtimeState.current()
         if (
             snapshot.phase != RuntimePhase.RUNNING ||
-            ownedSession.get()?.isRunning != true
+            currentTerminalSession()?.isRunning != true
         ) {
             callback(Result.failure(IllegalStateException("Start Linux before launching an app")))
             return
         }
-        if (ownedSession.get()?.mSessionName != rootfsName) {
+        if (currentTerminalSession()?.mSessionName != rootfsName) {
             callback(
                 Result.failure(
                     IllegalStateException("Switch to $rootfsName before launching ${application.name}"),
@@ -487,7 +616,7 @@ class RuntimeSupervisorService : Service() {
 
     private fun startDesktopInternal(request: DesktopLaunchRequest) {
         val runtime = app.runtimeState.current()
-        val terminal = ownedSession.get()
+        val terminal = currentTerminalSession()
         if (
             runtime.phase != RuntimePhase.RUNNING ||
             terminal?.isRunning != true ||
@@ -909,14 +1038,14 @@ class RuntimeSupervisorService : Service() {
         audioConfiguration: AudioConfiguration =
             effectiveAudioConfiguration(requestedRootfsName, allowMicrophone = false),
     ) {
-        val existing = ownedSession.get()
-        if (existing?.isRunning == true && existing.pid > 0) {
-            if (requestedRootfsName != null && existing.mSessionName != requestedRootfsName) {
+        val existing = terminalTabs.active()
+        if (existing?.value?.isRunning == true && existing.value.pid > 0) {
+            if (requestedRootfsName != null && existing.rootfsName != requestedRootfsName) {
                 publishState(
                     app.runtimeState.update {
                         it.copy(
                             message =
-                                "${existing.mSessionName} is running; stop it before switching " +
+                                "${existing.rootfsName} is running; stop it before switching " +
                                     "to $requestedRootfsName",
                         )
                     },
@@ -928,17 +1057,17 @@ class RuntimeSupervisorService : Service() {
                     it.copy(
                         phase = RuntimePhase.RUNNING,
                         desiredRunning = true,
-                        message = "Linux terminal is already running · PID ${existing.pid}",
-                        childPid = existing.pid.toLong(),
-                        rootfsName = existing.mSessionName,
+                        message = "${terminalTabs.size()} terminal tab(s) running",
+                        childPid = existing.value.pid.toLong(),
+                        rootfsName = existing.rootfsName,
                     )
                 },
             )
             return
         }
-        if (existing != null) {
-            ownedSession.compareAndSet(existing, null)
-        }
+        terminalTabs.clear().forEach { it.value.finishIfRunning() }
+        closingTerminalIds.clear()
+        nextTerminalNumber = 1
 
         val bootId = UUID.randomUUID().toString()
         publishState(
@@ -982,86 +1111,117 @@ class RuntimeSupervisorService : Service() {
                 audioEndpoint = audioController.endpoint(),
             )
         }.mapCatching { launch ->
-            configureTerminalColors()
-            val session =
-                TerminalSession(
-                    launch.executable,
-                    launch.workingDirectory,
-                    launch.arguments,
-                    launch.environment,
-                    TRANSCRIPT_ROWS,
-                    terminalClient,
-                )
-            session.mSessionName = launch.rootfs.name
-            check(ownedSession.compareAndSet(null, session)) {
-                "Another terminal session won the ownership race"
-            }
-            try {
-                session.updateSize(
-                    DEFAULT_COLUMNS,
-                    DEFAULT_ROWS,
-                    DEFAULT_CELL_WIDTH_PX,
-                    DEFAULT_CELL_HEIGHT_PX,
-                )
-            } catch (error: Throwable) {
-                ownedSession.compareAndSet(session, null)
-                if (session.pid > 0) session.finishIfRunning()
-                throw error
-            }
-            check(session.pid > 0) { "Termux did not return a terminal child PID" }
-            launch to session
-        }.onSuccess { (launch, session) ->
-            attachedViews.forEach { view ->
-                view.attachSession(session)
-                view.onScreenUpdated()
-            }
-            val running =
-                app.runtimeState.update {
-                    it.copy(
-                        phase = RuntimePhase.RUNNING,
-                        desiredRunning = true,
-                        message = "${launch.rootfs.name} terminal is running · PID ${session.pid}",
-                        childPid = session.pid.toLong(),
-                        rootfsName = launch.rootfs.name,
-                    )
-                }
-            publishState(running)
-            updateNotification("Linux terminal is running")
-            app.journal.append(
-                component = "terminal",
-                severity = "info",
-                event = "session_started",
-                message = "Interactive PRoot terminal started",
-                bootId = bootId,
-                fields =
-                    mapOf(
-                        "pid" to session.pid,
-                        "rootfs" to launch.rootfs.name,
-                        "terminal" to "termux-v0.118.3",
-                    ),
-            )
-        }.onFailure { error ->
-            val failed =
-                app.runtimeState.update {
-                    it.copy(
-                        phase = RuntimePhase.CRASHED,
-                        desiredRunning = false,
-                        message = error.message ?: error.javaClass.simpleName,
-                        childPid = null,
-                    )
-                }
-            publishState(failed)
-            app.journal.append(
-                component = "supervisor",
-                severity = "error",
-                event = "terminal_start_failed",
-                message = failed.message,
-                bootId = bootId,
-                fields = mapOf("exception" to error.javaClass.name),
-            )
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            launch to createTerminalSession(launch)
         }
+            .onSuccess { (launch, tab) ->
+                attachActiveTerminalToViews()
+                val session = tab.value
+                val running =
+                    app.runtimeState.update {
+                        it.copy(
+                            phase = RuntimePhase.RUNNING,
+                            desiredRunning = true,
+                            message = "${tab.title} is running · PID ${session.pid}",
+                            childPid = session.pid.toLong(),
+                            rootfsName = launch.rootfs.name,
+                        )
+                    }
+                publishState(running)
+                updateNotification("Linux terminal is running")
+                app.journal.append(
+                    component = "terminal",
+                    severity = "info",
+                    event = "session_started",
+                    message = "Interactive PRoot terminal started",
+                    bootId = bootId,
+                    fields =
+                        mapOf(
+                            "pid" to session.pid,
+                            "rootfs" to launch.rootfs.name,
+                            "tab_id" to tab.id,
+                            "terminal" to "termux-v0.118.3",
+                        ),
+                )
+            }.onFailure { error ->
+                val failed =
+                    app.runtimeState.update {
+                        it.copy(
+                            phase = RuntimePhase.CRASHED,
+                            desiredRunning = false,
+                            message = error.message ?: error.javaClass.simpleName,
+                            childPid = null,
+                        )
+                    }
+                publishState(failed)
+                app.journal.append(
+                    component = "supervisor",
+                    severity = "error",
+                    event = "terminal_start_failed",
+                    message = failed.message,
+                    bootId = bootId,
+                    fields = mapOf("exception" to error.javaClass.name),
+                )
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+    }
+
+    private fun createTerminalSession(launch: ProotTerminalLaunch): TerminalTab<TerminalSession> {
+        configureTerminalColors()
+        val session =
+            TerminalSession(
+                launch.executable,
+                launch.workingDirectory,
+                launch.arguments,
+                launch.environment,
+                TRANSCRIPT_ROWS,
+                terminalClient,
+            )
+        session.mSessionName = launch.rootfs.name
+        val tab =
+            TerminalTab(
+                id = session.mHandle,
+                title = "Terminal ${nextTerminalNumber++}",
+                rootfsName = launch.rootfs.name,
+                value = session,
+            )
+        terminalTabs.add(tab)
+        try {
+            session.updateSize(
+                DEFAULT_COLUMNS,
+                DEFAULT_ROWS,
+                DEFAULT_CELL_WIDTH_PX,
+                DEFAULT_CELL_HEIGHT_PX,
+            )
+            check(session.pid > 0) { "Termux did not return a terminal child PID" }
+        } catch (error: Throwable) {
+            terminalTabs.remove(tab.id)
+            if (session.pid > 0) session.finishIfRunning()
+            throw error
+        }
+        return tab
+    }
+
+    private fun attachActiveTerminalToViews() {
+        val session = currentTerminalSession() ?: return
+        attachedViews.forEach { view ->
+            if (view.mTermSession !== session) view.attachSession(session)
+            view.onScreenUpdated()
+        }
+    }
+
+    private fun publishTerminalTabState(message: String) {
+        val active = terminalTabs.active()
+        val next =
+            app.runtimeState.update {
+                it.copy(
+                    phase = if (active == null) it.phase else RuntimePhase.RUNNING,
+                    desiredRunning = active != null || it.desiredRunning,
+                    message = message,
+                    childPid = active?.value?.pid?.takeIf { pid -> pid > 0 }?.toLong(),
+                )
+            }
+        publishState(next)
     }
 
     private fun configureTerminalColors() {
@@ -1078,11 +1238,59 @@ class RuntimeSupervisorService : Service() {
     }
 
     private fun handleSessionFinished(session: TerminalSession) {
-        if (!ownedSession.compareAndSet(session, null)) return
-        attachedViews.forEach(TerminalView::onScreenUpdated)
+        val tab = terminalTabs.findByValue(session) ?: return
+        val individuallyClosed = closingTerminalIds.remove(tab.id)
+        terminalTabs.remove(tab.id)
         val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
         val expected = !beforeExit.desiredRunning || beforeExit.phase == RuntimePhase.STOPPING
+
+        if (terminalTabs.size() > 0) {
+            attachActiveTerminalToViews()
+            val active = terminalTabs.active()
+            val detail =
+                if (individuallyClosed || expected) {
+                    "${tab.title} closed · ${terminalTabs.size()} tab(s) remaining"
+                } else {
+                    "${tab.title} exited with code $exitCode · ${terminalTabs.size()} tab(s) remaining"
+                }
+            if (beforeExit.phase == RuntimePhase.STOPPING) {
+                publishState(
+                    app.runtimeState.update {
+                        it.copy(
+                            message = "Stopping ${terminalTabs.size()} remaining terminal tab(s)",
+                            childPid = active?.value?.pid?.takeIf { pid -> pid > 0 }?.toLong(),
+                        )
+                    },
+                )
+            } else {
+                publishTerminalTabState(detail)
+            }
+            app.journal.append(
+                component = "terminal",
+                severity = if (individuallyClosed || expected) "info" else "error",
+                event = if (individuallyClosed || expected) "tab_closed" else "tab_crashed",
+                message =
+                    if (individuallyClosed || expected) {
+                        "Terminal tab closed"
+                    } else {
+                        "Terminal tab exited unexpectedly with code $exitCode"
+                    },
+                bootId = beforeExit.bootId,
+                fields =
+                    mapOf(
+                        "tab_id" to tab.id,
+                        "title" to tab.title,
+                        "exit_code" to exitCode,
+                        "active_tab_id" to active?.id,
+                        "remaining_tabs" to terminalTabs.size(),
+                    ),
+            )
+            updateNotification("${terminalTabs.size()} Linux terminal tabs are running")
+            return
+        }
+
+        attachedViews.forEach(TerminalView::onScreenUpdated)
         pendingDesktopRestart.set(null)
         stopDesktopProcess(restarting = false)
         val next =
@@ -1136,13 +1344,23 @@ class RuntimeSupervisorService : Service() {
             fields = mapOf("user_requested" to userRequested),
         )
 
-        val session = ownedSession.get()
-        if (session == null || !session.isRunning || session.pid < 1) {
-            ownedSession.compareAndSet(session, null)
+        val sessions = terminalTabs.all()
+        if (sessions.isEmpty()) {
             publishStoppedState()
             return
         }
+        sessions.forEach { tab ->
+            closingTerminalIds += tab.id
+            terminateTerminalTab(tab)
+        }
+    }
 
+    private fun terminateTerminalTab(tab: TerminalTab<TerminalSession>) {
+        val session = tab.value
+        if (!session.isRunning || session.pid < 1) {
+            handleSessionFinished(session)
+            return
+        }
         try {
             Os.kill(session.pid, OsConstants.SIGTERM)
         } catch (error: ErrnoException) {
@@ -1150,20 +1368,21 @@ class RuntimeSupervisorService : Service() {
                 component = "supervisor",
                 severity = "warning",
                 event = "terminal_sigterm_failed",
-                message = error.message ?: "Could not signal the terminal",
-                bootId = current.bootId,
+                message = error.message ?: "Could not signal ${tab.title}",
+                bootId = app.runtimeState.current().bootId,
+                fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
             )
         }
         mainHandler.postDelayed(
             {
-                if (ownedSession.get() === session && session.isRunning) {
+                if (terminalTabs.get(tab.id)?.value === session && session.isRunning) {
                     app.journal.append(
                         component = "supervisor",
                         severity = "warning",
                         event = "terminal_force_stop",
-                        message = "Terminal ignored SIGTERM; forcing the owned session to stop",
-                        bootId = current.bootId,
-                        fields = mapOf("child_pid" to session.pid),
+                        message = "${tab.title} ignored SIGTERM; forcing it to stop",
+                        bootId = app.runtimeState.current().bootId,
+                        fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
                     )
                     session.finishIfRunning()
                 }
@@ -1173,6 +1392,8 @@ class RuntimeSupervisorService : Service() {
     }
 
     private fun publishStoppedState() {
+        terminalTabs.clear()
+        closingTerminalIds.clear()
         val stopped =
             app.runtimeState.update {
                 it.copy(
@@ -1429,6 +1650,7 @@ class RuntimeSupervisorService : Service() {
         private const val MAX_APP_OUTPUT_CHARS = 2_000
         private const val MAX_APP_OUTPUT_LINES = 200
         private const val MAX_DESKTOP_OUTPUT_LINES = 400
+        private const val MAX_TERMINAL_TITLE_CHARS = 40
         private const val DISPLAY_NUMBER = 0
 
         fun start(

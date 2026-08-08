@@ -2,6 +2,7 @@ package org.randomcoder.udroid.ui
 
 import android.content.Context
 import android.graphics.Typeface
+import android.os.Build
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -21,19 +22,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.StopCircle
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +65,7 @@ import com.termux.view.TerminalViewClient
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import kotlin.math.roundToInt
 
 @Composable
@@ -65,8 +77,13 @@ fun InteractiveTerminalPage(
     onStop: () -> Unit,
     onExit: () -> Unit,
 ) {
+    val tabs = service?.terminalTabSnapshots().orEmpty()
+    val activeTab = tabs.firstOrNull(TerminalTabSnapshot::active)
     val session = service?.currentTerminalSession()
     var stopRequested by remember(session) { mutableStateOf(false) }
+    var tabError by remember { mutableStateOf<String?>(null) }
+    var renamingTab by remember { mutableStateOf<TerminalTabSnapshot?>(null) }
+    var creatingTab by remember { mutableStateOf(false) }
     val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
     Column(
         modifier =
@@ -77,13 +94,51 @@ fun InteractiveTerminalPage(
         TerminalSessionBar(
             snapshot = snapshot,
             session = session,
+            activeTab = activeTab,
             stopping = stopping,
+            creatingTab = creatingTab,
             onExit = onExit,
+            onCreateTab = {
+                val connectedService = service
+                if (connectedService == null) {
+                    tabError = "Linux service is reconnecting"
+                } else {
+                    creatingTab = true
+                    tabError = null
+                    connectedService.createTerminalTab { result ->
+                        creatingTab = false
+                        tabError = result.exceptionOrNull()?.message
+                    }
+                }
+            },
             onStop = {
                 stopRequested = true
                 onStop()
             },
         )
+
+        if (tabs.isNotEmpty()) {
+            TerminalTabsRow(
+                tabs = tabs,
+                onSelect = { id -> service?.selectTerminalTab(id) },
+                onRename = { tab -> renamingTab = tab },
+                onClose = { id -> service?.closeTerminalTab(id) },
+            )
+        }
+
+        tabError?.let { message ->
+            Text(
+                text = message,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(UdroidTerminalSurface)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+            )
+        }
 
         if (stopping) {
             StoppingTerminalState(
@@ -104,14 +159,32 @@ fun InteractiveTerminalPage(
             )
         }
     }
+
+    renamingTab?.let { tab ->
+        RenameTerminalDialog(
+            tab = tab,
+            onDismiss = { renamingTab = null },
+            onRename = { title ->
+                if (service?.renameTerminalTab(tab.id, title) == true) {
+                    renamingTab = null
+                    tabError = null
+                } else {
+                    tabError = "Enter a terminal name"
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun TerminalSessionBar(
     snapshot: RuntimeSnapshot,
     session: TerminalSession?,
+    activeTab: TerminalTabSnapshot?,
     stopping: Boolean,
+    creatingTab: Boolean,
     onExit: () -> Unit,
+    onCreateTab: () -> Unit,
     onStop: () -> Unit,
 ) {
     val running = session?.isRunning == true && !stopping
@@ -153,7 +226,7 @@ private fun TerminalSessionBar(
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        terminalSessionTitle(session?.mSessionName),
+                        activeTab?.title ?: terminalSessionTitle(session?.mSessionName),
                         color = UdroidTerminalText,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
@@ -161,12 +234,36 @@ private fun TerminalSessionBar(
                     Text(
                         when {
                             stopping -> "Stopping terminal…"
-                            running -> "root  •  aarch64  •  PID ${session?.pid}"
+                            running ->
+                                "root  •  ${Build.SUPPORTED_ABIS.firstOrNull().orEmpty()}" +
+                                    "  •  PID ${session?.pid}"
                             else -> snapshot.message
                         },
                         color = UdroidTerminalMuted,
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
+                    )
+                }
+            }
+        }
+        if (running) {
+            if (creatingTab) {
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = UdroidTerminalGreen,
+                        strokeWidth = 2.dp,
+                    )
+                }
+            } else {
+                IconButton(onClick = onCreateTab) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = "New terminal tab",
+                        tint = UdroidTerminalGreen,
                     )
                 }
             }
@@ -194,6 +291,149 @@ private fun TerminalSessionBar(
             Spacer(Modifier.width(48.dp))
         }
     }
+}
+
+@Composable
+private fun TerminalTabsRow(
+    tabs: List<TerminalTabSnapshot>,
+    onSelect: (String) -> Unit,
+    onRename: (TerminalTabSnapshot) -> Unit,
+    onClose: (String) -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .background(UdroidTerminalSurface)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        tabs.forEach { tab ->
+            TerminalTabChip(
+                tab = tab,
+                onSelect = { onSelect(tab.id) },
+                onRename = { onRename(tab) },
+                onClose = { onClose(tab.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TerminalTabChip(
+    tab: TerminalTabSnapshot,
+    onSelect: () -> Unit,
+    onRename: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Surface(
+        modifier =
+            Modifier
+                .widthIn(min = 128.dp, max = 196.dp)
+                .height(40.dp)
+                .clickable(onClick = onSelect),
+        color = if (tab.active) UdroidTerminalRaised else UdroidTerminal,
+        shape = RoundedCornerShape(9.dp),
+        border =
+            BorderStroke(
+                1.dp,
+                if (tab.active) UdroidTerminalGreen else UdroidTerminalLine,
+            ),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 10.dp, end = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Terminal,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (tab.active) UdroidTerminalGreen else UdroidTerminalMuted,
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = tab.title,
+                modifier = Modifier.weight(1f),
+                color = if (tab.active) UdroidTerminalText else UdroidTerminalMuted,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+            Box {
+                IconButton(
+                    modifier = Modifier.size(36.dp),
+                    onClick = { menuExpanded = true },
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = "${tab.title} settings",
+                        modifier = Modifier.size(18.dp),
+                        tint = UdroidTerminalMuted,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            menuExpanded = false
+                            onRename()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close terminal") },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Close, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onClose()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun RenameTerminalDialog(
+    tab: TerminalTabSnapshot,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+) {
+    var title by remember(tab.id) { mutableStateOf(tab.title) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename terminal") },
+        text = {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it.take(40) },
+                label = { Text("Terminal name") },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onRename(title) },
+                enabled = title.isNotBlank(),
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable
@@ -329,7 +569,7 @@ private fun LiveTerminal(
         with(density) { 15.sp.toPx().roundToInt() }
     }
     val client =
-        remember(session) {
+        remember {
             UdroidTerminalViewClient(
                 context = context,
                 modifiers = modifiers,
@@ -337,7 +577,7 @@ private fun LiveTerminal(
             )
         }
     val terminalView =
-        remember(session) {
+        remember {
             TerminalView(context, null).apply {
                 setBackgroundColor(android.graphics.Color.rgb(17, 19, 31))
                 setTextSize(initialTextSize)
@@ -359,6 +599,12 @@ private fun LiveTerminal(
     Column(modifier = modifier.fillMaxSize()) {
         AndroidView(
             factory = { terminalView },
+            update = { view ->
+                if (view.mTermSession !== session) {
+                    view.attachSession(session)
+                }
+                view.onScreenUpdated()
+            },
             modifier =
                 Modifier
                     .weight(1f)
