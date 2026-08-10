@@ -83,6 +83,9 @@ jobs:
           echo "UDROID_SIGNING_KEY_ALIAS=${SIGNING_KEY_ALIAS}" >> "${GITHUB_ENV}"
           echo "UDROID_SIGNING_KEY_PASSWORD=${SIGNING_KEY_PASSWORD}" >> "${GITHUB_ENV}"
 
+      - name: Verify packaged media bridge
+        run: tools/verify-fma-assets.sh
+
       - name: Verify release tag matches Android version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash

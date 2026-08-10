@@ -43,6 +43,8 @@ import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
+import org.randomcoder.udroid.media.MediaAccelerationConfiguration
+import org.randomcoder.udroid.media.MediaAccelerationConfigurationStore
 import org.randomcoder.udroid.oci.OciHubCatalogRepository
 import org.randomcoder.udroid.oci.OciHubCatalogueState
 import org.randomcoder.udroid.oci.OciHubRepository
@@ -116,6 +118,9 @@ class MainActivity : ComponentActivity() {
     private var desktopScanMessage by mutableStateOf<String?>(null)
     private var audioConfiguration by mutableStateOf(AudioConfiguration())
     private var audioConfigurationMessage by mutableStateOf<String?>(null)
+    private var mediaAccelerationConfiguration by
+        mutableStateOf(MediaAccelerationConfiguration())
+    private var mediaAccelerationConfigurationMessage by mutableStateOf<String?>(null)
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
@@ -135,6 +140,9 @@ class MainActivity : ComponentActivity() {
     private var runtimeServiceBound = false
     private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
+    private val mediaAccelerationConfigurationStore by lazy {
+        MediaAccelerationConfigurationStore(this)
+    }
     private val ociHubCatalogueRepository by lazy { OciHubCatalogRepository(this) }
     private val ociHubTagRepository by lazy { OciHubTagRepository(this) }
 
@@ -225,6 +233,8 @@ class MainActivity : ComponentActivity() {
                     desktopScanMessage = desktopScanMessage,
                     audioConfiguration = audioConfiguration,
                     audioConfigurationMessage = audioConfigurationMessage,
+                    mediaAccelerationConfiguration = mediaAccelerationConfiguration,
+                    mediaAccelerationConfigurationMessage = mediaAccelerationConfigurationMessage,
                     linuxApplicationsState = linuxApplicationsState,
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
@@ -260,6 +270,7 @@ class MainActivity : ComponentActivity() {
                     onTouchScaleChanged = { updateTouchScale(it) },
                     onAudioOutputChanged = { updateAudioOutput(it) },
                     onMicrophoneChanged = { updateMicrophone(it) },
+                    onMediaAccelerationChanged = { updateMediaAcceleration(it) },
                     onStartDesktop = { startSelectedDesktop() },
                     onStopDesktop = { runtimeService?.stopDesktop() },
                     onRestartDesktop = { restartSelectedDesktop() },
@@ -402,6 +413,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshFromDisk() {
+        val previousPhase = snapshot.phase
         snapshot = app.runtimeState.current()
         installProgress = app.installState.current()
         updateState = app.updateState.current()
@@ -422,6 +434,17 @@ class MainActivity : ComponentActivity() {
         if (selectedSystemRootfsName !in installedRootfses.map(InstalledRootfs::name)) {
             selectedSystemRootfsName = installedRootfsName
         }
+        selectedSystemRootfsName
+            ?.takeIf {
+                snapshot.rootfsName == it &&
+                    snapshot.phase == RuntimePhase.RUNNING &&
+                    previousPhase != RuntimePhase.RUNNING
+            }?.let { rootfsName ->
+                val configuration = mediaAccelerationConfigurationStore.load(rootfsName)
+                mediaAccelerationConfiguration = configuration
+                mediaAccelerationConfigurationMessage =
+                    mediaAccelerationRuntimeMessage(rootfsName, configuration)
+            }
         installProgress
             ?.takeIf { progress ->
                 progress.stage == InstallStage.READY &&
@@ -641,6 +664,7 @@ class MainActivity : ComponentActivity() {
         selectedSystemRootfsName = rootfsName
         rootfsMaintenanceMessage = null
         loadAudioConfiguration(rootfsName)
+        loadMediaAccelerationConfiguration(rootfsName)
         selectDestination(UdroidDestination.SYSTEM)
     }
 
@@ -717,6 +741,9 @@ class MainActivity : ComponentActivity() {
             runCatching { audioConfigurationStore.remove(rootfsName) }
                 .exceptionOrNull()
                 ?.let { cleanupWarnings += it.message ?: "audio settings" }
+            runCatching { mediaAccelerationConfigurationStore.remove(rootfsName) }
+                .exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "media acceleration settings" }
             runCatching {
                 LinuxApplicationShortcutPublisher(this@MainActivity)
                     .disableForRootfs(rootfsName)
@@ -966,6 +993,59 @@ class MainActivity : ComponentActivity() {
             }.onFailure {
                 audioConfigurationMessage = it.message ?: "Could not save audio settings"
             }
+    }
+
+    private fun loadMediaAccelerationConfiguration(rootfsName: String) {
+        runCatching { mediaAccelerationConfigurationStore.load(rootfsName) }
+            .onSuccess {
+                mediaAccelerationConfiguration = it
+                mediaAccelerationConfigurationMessage =
+                    mediaAccelerationRuntimeMessage(rootfsName, it)
+            }.onFailure {
+                mediaAccelerationConfiguration = MediaAccelerationConfiguration()
+                mediaAccelerationConfigurationMessage =
+                    it.message ?: "Could not load media acceleration settings"
+            }
+    }
+
+    private fun updateMediaAcceleration(enabled: Boolean) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        val configuration = MediaAccelerationConfiguration(enabled = enabled)
+        runCatching {
+            mediaAccelerationConfigurationStore.save(rootfsName, configuration)
+        }.onSuccess {
+            mediaAccelerationConfiguration = it
+            val runningThisRootfs =
+                runtimeService?.currentTerminalSession()?.isRunning == true &&
+                    runtimeService?.currentTerminalSession()?.mSessionName == rootfsName
+            mediaAccelerationConfigurationMessage =
+                if (runningThisRootfs) {
+                    "Restart this Linux system to apply the change."
+                } else if (enabled) {
+                    "Android video decoding will start with this Linux system."
+                } else {
+                    "Android video decoding is off."
+                }
+        }.onFailure {
+            mediaAccelerationConfigurationMessage =
+                it.message ?: "Could not save media acceleration settings"
+        }
+    }
+
+    private fun mediaAccelerationRuntimeMessage(
+        rootfsName: String,
+        configuration: MediaAccelerationConfiguration,
+    ): String? {
+        if (!configuration.enabled) return null
+        val runtimeOwnsSystem =
+            snapshot.rootfsName == rootfsName && snapshot.phase == RuntimePhase.RUNNING
+        if (!runtimeOwnsSystem) return null
+        val service = runtimeService ?: return "Android video decoding is enabled for this session."
+        return if (service.currentMediaSession().running) {
+            "Android video decoding is active."
+        } else {
+            "Android video decoding did not start. Check the supervisor log."
+        }
     }
 
     private fun saveDesktopConfiguration(

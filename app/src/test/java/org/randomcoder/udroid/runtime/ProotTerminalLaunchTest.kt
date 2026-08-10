@@ -129,6 +129,35 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `app owned media bridge is mounted and exported to the guest`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                mediaHostDirectory = "/data/user/0/udroid/files/media/transport",
+            )
+
+        assertTrue(
+            arguments
+                .toList()
+                .windowed(2)
+                .contains(
+                    listOf(
+                        "-b",
+                        "/data/user/0/udroid/files/media/transport:/tmp/.udroid-media",
+                    ),
+                ),
+        )
+        assertTrue("FMA_SOCKET=/tmp/.udroid-media/fake-media-accel.sock" in arguments)
+        assertTrue("FMA_VA_SYNC_DIRECT_OUTPUT=1" in arguments)
+        assertTrue("LIBVA_DRIVERS_PATH=/tmp/.udroid-media" in arguments)
+        assertTrue("LIBVA_DRIVER_NAME=fma" in arguments)
+    }
+
+    @Test
     fun `proot loader and temporary storage stay app private`() {
         val environment =
             ProotTerminalLaunchBuilder.buildEnvironment(

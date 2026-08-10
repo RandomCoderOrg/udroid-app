@@ -67,6 +67,8 @@ android {
 
     buildTypes {
         release {
+            isDebuggable =
+                providers.gradleProperty("udroid.debuggableRelease").orNull == "true"
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig =
