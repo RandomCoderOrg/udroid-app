@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StatFs
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
+import org.randomcoder.udroid.runtime.ANDROID_PROOT_BIND_MOUNTS
 import org.randomcoder.udroid.runtime.ProotPathContract
 import org.randomcoder.udroid.runtime.addAndroidProotBindMounts
 import org.tukaani.xz.XZInputStream
@@ -14,6 +15,7 @@ import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.InterruptedIOException
 import java.io.InputStreamReader
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -196,6 +198,19 @@ class ProotTarExtractor(
             if (!process.waitFor(PROCESS_STOP_GRACE_MS, TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly()
             }
+            stderrThread.join(DIAGNOSTIC_JOIN_MS)
+            val exitCode = runCatching { process.exitValue() }.getOrNull()
+            val diagnosticLines = synchronized(stderrLines) { stderrLines.toList() }
+            if (error is IOException &&
+                error !is InterruptedIOException &&
+                exitCode != null &&
+                diagnosticLines.isNotEmpty()
+            ) {
+                throw IllegalStateException(
+                    diagnosticSummary(exitCode, diagnosticLines),
+                    error,
+                )
+            }
             throw error
         } finally {
             tarMount.delete()
@@ -250,14 +265,7 @@ class ProotTarExtractor(
             buildList {
                 add("--link2symlink")
                 add("--rootfs=$rootfsPath")
-                add("-b")
-                add("/system")
-                add("-b")
-                add("/apex")
-                add("-b")
-                add("/dev")
-                add("-b")
-                add("/linkerconfig/ld.config.txt")
+                addAndroidProotBindMounts()
                 add("-b")
                 add("$tarExecutablePath:$tarMountPath")
                 add("--cwd=/")
@@ -272,8 +280,10 @@ class ProotTarExtractor(
                 add("-")
                 add("-C")
                 add("/")
-                // /dev is an Android bind mount, not an archive-owned directory.
-                add("--exclude=dev")
+                // Android bind mounts are live host paths, not archive-owned entries.
+                ANDROID_PROOT_BIND_MOUNTS.forEach { path ->
+                    add("--exclude=${path.removePrefix("/")}")
+                }
                 add("--exclude=$RUNTIME_MOUNT_DIRECTORY")
                 if (excludeOciWhiteouts) {
                     add("--wildcards")
