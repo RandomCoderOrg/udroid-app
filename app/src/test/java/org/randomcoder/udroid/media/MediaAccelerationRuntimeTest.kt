@@ -1,11 +1,35 @@
 package org.randomcoder.udroid.media
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.nio.file.Files
 
 class MediaAccelerationRuntimeTest {
+    @Test
+    fun `reads the runtime directory revision from the packaged manifest`() {
+        assertEquals(
+            "132c7bb7292ba8e337236db303e0e3c31972a28f",
+            MediaAccelerationRuntimeInstaller.parseSourceRevision(
+                "format=1\nsource_revision=132c7bb7292ba8e337236db303e0e3c31972a28f\n",
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects a missing or ambiguous runtime revision`() {
+        assertThrows(IllegalStateException::class.java) {
+            MediaAccelerationRuntimeInstaller.parseSourceRevision("format=1\n")
+        }
+        assertThrows(IllegalStateException::class.java) {
+            MediaAccelerationRuntimeInstaller.parseSourceRevision(
+                "source_revision=${"a".repeat(40)}\nsource_revision=${"b".repeat(40)}\n",
+            )
+        }
+    }
+
     @Test
     fun `detects a glibc rootfs without recursively scanning it`() {
         val rootfs = Files.createTempDirectory("udroid-glibc-rootfs").toFile()

@@ -25,9 +25,7 @@ data class MediaAccelerationEndpoint(
 }
 
 object MediaAccelerationRuntimeInstaller {
-    // Local validation build. Replace with the committed FMA revision before
-    // publishing assets for every supported ABI.
-    private const val RUNTIME_VERSION = "106e505-sync-direct-pdeath1"
+    private const val MANIFEST_ASSET = "runtime/fma-assets.manifest"
     private val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
     fun install(context: Context): MediaAccelerationRuntime {
@@ -35,8 +33,12 @@ object MediaAccelerationRuntimeInstaller {
         checkNotNull(abi) {
             "No packaged media bridge supports ${Build.SUPPORTED_ABIS.joinToString()}"
         }
+        val runtimeVersion =
+            context.assets.open(MANIFEST_ASSET).bufferedReader().use { reader ->
+                parseSourceRevision(reader.readText())
+            }
         val directory =
-            File(context.filesDir, "media/fma-$RUNTIME_VERSION-$abi").apply {
+            File(context.filesDir, "media/fma-$runtimeVersion-$abi").apply {
                 check(mkdirs() || isDirectory) { "Could not prepare the media runtime" }
             }
         val daemon = File(directory, "fake-media-acceld")
@@ -48,6 +50,18 @@ object MediaAccelerationRuntimeInstaller {
 
     internal fun supportsRootfs(rootfs: File): Boolean =
         GLIBC_PATHS.any { File(rootfs, it).isFile }
+
+    internal fun parseSourceRevision(manifest: String): String {
+        val revisions =
+            manifest.lineSequence()
+                .filter { it.startsWith("source_revision=") }
+                .map { it.substringAfter('=') }
+                .toList()
+        check(revisions.size == 1 && revisions.single().matches(Regex("[0-9a-f]{40}"))) {
+            "Packaged media bridge has an invalid source revision"
+        }
+        return revisions.single()
+    }
 
     private fun installAsset(
         context: Context,

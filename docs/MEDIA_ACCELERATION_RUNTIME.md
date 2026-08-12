@@ -50,11 +50,25 @@ CPU-mappable surface fallback.
 
 ## Packaged source
 
-`tools/build-fma-assets.sh` reproduces the Android daemon and matching guest
-driver for `arm64-v8a`, `armeabi-v7a`, and `x86_64` from FMA commit
-`1da72812c411b67f76d8c20a093cb0ff54760251`. CI runs
-`tools/verify-fma-assets.sh` to reject missing, mismatched, or graphics-stack-
-linked binaries.
+`tools/fma-source.lock` pins the one FMA revision used for every packaged
+Android daemon and guest VA driver. `tools/build-fma-assets.sh` reproduces all
+six assets for `arm64-v8a`, `armeabi-v7a`, and `x86_64`, then writes their
+SHA-256 hashes and source revision to the packaged manifest. The builder also
+stamps that revision into a read-only `.fma_source` ELF section in every
+daemon and driver. CI runs
+`tools/verify-fma-assets.sh` to reject missing, mixed-generation, modified, or
+graphics-stack-linked binaries. The app also reads its runtime directory
+version from that manifest instead of maintaining a second handwritten value.
+
+The default guest-driver build uses isolated Ubuntu containers. A local,
+network-free cross-build is available when Zig and libva headers are already
+present:
+
+```bash
+FMA_VA_BUILD_MODE=zig \
+FMA_LIBVA_INCLUDE=/path/containing/va/va.h \
+tools/build-fma-assets.sh
+```
 
 H.264 has exact-frame validation in FMA, including the project's full Gravity
 trailer fixture. Some H.264 POC type 1 streams currently require FMA's
@@ -62,10 +76,26 @@ vendor-gated FFmpeg adapter to preserve the original packet metadata. VP9,
 AV1, frame presentation, and broad application compatibility remain separate
 validation gates and must not be inferred from the runtime merely starting.
 
-The current working-tree arm64 asset is a local conformance build rather than
-the pinned release artifact. It is intentionally not publishable until the FMA
-changes are committed and the build script reproduces matching arm64, armv7
-and x86_64 assets.
+The pinned conformance revision is
+`132c7bb7292ba8e337236db303e0e3c31972a28f`.
+
+Two consecutive local Zig/NDK builds produced the same six SHA-256 hashes. The
+verifier's negative tests reject both a modified binary and a stale x86_64
+driver whose manifest hash was recomputed after its embedded source revision
+changed. The assembled APK was unpacked and passed the same verifier, proving
+that packaging did not substitute or omit an asset.
+
+An update-signed release APK installed over uDroid 0.1.0 without clearing its
+Linux systems or media setting. After a supervised stop and restart, the Pixel
+6a extracted
+`media/fma-132c7bb7292ba8e337236db303e0e3c31972a28f-arm64-v8a`, started the
+matching daemon, published its app-private socket, and launched PRoot with the
+transport bind and VA-API environment. This validates packaging and lifecycle;
+it does not replace the codec/browser measurements below.
+
+Android starts app-data native executables through `/system/bin/linker64`, so
+`ps` reports this daemon as `linker64`. Diagnostics should inspect its complete
+command line for `fake-media-acceld` rather than relying on the process name.
 
 ## Local browser lifecycle checkpoint
 
