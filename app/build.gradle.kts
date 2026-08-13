@@ -80,6 +80,13 @@ android {
                 "proguard-rules.pro",
             )
         }
+        create("dev") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "+dev"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
         create("probe") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".ociprobe"

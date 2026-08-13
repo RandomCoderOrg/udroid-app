@@ -93,27 +93,74 @@ jobs:
           test -n "${VERSION_NAME}"
           test "v${VERSION_NAME}" = "${GITHUB_REF_NAME}"
 
+      - name: Select APK variant and artifact identity
+        id: apk
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VARIANT="release"
+            LINT_TASK="lintRelease"
+            ASSEMBLE_TASK="assembleRelease"
+            APK_PATH="app/build/outputs/apk/release/app-release.apk"
+            ARTIFACT_NAME="udroid-${GITHUB_REF_NAME}-prerelease"
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            test -n "${PR_NUMBER}"
+            test -n "${PR_HEAD_SHA}"
+            VARIANT="dev"
+            LINT_TASK="lintDev"
+            ASSEMBLE_TASK="assembleDev"
+            APK_PATH="app/build/outputs/apk/dev/app-dev.apk"
+            ARTIFACT_NAME="udroid-pr-${PR_NUMBER}-${PR_HEAD_SHA:0:7}-dev"
+          else
+            VARIANT="dev"
+            LINT_TASK="lintDev"
+            ASSEMBLE_TASK="assembleDev"
+            APK_PATH="app/build/outputs/apk/dev/app-dev.apk"
+            ARTIFACT_NAME="udroid-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA:0:7}-dev"
+          fi
+
+          if [[ ! "${ARTIFACT_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Unsafe artifact name: ${ARTIFACT_NAME}" >&2
+            exit 1
+          fi
+
+          echo "variant=${VARIANT}" >> "${GITHUB_OUTPUT}"
+          echo "lint_task=${LINT_TASK}" >> "${GITHUB_OUTPUT}"
+          echo "assemble_task=${ASSEMBLE_TASK}" >> "${GITHUB_OUTPUT}"
+          echo "apk_path=${APK_PATH}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_name=${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "asset_name=${ARTIFACT_NAME}.apk" >> "${GITHUB_OUTPUT}"
+
       - name: Test, lint, and assemble optimized APK
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
+        run: >-
+          ./gradlew --no-daemon
+          testDebugUnitTest
+          ${{ steps.apk.outputs.lint_task }}
+          ${{ steps.apk.outputs.assemble_task }}
 
       - name: Verify embedded X11 release JNI contract
-        run: tools/verify-release-jni-contract.sh app/build/outputs/apk/release/app-release.apk
+        run: tools/verify-release-jni-contract.sh "${{ steps.apk.outputs.apk_path }}"
 
       - name: Package release assets
         shell: bash
+        env:
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+          ASSET_NAME: ${{ steps.apk.outputs.asset_name }}
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/release/app-release.apk \
-            "release-assets/udroid-${GITHUB_REF_NAME}-prerelease.apk"
+          cp "${APK_PATH}" "release-assets/${ASSET_NAME}"
           (
             cd release-assets
-            sha256sum "udroid-${GITHUB_REF_NAME}-prerelease.apk" > SHA256SUMS
+            sha256sum "${ASSET_NAME}" > SHA256SUMS
           )
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: udroid-${{ github.ref_name }}-prerelease
+          name: ${{ steps.apk.outputs.artifact_name }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30

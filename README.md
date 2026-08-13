@@ -72,6 +72,14 @@ contains:
 - GitHub's source archives, including the vendored Termux terminal components
   and the corresponding third-party notices.
 
+Pull requests and non-tag workflow runs publish a separate optimized
+`uDroid Dev` APK for 30 days. It uses the `org.randomcoder.udroid.dev`
+application ID and the Android debug key, so it can be installed beside the
+update-signed app without replacing it. PR artifacts are named with the pull
+request number and head commit, for example `udroid-pr-24-cf9c1ed-dev.apk`.
+They are test artifacts and cannot update either the official app or another
+machine's debug build.
+
 The published `v0.0.2` APK predates stable update signing and retains its
 original debug asset name. It is a development build, not a Play Store or
 production-signed release:
