@@ -38,6 +38,8 @@ import org.randomcoder.udroid.audio.AudioSessionSnapshot
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.x11.X11ServerController
+import org.randomcoder.udroid.x11.GuestX11TransportProbe
+import org.randomcoder.udroid.x11.GuestX11TransportResult
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -57,6 +59,7 @@ class RuntimeSupervisorService : Service() {
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
     private val applicationProcesses = ConcurrentHashMap<String, Process>()
+    private val guestX11TransportProbe by lazy { GuestX11TransportProbe(this) }
     private val applicationExecutor = Executors.newCachedThreadPool()
     private val x11Controller by lazy { X11ServerController(this, app.journal) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
@@ -586,10 +589,56 @@ class RuntimeSupervisorService : Service() {
                 runCatching {
                     if (desktopLaunchToken.get() != launchToken) return@runCatching null
                     val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
+                    val prootRuntime = ProotRuntimeInstaller.install(this)
+                    when (
+                        val probe =
+                            guestX11TransportProbe.query(
+                                runtime = prootRuntime,
+                                rootfs = rootfs,
+                                socketDirectory = socketDirectory,
+                            )
+                    ) {
+                        is GuestX11TransportResult.Ready ->
+                            app.journal.append(
+                                component = "x11",
+                                severity = "info",
+                                event = "guest_transport_ready",
+                                message =
+                                    "PRoot guest completed X11 protocol " +
+                                        "${probe.protocolMajor}.${probe.protocolMinor} setup",
+                                bootId = runtime.bootId,
+                                fields =
+                                    mapOf(
+                                        "rootfs" to request.rootfsName,
+                                        "display" to DISPLAY_NUMBER,
+                                        "transport" to "private_bind",
+                                    ),
+                            )
+
+                        is GuestX11TransportResult.Failed -> {
+                            app.journal.append(
+                                component = "x11",
+                                severity = "error",
+                                event = "guest_transport_failed",
+                                message = probe.userMessage,
+                                bootId = runtime.bootId,
+                                fields =
+                                    mapOf(
+                                        "rootfs" to request.rootfsName,
+                                        "display" to DISPLAY_NUMBER,
+                                        "transport" to "private_bind",
+                                        "stage" to probe.stage,
+                                        "errno" to probe.errno,
+                                    ),
+                            )
+                            error(probe.userMessage)
+                        }
+                    }
+                    if (desktopLaunchToken.get() != launchToken) return@runCatching null
                     val launch =
                         ProotDesktopLaunchBuilder.create(
                             context = this,
-                            runtime = ProotRuntimeInstaller.install(this),
+                            runtime = prootRuntime,
                             rootfs = rootfs,
                             x11SocketDirectory = socketDirectory,
                             environment = request.environment,

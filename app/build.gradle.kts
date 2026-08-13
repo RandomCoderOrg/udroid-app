@@ -18,6 +18,11 @@ val hasUpdateSigning =
         updateSigningKeyAlias,
         updateSigningKeyPassword,
     ).all { !it.isNullOrBlank() }
+val x11GuestProbeFault =
+    providers.gradleProperty("udroidX11GuestProbeFault").orNull ?: "none"
+require(x11GuestProbeFault in setOf("none", "deny")) {
+    "udroidX11GuestProbeFault must be none or deny"
+}
 
 kotlin {
     compilerOptions {
@@ -48,6 +53,7 @@ android {
             "UPDATE_RELEASES_API",
             "\"https://api.github.com/repos/RandomCoderOrg/udroid-app/releases?per_page=20\"",
         )
+        buildConfigField("String", "X11_GUEST_PROBE_FAULT", "\"none\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -66,6 +72,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField(
+                "String",
+                "X11_GUEST_PROBE_FAULT",
+                "\"$x11GuestProbeFault\"",
+            )
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
