@@ -102,6 +102,24 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `direct rootfs X11 exports display without a bind alias`() {
+        val socketDirectory = "/data/rootfs/tmp/.X11-unix"
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "/data/rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/sh",
+                x11SocketDirectory = socketDirectory,
+                bindX11Socket = false,
+            )
+
+        assertTrue("DISPLAY=:0" in arguments)
+        assertTrue(arguments.none { socketDirectory in it })
+    }
+
+    @Test
     fun `authenticated loopback audio is exported to the guest`() {
         val arguments =
             ProotTerminalLaunchBuilder.buildArguments(

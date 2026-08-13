@@ -22,6 +22,8 @@ class X11ServerService : Service() {
         }
     private val startAccepted = AtomicBoolean(false)
     private val serverReady = AtomicBoolean(false)
+    @Volatile
+    private var activeSocket: File? = null
     private val handler by lazy {
         Handler(mainLooper) { message ->
             when (message.what) {
@@ -61,7 +63,7 @@ class X11ServerService : Service() {
             return
         }
         if (!startAccepted.compareAndSet(false, true)) {
-            val socket = X11RuntimePaths.displaySocket(this)
+            val socket = activeSocket ?: X11RuntimePaths.displaySocket(this)
             val probe = X11ProtocolProbe.query(socket)
             reply(
                 client,
@@ -88,6 +90,7 @@ class X11ServerService : Service() {
                 }.let(::File)
             prepareRuntime(runtimeDirectory, xkbRoot)
             val socket = File(runtimeDirectory, ".X11-unix/X0")
+            activeSocket = socket
             reply(
                 client,
                 X11ServerProtocol.STATE_STARTING,
@@ -132,7 +135,7 @@ class X11ServerService : Service() {
         }
         val socketDirectory = File(runtime, ".X11-unix")
         check(socketDirectory.mkdirs() || socketDirectory.isDirectory) {
-            "Could not create the private X11 socket directory"
+            "Could not create the X11 socket directory"
         }
         val staleSocket = File(socketDirectory, "X0")
         check(!staleSocket.exists() || staleSocket.delete()) {

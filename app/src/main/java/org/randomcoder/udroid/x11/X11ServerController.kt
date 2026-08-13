@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import android.os.ParcelFileDescriptor
+import android.system.Os
 import org.randomcoder.udroid.runtime.EventJournal
 import java.io.File
 
@@ -33,7 +34,7 @@ class X11ServerController(
     private var bound = false
     private var pendingStart: StartRequest? = null
     private var rendererCallback: ((ParcelFileDescriptor?) -> Unit)? = null
-    private val readyCallbacks = mutableListOf<(File?) -> Unit>()
+    private val readyCallbacks = mutableListOf<(X11DisplayEndpoint?) -> Unit>()
     private var rendererRequestInFlight = false
     private var ready = false
 
@@ -71,14 +72,10 @@ class X11ServerController(
     fun start(
         rootfs: File,
         bootId: String,
-    ): File {
-        val runtimeDirectory = X11RuntimePaths.runtimeDirectory(context)
-        val socketDirectory = X11RuntimePaths.socketDirectory(context)
-        check(socketDirectory.mkdirs() || socketDirectory.isDirectory) {
-            "Could not prepare the private X11 socket directory"
-        }
+    ): X11DisplayEndpoint {
+        val endpoint = selectEndpoint(rootfs, bootId)
         val xkbRoot = File(rootfs, "usr/share/X11/xkb")
-        val request = StartRequest(runtimeDirectory, xkbRoot, bootId)
+        val request = StartRequest(endpoint, xkbRoot, bootId)
         pendingStart = request
 
         journal.append(
@@ -90,7 +87,8 @@ class X11ServerController(
             fields =
                 mapOf(
                     "protocol_version" to X11ServerProtocol.VERSION,
-                    "socket" to X11RuntimePaths.displaySocket(context).absolutePath,
+                    "socket" to File(endpoint.socketDirectory, "X0").absolutePath,
+                    "transport" to endpoint.transport.journalValue,
                 ),
         )
 
@@ -105,7 +103,7 @@ class X11ServerController(
                 )
             check(bound) { "Android rejected the embedded X11 service binding" }
         }
-        return socketDirectory
+        return endpoint
     }
 
     fun stop(bootId: String?) {
@@ -141,16 +139,16 @@ class X11ServerController(
         if (ready && !rendererRequestInFlight) sendRendererRequest()
     }
 
-    fun activeSocketDirectory(): File? =
+    fun activeEndpoint(): X11DisplayEndpoint? =
         pendingStart
             ?.takeIf { ready }
-            ?.let { X11RuntimePaths.socketDirectory(context) }
-            ?.takeIf(File::isDirectory)
+            ?.endpoint
+            ?.takeIf { it.socketDirectory.isDirectory }
 
-    fun whenReady(callback: (File?) -> Unit) {
-        val socketDirectory = activeSocketDirectory()
-        if (socketDirectory != null) {
-            callback(socketDirectory)
+    fun whenReady(callback: (X11DisplayEndpoint?) -> Unit) {
+        val endpoint = activeEndpoint()
+        if (endpoint != null) {
+            callback(endpoint)
         } else {
             readyCallbacks += callback
         }
@@ -167,7 +165,7 @@ class X11ServerController(
                         Bundle().apply {
                             putString(
                                 X11ServerProtocol.KEY_RUNTIME_DIRECTORY,
-                                request.runtimeDirectory.absolutePath,
+                                request.endpoint.runtimeDirectory.absolutePath,
                             )
                             putString(
                                 X11ServerProtocol.KEY_XKB_ROOT,
@@ -197,6 +195,9 @@ class X11ServerController(
             buildMap<String, Any?> {
                 put("protocol_version", X11ServerProtocol.VERSION)
                 put("server_pid", data.getInt(X11ServerProtocol.KEY_PID))
+                pendingStart?.endpoint?.transport?.journalValue?.let {
+                    put("transport", it)
+                }
                 data.getString(X11ServerProtocol.KEY_SOCKET_PATH)?.let {
                     put("socket", it)
                 }
@@ -217,9 +218,9 @@ class X11ServerController(
         )
         if (state == X11ServerProtocol.STATE_READY) {
             ready = true
-            val socketDirectory = activeSocketDirectory()
+            val endpoint = activeEndpoint()
             readyCallbacks.toList().also(readyCallbacks::removeAll).forEach {
-                it(socketDirectory)
+                it(endpoint)
             }
             if (rendererCallback != null && !rendererRequestInFlight) {
                 sendRendererRequest()
@@ -284,9 +285,71 @@ class X11ServerController(
         )
     }
 
+    private fun selectEndpoint(
+        rootfs: File,
+        bootId: String,
+    ): X11DisplayEndpoint =
+        runCatching { directRootfsEndpoint(rootfs) }
+            .getOrElse { error ->
+                journal.append(
+                    component = "x11",
+                    severity = "warning",
+                    event = "direct_transport_unavailable",
+                    message = error.message ?: "Could not prepare direct rootfs X11 transport",
+                    bootId = bootId,
+                    fields = mapOf("fallback" to X11GuestTransport.PRIVATE_BIND.journalValue),
+                )
+                privateBindEndpoint()
+            }
+
+    private fun directRootfsEndpoint(rootfs: File): X11DisplayEndpoint {
+        val root = rootfs.canonicalFile
+        val runtime = File(root, "tmp")
+        check(runtime.mkdirs() || runtime.isDirectory) {
+            "Could not prepare the rootfs X11 runtime directory"
+        }
+        val canonicalRuntime = runtime.canonicalFile
+        check(canonicalRuntime.toPath().startsWith(root.toPath())) {
+            "The rootfs X11 runtime directory escaped the installed image"
+        }
+        Os.chmod(canonicalRuntime.absolutePath, ROOTFS_TMP_MODE)
+        val socketDirectory = File(canonicalRuntime, ".X11-unix")
+        check(socketDirectory.mkdirs() || socketDirectory.isDirectory) {
+            "Could not prepare the rootfs X11 socket directory"
+        }
+        val canonicalSocketDirectory = socketDirectory.canonicalFile
+        check(canonicalSocketDirectory.toPath().startsWith(root.toPath())) {
+            "The rootfs X11 socket directory escaped the installed image"
+        }
+        // PRoot can leave a mode-000 bind target behind after unmounting it.
+        Os.chmod(canonicalSocketDirectory.absolutePath, ROOTFS_TMP_MODE)
+        return X11DisplayEndpoint(
+            runtimeDirectory = canonicalRuntime,
+            socketDirectory = canonicalSocketDirectory,
+            transport = X11GuestTransport.DIRECT_ROOTFS,
+        )
+    }
+
+    private fun privateBindEndpoint(): X11DisplayEndpoint {
+        val runtime = X11RuntimePaths.runtimeDirectory(context)
+        val socketDirectory = X11RuntimePaths.socketDirectory(context)
+        check(socketDirectory.mkdirs() || socketDirectory.isDirectory) {
+            "Could not prepare the private X11 socket directory"
+        }
+        return X11DisplayEndpoint(
+            runtimeDirectory = runtime,
+            socketDirectory = socketDirectory,
+            transport = X11GuestTransport.PRIVATE_BIND,
+        )
+    }
+
     private data class StartRequest(
-        val runtimeDirectory: File,
+        val endpoint: X11DisplayEndpoint,
         val xkbRoot: File,
         val bootId: String,
     )
+
+    private companion object {
+        const val ROOTFS_TMP_MODE = 0x3ff
+    }
 }

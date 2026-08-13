@@ -4,6 +4,7 @@ import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
+import org.randomcoder.udroid.x11.X11DisplayEndpoint
 import java.io.File
 
 object ProotDesktopLaunchBuilder {
@@ -11,7 +12,7 @@ object ProotDesktopLaunchBuilder {
         context: Context,
         runtime: ProotRuntime,
         rootfs: File,
-        x11SocketDirectory: File,
+        x11Endpoint: X11DisplayEndpoint,
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
         audioEndpoint: AudioEndpoint? = null,
@@ -19,13 +20,14 @@ object ProotDesktopLaunchBuilder {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
         }
-        require(x11SocketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
+        require(x11Endpoint.socketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
         val guestHome = if (File(rootfs, "root").isDirectory) "/root" else "/"
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
                 rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
-                x11SocketDirectory = x11SocketDirectory.absolutePath,
+                x11SocketDirectory = x11Endpoint.socketDirectory.absolutePath,
+                bindX11Socket = x11Endpoint.requiresGuestBind,
                 guestHome = guestHome,
                 environment = environment,
                 configuration = configuration,
@@ -64,6 +66,7 @@ object ProotDesktopLaunchBuilder {
         prootPath: String,
         rootfsPath: String,
         x11SocketDirectory: String,
+        bindX11Socket: Boolean = true,
         guestHome: String,
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
@@ -77,8 +80,10 @@ object ProotDesktopLaunchBuilder {
             add("--root-id")
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
-            add("-b")
-            add("$x11SocketDirectory:/tmp/.X11-unix")
+            if (bindX11Socket) {
+                add("-b")
+                add("$x11SocketDirectory:/tmp/.X11-unix")
+            }
             if (audioAuthDirectory != null) {
                 add("-b")
                 add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")

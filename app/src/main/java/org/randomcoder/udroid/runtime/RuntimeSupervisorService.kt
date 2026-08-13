@@ -442,8 +442,8 @@ class RuntimeSupervisorService : Service() {
             return
         }
 
-        x11Controller.whenReady { socketDirectory ->
-            if (socketDirectory == null) {
+        x11Controller.whenReady { x11Endpoint ->
+            if (x11Endpoint == null) {
                 callback(Result.failure(IllegalStateException("Embedded X11 failed to start")))
                 return@whenReady
             }
@@ -456,7 +456,7 @@ class RuntimeSupervisorService : Service() {
                                 context = this,
                                 runtime = ProotRuntimeInstaller.install(this),
                                 rootfs = rootfs,
-                                x11SocketDirectory = socketDirectory,
+                                x11Endpoint = x11Endpoint,
                                 application = application,
                                 audioEndpoint = audioController.endpoint(),
                             )
@@ -577,9 +577,9 @@ class RuntimeSupervisorService : Service() {
                     "touch_scale" to request.configuration.touchScaleEnabled,
                 ),
         )
-        x11Controller.whenReady { socketDirectory ->
+        x11Controller.whenReady { x11Endpoint ->
             if (desktopLaunchToken.get() != launchToken) return@whenReady
-            if (socketDirectory == null) {
+            if (x11Endpoint == null) {
                 if (desktopLaunchToken.compareAndSet(launchToken, null)) {
                     publishDesktopFailure(request, "Embedded X11 display :0 is unavailable")
                 }
@@ -595,7 +595,7 @@ class RuntimeSupervisorService : Service() {
                             guestX11TransportProbe.query(
                                 runtime = prootRuntime,
                                 rootfs = rootfs,
-                                socketDirectory = socketDirectory,
+                                endpoint = x11Endpoint,
                             )
                     ) {
                         is GuestX11TransportResult.Ready ->
@@ -611,7 +611,7 @@ class RuntimeSupervisorService : Service() {
                                     mapOf(
                                         "rootfs" to request.rootfsName,
                                         "display" to DISPLAY_NUMBER,
-                                        "transport" to "private_bind",
+                                        "transport" to x11Endpoint.transport.journalValue,
                                     ),
                             )
 
@@ -626,7 +626,7 @@ class RuntimeSupervisorService : Service() {
                                     mapOf(
                                         "rootfs" to request.rootfsName,
                                         "display" to DISPLAY_NUMBER,
-                                        "transport" to "private_bind",
+                                        "transport" to x11Endpoint.transport.journalValue,
                                         "stage" to probe.stage,
                                         "errno" to probe.errno,
                                     ),
@@ -640,7 +640,7 @@ class RuntimeSupervisorService : Service() {
                             context = this,
                             runtime = prootRuntime,
                             rootfs = rootfs,
-                            x11SocketDirectory = socketDirectory,
+                            x11Endpoint = x11Endpoint,
                             environment = request.environment,
                             configuration = request.configuration,
                             audioEndpoint = audioController.endpoint(),
@@ -1022,12 +1022,12 @@ class RuntimeSupervisorService : Service() {
                         fields = mapOf("exception" to error.javaClass.name),
                     )
                 }
-            val x11SocketDirectory = x11Controller.start(rootfs, bootId)
+            val x11Endpoint = x11Controller.start(rootfs, bootId)
             ProotTerminalLaunchBuilder.create(
                 context = this,
                 runtime = runtime,
                 rootfs = rootfs,
-                x11SocketDirectory = x11SocketDirectory,
+                x11Endpoint = x11Endpoint,
                 audioEndpoint = audioController.endpoint(),
             )
         }.mapCatching { launch ->

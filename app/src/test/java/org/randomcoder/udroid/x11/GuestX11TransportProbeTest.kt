@@ -34,6 +34,7 @@ class GuestX11TransportProbeTest {
                 prootPath = "/data/proot",
                 rootfsPath = "/data/rootfs",
                 socketDirectory = "/data/x11/.X11-unix",
+                bindSocket = true,
                 nativeProbe = "/data/runtime_probe",
                 forceDenied = false,
                 androidBindMounts = listOf("/system", "/proc"),
@@ -60,6 +61,7 @@ class GuestX11TransportProbeTest {
                 prootPath = "/data/proot",
                 rootfsPath = "/data/rootfs",
                 socketDirectory = "/data/x11/.X11-unix",
+                bindSocket = false,
                 nativeProbe = "/data/runtime_probe",
                 forceDenied = true,
                 androidBindMounts = emptyList(),
@@ -67,5 +69,6 @@ class GuestX11TransportProbeTest {
             )
 
         assertEquals("--x11-deny", arguments[arguments.lastIndex - 1])
+        assertTrue("/data/x11/.X11-unix:/tmp/.X11-unix" !in arguments)
     }
 }

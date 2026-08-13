@@ -1,6 +1,6 @@
 # Embedded X11 runtime architecture
 
-Status: accepted integration boundary, 2026-07-24
+Status: accepted integration boundary, updated 2026-08-13
 
 ## Decision
 
@@ -47,9 +47,9 @@ supervised X server and PRoot guest continue running.
 flowchart LR
     UI["uDroid desktop Activity"] -->|"attach Surface and IME"| View["Lorie display view"]
     Supervisor["Runtime supervisor"] -->|"versioned Binder contract"| Server["X11 server process"]
-    Server --> Socket["Private X socket"]
+    Server --> Socket["X0 inside active rootfs /tmp"]
     Supervisor --> PRoot["PRoot distro"]
-    Socket -->|"bind-mounted as /tmp/.X11-unix/X0"| PRoot
+    Socket -->|"visible directly as /tmp/.X11-unix/X0"| PRoot
     PRoot -->|"DISPLAY=:0"| Apps["Linux X11 apps"]
     Server -->|"buffer and event FD transport"| View
     View -->|"EGL/GLES present"| Surface["Android Surface"]
@@ -62,8 +62,13 @@ flowchart LR
   desktop Activity and its `Surface`.
 - The desktop Activity owns only the visible Android surface and input/IME
   adapters. Closing or rotating it must not terminate Linux or the X server.
-- The X socket and control socket live in a per-generation private runtime
-  directory. That directory is bind-mounted into PRoot as `/tmp`.
+- The X socket lives directly in the active rootfs at
+  `/tmp/.X11-unix/X0`. This avoids relying on PRoot to translate an
+  app-private Unix-socket directory on OEM Android builds. The old private
+  directory transport remains a preparation-time fallback and must pass the
+  same guest handshake before a desktop is launched.
+- The Binder control and renderer channels remain app-private and independent
+  from the guest filesystem.
 - The control protocol uses Binder and file descriptors. It is never exposed
   on TCP and never accepts an unauthenticated broadcast.
 
@@ -136,18 +141,20 @@ Desktop environments are not the first health test. Each gate records latency,
 RSS/PSS, CPU time, frame/present counts, and failure reason.
 
 1. `server-start`: the native process reaches the Xorg ready state.
-2. `socket-ready`: the private `X0` socket exists and accepts a connection.
-3. `x-query`: a tiny client reads the root window geometry and required
+2. `socket-ready`: the host-side `X0` path completes an X11 setup handshake.
+3. `guest-socket-ready`: the same packaged native probe runs through the exact
+   PRoot namespace and completes setup against `/tmp/.X11-unix/X0`.
+4. `x-query`: a tiny client reads the root window geometry and required
    extensions.
-4. `test-pattern`: the server draws a deterministic pattern with a known
+5. `test-pattern`: the server draws a deterministic pattern with a known
    checksum and the Android surface receives frames.
-5. `surface-cycle`: attach, resize, detach, and reattach without restarting
+6. `surface-cycle`: attach, resize, detach, and reattach without restarting
    the server.
-6. `input-loop`: injected pointer and key events are observed by a tiny X
+7. `input-loop`: injected pointer and key events are observed by a tiny X
    client.
-7. `present-soak`: bounded frame pacing and buffer lifetime test.
-8. `xterm`: first real guest application.
-9. `lightweight-session`: first desktop, initially without composition.
+8. `present-soak`: bounded frame pacing and buffer lifetime test.
+9. `xterm`: first real guest application.
+10. `lightweight-session`: first desktop, initially without composition.
 
 GNOME, KDE, browsers, and games remain later macro probes.
 
@@ -159,12 +166,12 @@ visible application presentation, motion, and surface-cycle checks:
 | Probe | Result |
 | --- | --- |
 | Process isolation | `org.randomcoder.udroid:x11` owned the X server |
-| Server socket | app-private `.X11-unix/X0`, mode `srwxrwxrwx` |
+| Server socket (historical run) | app-private `.X11-unix/X0`, mode `srwxrwxrwx` |
 | Protocol setup | X11 `11.0` connection setup completed |
 | Cold Binder/process setup | 708 ms |
 | Native Xorg to protocol-ready | 117 ms |
 | Total request to protocol-ready | 825 ms |
-| Guest bridge | same socket bind-mounted at `/tmp/.X11-unix`, `DISPLAY=:0` |
+| Guest bridge | historical private socket bind at `/tmp/.X11-unix`, `DISPLAY=:0` |
 | Renderer transport | one Binder-delivered renderer FD per Desktop attach |
 | Android display target | 1080×2142 below expanded controls; near-full height with the 32 dp strip |
 | Live X11 geometry | raw probe observed 1280×720 in Fixed mode and 1080×2142 after returning to Native |
@@ -192,6 +199,30 @@ The protocol probe deliberately sends the 12-byte X11 connection prefix and
 parses the eight-byte setup response. Merely connecting to the Unix socket is
 not considered ready; that weaker test initially hid a probe-side
 `LocalSocket` ordering bug.
+
+## Guest transport compatibility checkpoint
+
+Issue 23 showed that host readiness is insufficient: the Android process can
+connect to its socket while the PRoot-visible bind alias fails with `EACCES`.
+uDroid now runs the packaged protocol probe inside the exact PRoot namespace
+before launching a desktop. A failure records its stage and errno, leaves the
+display unclaimed, and never emits `desktop_started`.
+
+The primary route creates `X0` directly under the active rootfs. Startup also
+repairs `/tmp` and `/tmp/.X11-unix` to mode `01777`, because an earlier PRoot
+bind may leave a mode-000 mount-point placeholder behind. Terminal, desktop,
+and graphical-application launchers omit the X11 bind for this route.
+
+The API 34 AVD regression test proved both directions:
+
+- injected guest `EACCES`: `guest_transport_failed`, errno 13, no desktop
+  process;
+- normal direct-rootfs route: X11 11.0 guest handshake followed by
+  `desktop_started`, with no X11 directory bind in either PRoot command.
+
+The exact Huawei policy or PRoot behavior still requires confirmation on the
+reporter's Android 12 device. The diagnostic contract no longer confuses that
+transport failure with XFCE, D-Bus, compositing, or GPU startup.
 
 The presentation investigation used two independent observations. An XWD dump
 of the root window contained the expected gears while Android was still black,

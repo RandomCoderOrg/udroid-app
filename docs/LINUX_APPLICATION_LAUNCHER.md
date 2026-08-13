@@ -63,7 +63,8 @@ Graphical applications receive an isolated environment containing:
 - `XDG_CURRENT_DESKTOP=UDROID`
 - `GDK_BACKEND=x11`
 - `QT_QPA_PLATFORM=xcb`
-- the same private X11 socket bind used by the interactive distro
+- the active X11 endpoint selected for the distro: normally the socket living
+  directly at `/tmp/.X11-unix/X0`, or the validated private-bind fallback
 
 Each application is a separate PRoot process owned by
 `RuntimeSupervisorService`. Output is drained off the process pipe into the

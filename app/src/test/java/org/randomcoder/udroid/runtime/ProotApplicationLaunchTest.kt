@@ -38,4 +38,22 @@ class ProotApplicationLaunchTest {
         assertFalse(arguments.contains("sh"))
         assertFalse(arguments.contains("-c"))
     }
+
+    @Test
+    fun `direct rootfs display does not add an X11 bind alias`() {
+        val socketDirectory = "/data/rootfs/tmp/.X11-unix"
+        val arguments =
+            ProotApplicationLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = socketDirectory,
+                bindX11Socket = false,
+                guestHome = "/root",
+                guestWorkingDirectory = "/root",
+                applicationArguments = listOf("/usr/bin/demo"),
+            )
+
+        assertTrue("DISPLAY=:0" in arguments)
+        assertTrue(arguments.none { socketDirectory in it })
+    }
 }

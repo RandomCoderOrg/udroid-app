@@ -4,6 +4,7 @@ import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
+import org.randomcoder.udroid.x11.X11DisplayEndpoint
 import java.io.File
 import java.nio.file.Files
 
@@ -27,7 +28,7 @@ object ProotTerminalLaunchBuilder {
         context: Context,
         runtime: ProotRuntime,
         rootfs: File = InstalledRootfsResolver.resolve(context),
-        x11SocketDirectory: File? = null,
+        x11Endpoint: X11DisplayEndpoint? = null,
         audioEndpoint: AudioEndpoint? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
@@ -57,7 +58,8 @@ object ProotTerminalLaunchBuilder {
                 rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                 guestHome = guestHome,
                 guestShell = guestShell,
-                x11SocketDirectory = x11SocketDirectory?.absolutePath,
+                x11SocketDirectory = x11Endpoint?.socketDirectory?.absolutePath,
+                bindX11Socket = x11Endpoint?.requiresGuestBind == true,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
             )
         val environment =
@@ -83,6 +85,7 @@ object ProotTerminalLaunchBuilder {
         guestHome: String,
         guestShell: String,
         x11SocketDirectory: String? = null,
+        bindX11Socket: Boolean = x11SocketDirectory != null,
         audioAuthDirectory: String? = null,
     ): Array<String> =
         buildList {
@@ -94,7 +97,7 @@ object ProotTerminalLaunchBuilder {
             add("--root-id")
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
-            if (x11SocketDirectory != null) {
+            if (x11SocketDirectory != null && bindX11Socket) {
                 add("-b")
                 add("$x11SocketDirectory:/tmp/.X11-unix")
             }

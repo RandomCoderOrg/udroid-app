@@ -42,14 +42,15 @@ internal class GuestX11TransportProbe(private val context: Context) {
     fun query(
         runtime: ProotRuntime,
         rootfs: File,
-        socketDirectory: File,
+        endpoint: X11DisplayEndpoint,
     ): GuestX11TransportResult {
         val nativeProbe = NativeProbeInstaller.install(context)
         val arguments =
             GuestX11ProbeCommand.buildArguments(
                 prootPath = runtime.executable.absolutePath,
                 rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
-                socketDirectory = socketDirectory.absolutePath,
+                socketDirectory = endpoint.socketDirectory.absolutePath,
+                bindSocket = endpoint.requiresGuestBind,
                 nativeProbe = nativeProbe.absolutePath,
                 forceDenied = BuildConfig.X11_GUEST_PROBE_FAULT == "deny",
             )
@@ -105,6 +106,7 @@ internal object GuestX11ProbeCommand {
         prootPath: String,
         rootfsPath: String,
         socketDirectory: String,
+        bindSocket: Boolean,
         nativeProbe: String,
         forceDenied: Boolean,
         androidBindMounts: List<String> = ANDROID_PROOT_BIND_MOUNTS,
@@ -120,8 +122,10 @@ internal object GuestX11ProbeCommand {
                 add("-b")
                 add(path)
             }
-            add("-b")
-            add("$socketDirectory:/tmp/.X11-unix")
+            if (bindSocket) {
+                add("-b")
+                add("$socketDirectory:/tmp/.X11-unix")
+            }
             add("-b")
             add("$nativeProbe:$GUEST_PROBE")
             add("--cwd=/")

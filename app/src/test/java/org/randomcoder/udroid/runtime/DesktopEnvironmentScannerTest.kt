@@ -70,6 +70,7 @@ class DesktopEnvironmentScannerTest {
                 prootPath = "/data/proot",
                 rootfsPath = "/data/rootfs",
                 x11SocketDirectory = "/data/x11",
+                bindX11Socket = false,
                 guestHome = "/root",
                 environment = desktop,
                 configuration =
@@ -87,6 +88,7 @@ class DesktopEnvironmentScannerTest {
         assertTrue(arguments.contains("PULSE_SERVER=tcp:127.0.0.1:4713"))
         assertTrue(arguments.contains("PULSE_COOKIE=/tmp/.udroid-pulse/cookie"))
         assertTrue(arguments.contains("GDK_SCALE=2"))
+        assertFalse(arguments.any { "/data/x11" in it })
         val script = arguments[arguments.indexOf("-lc") + 1]
         assertTrue(script.contains("-s false"))
         assertTrue(script.contains("sleep 1"))
