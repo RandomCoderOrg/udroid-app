@@ -4,6 +4,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.randomcoder.udroid.runtime.ANDROID_PROOT_BIND_MOUNTS
 
 class ProotTarExtractorTest {
     @Test
@@ -19,7 +20,14 @@ class ProotTarExtractorTest {
         assertTrue("--delay-directory-restore" in arguments)
         assertTrue("--preserve-permissions" in arguments)
         assertTrue("--strip-components=1" in arguments)
-        assertTrue("--exclude=dev" in arguments)
+        val guestCommandIndex = arguments.indexOf("/.udroid-extract/tar")
+        assertTrue(guestCommandIndex > 0)
+        ANDROID_PROOT_BIND_MOUNTS.forEach { path ->
+            val bindIndex = arguments.windowed(2).indexOf(listOf("-b", path))
+            assertTrue("Missing extraction bind for $path", bindIndex >= 0)
+            assertTrue("Extraction bind $path must precede the guest command", bindIndex < guestCommandIndex)
+            assertTrue("--exclude=${path.removePrefix("/")}" in arguments)
+        }
         assertTrue(
             arguments.windowed(2).contains(
                 listOf(
