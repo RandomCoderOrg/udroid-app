@@ -90,6 +90,7 @@ import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.audio.AudioConfiguration
+import org.randomcoder.udroid.media.MediaAccelerationConfiguration
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
@@ -177,6 +178,8 @@ fun UdroidApp(
     desktopScanMessage: String?,
     audioConfiguration: AudioConfiguration,
     audioConfigurationMessage: String?,
+    mediaAccelerationConfiguration: MediaAccelerationConfiguration,
+    mediaAccelerationConfigurationMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -202,6 +205,7 @@ fun UdroidApp(
     onTouchScaleChanged: (Boolean) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
+    onMediaAccelerationChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
@@ -316,6 +320,8 @@ fun UdroidApp(
                         desktopScanMessage = desktopScanMessage,
                         audioConfiguration = audioConfiguration,
                         audioConfigurationMessage = audioConfigurationMessage,
+                        mediaAccelerationConfiguration = mediaAccelerationConfiguration,
+                        mediaAccelerationConfigurationMessage = mediaAccelerationConfigurationMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -340,6 +346,7 @@ fun UdroidApp(
                         onTouchScaleChanged = onTouchScaleChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
+                        onMediaAccelerationChanged = onMediaAccelerationChanged,
                         onStartDesktop = onStartDesktop,
                         onStopDesktop = onStopDesktop,
                         onRestartDesktop = onRestartDesktop,
@@ -384,6 +391,8 @@ fun UdroidApp(
                         desktopScanMessage = desktopScanMessage,
                         audioConfiguration = audioConfiguration,
                         audioConfigurationMessage = audioConfigurationMessage,
+                        mediaAccelerationConfiguration = mediaAccelerationConfiguration,
+                        mediaAccelerationConfigurationMessage = mediaAccelerationConfigurationMessage,
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
@@ -408,6 +417,7 @@ fun UdroidApp(
                         onTouchScaleChanged = onTouchScaleChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
+                        onMediaAccelerationChanged = onMediaAccelerationChanged,
                         onStartDesktop = onStartDesktop,
                         onStopDesktop = onStopDesktop,
                         onRestartDesktop = onRestartDesktop,
@@ -466,6 +476,8 @@ private fun ManagementPane(
     desktopScanMessage: String?,
     audioConfiguration: AudioConfiguration,
     audioConfigurationMessage: String?,
+    mediaAccelerationConfiguration: MediaAccelerationConfiguration,
+    mediaAccelerationConfigurationMessage: String?,
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
@@ -490,6 +502,7 @@ private fun ManagementPane(
     onTouchScaleChanged: (Boolean) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
+    onMediaAccelerationChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
@@ -684,6 +697,8 @@ private fun ManagementPane(
                                 scanMessage = desktopScanMessage,
                                 audioConfiguration = audioConfiguration,
                                 audioConfigurationMessage = audioConfigurationMessage,
+                                mediaAccelerationConfiguration = mediaAccelerationConfiguration,
+                                mediaAccelerationConfigurationMessage = mediaAccelerationConfigurationMessage,
                                 resetAvailable =
                                     selectedRootfs.name in resettableRootfsNames ||
                                         selectedDistro != null,
@@ -712,6 +727,7 @@ private fun ManagementPane(
                                 onTouchScaleChanged = onTouchScaleChanged,
                                 onAudioOutputChanged = onAudioOutputChanged,
                                 onMicrophoneChanged = onMicrophoneChanged,
+                                onMediaAccelerationChanged = onMediaAccelerationChanged,
                                 onStartDesktop = onStartDesktop,
                                 onStopTerminal = onStop,
                                 onStopDesktop = onStopDesktop,

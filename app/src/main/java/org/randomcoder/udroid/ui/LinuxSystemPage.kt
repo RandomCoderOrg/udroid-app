@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.catalog.LinuxDistribution
+import org.randomcoder.udroid.media.MediaAccelerationConfiguration
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
 import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopEnvironment
@@ -78,6 +79,8 @@ fun LinuxSystemPage(
     scanMessage: String?,
     audioConfiguration: AudioConfiguration,
     audioConfigurationMessage: String?,
+    mediaAccelerationConfiguration: MediaAccelerationConfiguration,
+    mediaAccelerationConfigurationMessage: String?,
     resetAvailable: Boolean,
     maintenanceInProgress: Boolean,
     maintenanceMessage: String?,
@@ -90,6 +93,7 @@ fun LinuxSystemPage(
     onTouchScaleChanged: (Boolean) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
+    onMediaAccelerationChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
     onStopTerminal: () -> Unit,
     onStopDesktop: () -> Unit,
@@ -236,6 +240,20 @@ fun LinuxSystemPage(
                 message = audioConfigurationMessage,
                 onOutputChanged = onAudioOutputChanged,
                 onMicrophoneChanged = onMicrophoneChanged,
+            )
+        }
+
+        item(key = "experimental-label") {
+            UdroidSectionLabel(
+                text = "Experimental",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "media-acceleration-settings") {
+            MediaAccelerationSettingsPanel(
+                configuration = mediaAccelerationConfiguration,
+                message = mediaAccelerationConfigurationMessage,
+                onEnabledChanged = onMediaAccelerationChanged,
             )
         }
 
@@ -609,6 +627,40 @@ private fun AudioSettingsPanel(
                 checked = configuration.microphoneEnabled,
                 enabled = true,
                 onCheckedChange = onMicrophoneChanged,
+            )
+            message?.let {
+                Divider(color = UdroidLine)
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaAccelerationSettingsPanel(
+    configuration: MediaAccelerationConfiguration,
+    message: String?,
+    onEnabledChanged: (Boolean) -> Unit,
+) {
+    Surface(
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column {
+            SettingRow(
+                title = "Android video decoding",
+                detail =
+                    "Use Android MediaCodec for compatible H.264, VP9, and AV1 VA-API " +
+                        "applications. Requires a glibc system and a Linux restart.",
+                checked = configuration.enabled,
+                enabled = true,
+                onCheckedChange = onEnabledChanged,
             )
             message?.let {
                 Divider(color = UdroidLine)

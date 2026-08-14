@@ -92,6 +92,18 @@ manifest records every input package, version, repository path, and archive
 checksum used for all supported ABIs.
 The individual dependency packages retain their upstream licenses.
 
+## fake-media-accel
+
+- Project: <https://github.com/RandomCoderOrg/fake-media-accel>
+- Source commit: `1da72812c411b67f76d8c20a093cb0ff54760251`
+- License: MIT
+- Integration design: `docs/MEDIA_ACCELERATION_RUNTIME.md`
+- Reproduction script: `tools/build-fma-assets.sh`
+
+The APK packages an Android MediaCodec daemon and one matching glibc VA-API
+driver for each supported Android ABI. The bridge communicates through an
+app-private Unix-domain socket and is independent of the device GPU driver.
+
 ## PRoot-Distro rootfs recipes
 
 - Project: <https://github.com/termux/proot-distro>

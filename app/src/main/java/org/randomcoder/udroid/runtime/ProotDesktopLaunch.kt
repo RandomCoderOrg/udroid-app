@@ -4,6 +4,7 @@ import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
+import org.randomcoder.udroid.media.MediaAccelerationEndpoint
 import java.io.File
 
 object ProotDesktopLaunchBuilder {
@@ -15,6 +16,7 @@ object ProotDesktopLaunchBuilder {
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
         audioEndpoint: AudioEndpoint? = null,
+        mediaEndpoint: MediaAccelerationEndpoint? = null,
     ): ProotApplicationLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -30,6 +32,7 @@ object ProotDesktopLaunchBuilder {
                 environment = environment,
                 configuration = configuration,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                mediaHostDirectory = mediaEndpoint?.hostDirectory?.absolutePath,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -69,6 +72,7 @@ object ProotDesktopLaunchBuilder {
         configuration: DesktopConfiguration,
         hasDbusRunSession: Boolean,
         audioAuthDirectory: String? = null,
+        mediaHostDirectory: String? = null,
     ): List<String> =
         buildList {
             add(prootPath)
@@ -83,6 +87,10 @@ object ProotDesktopLaunchBuilder {
                 add("-b")
                 add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
             }
+            if (mediaHostDirectory != null) {
+                add("-b")
+                add("$mediaHostDirectory:${MediaAccelerationEndpoint.GUEST_DIRECTORY}")
+            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
@@ -96,6 +104,9 @@ object ProotDesktopLaunchBuilder {
             if (audioAuthDirectory != null) {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
                 add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
+            }
+            if (mediaHostDirectory != null) {
+                with(ProotTerminalLaunchBuilder) { addMediaAccelerationEnvironment() }
             }
             add("XDG_SESSION_TYPE=x11")
             add("XDG_CURRENT_DESKTOP=${environment.kind.desktopName}")

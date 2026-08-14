@@ -4,6 +4,7 @@ import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.media.MediaAccelerationEndpoint
 import java.io.File
 
 data class ProotApplicationLaunch(
@@ -20,6 +21,7 @@ object ProotApplicationLaunchBuilder {
         x11SocketDirectory: File,
         application: LinuxApplication,
         audioEndpoint: AudioEndpoint? = null,
+        mediaEndpoint: MediaAccelerationEndpoint? = null,
     ): ProotApplicationLaunch {
         require(application.executable.isNotBlank()) { "Application executable is empty" }
         require(x11SocketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
@@ -38,6 +40,7 @@ object ProotApplicationLaunchBuilder {
                 applicationArguments =
                     listOf(application.executable) + application.arguments,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                mediaHostDirectory = mediaEndpoint?.hostDirectory?.absolutePath,
             )
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -73,6 +76,7 @@ object ProotApplicationLaunchBuilder {
         guestWorkingDirectory: String,
         applicationArguments: List<String>,
         audioAuthDirectory: String? = null,
+        mediaHostDirectory: String? = null,
     ): List<String> {
         require(applicationArguments.isNotEmpty())
         return buildList {
@@ -88,6 +92,10 @@ object ProotApplicationLaunchBuilder {
                 add("-b")
                 add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
             }
+            if (mediaHostDirectory != null) {
+                add("-b")
+                add("$mediaHostDirectory:${MediaAccelerationEndpoint.GUEST_DIRECTORY}")
+            }
             add("--cwd=$guestWorkingDirectory")
             add("/usr/bin/env")
             add("-i")
@@ -101,6 +109,9 @@ object ProotApplicationLaunchBuilder {
             if (audioAuthDirectory != null) {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
                 add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
+            }
+            if (mediaHostDirectory != null) {
+                with(ProotTerminalLaunchBuilder) { addMediaAccelerationEnvironment() }
             }
             add("XDG_CURRENT_DESKTOP=UDROID")
             add("GDK_BACKEND=x11")

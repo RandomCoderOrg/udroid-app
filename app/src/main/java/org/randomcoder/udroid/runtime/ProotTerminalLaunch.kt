@@ -4,6 +4,7 @@ import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
+import org.randomcoder.udroid.media.MediaAccelerationEndpoint
 import java.io.File
 import java.nio.file.Files
 
@@ -29,6 +30,7 @@ object ProotTerminalLaunchBuilder {
         rootfs: File = InstalledRootfsResolver.resolve(context),
         x11SocketDirectory: File? = null,
         audioEndpoint: AudioEndpoint? = null,
+        mediaEndpoint: MediaAccelerationEndpoint? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -59,6 +61,7 @@ object ProotTerminalLaunchBuilder {
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                mediaHostDirectory = mediaEndpoint?.hostDirectory?.absolutePath,
             )
         val environment =
             buildEnvironment(
@@ -84,6 +87,7 @@ object ProotTerminalLaunchBuilder {
         guestShell: String,
         x11SocketDirectory: String? = null,
         audioAuthDirectory: String? = null,
+        mediaHostDirectory: String? = null,
     ): Array<String> =
         buildList {
             // TerminalSession passes this complete vector to execvp(), including argv[0].
@@ -102,6 +106,10 @@ object ProotTerminalLaunchBuilder {
                 add("-b")
                 add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
             }
+            if (mediaHostDirectory != null) {
+                add("-b")
+                add("$mediaHostDirectory:${MediaAccelerationEndpoint.GUEST_DIRECTORY}")
+            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
@@ -118,9 +126,20 @@ object ProotTerminalLaunchBuilder {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
                 add("PULSE_COOKIE=${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}")
             }
+            if (mediaHostDirectory != null) addMediaAccelerationEnvironment()
             add(guestShell)
             if (guestShell.endsWith("bash")) add("--login")
         }.toTypedArray()
+
+    internal fun MutableList<String>.addMediaAccelerationEnvironment() {
+        add("FMA_SOCKET=${MediaAccelerationEndpoint.GUEST_DIRECTORY}/${MediaAccelerationEndpoint.SOCKET_NAME}")
+        // Raw DMA-heap buffers do not carry MediaCodec release fences. Keep
+        // visible VP9/AV1 outputs behind FRAME_READY before applications can
+        // import them, otherwise a reused surface can briefly show old pixels.
+        add("FMA_VA_SYNC_DIRECT_OUTPUT=1")
+        add("LIBVA_DRIVERS_PATH=${MediaAccelerationEndpoint.GUEST_DIRECTORY}")
+        add("LIBVA_DRIVER_NAME=fma")
+    }
 
     internal fun buildEnvironment(
         androidHome: String,

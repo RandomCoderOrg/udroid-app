@@ -37,6 +37,9 @@ import org.randomcoder.udroid.audio.AudioServerController
 import org.randomcoder.udroid.audio.AudioSessionSnapshot
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.media.MediaAccelerationController
+import org.randomcoder.udroid.media.MediaAccelerationConfigurationStore
+import org.randomcoder.udroid.media.MediaAccelerationSnapshot
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
 import java.io.File
@@ -63,6 +66,10 @@ class RuntimeSupervisorService : Service() {
     private val audioController by lazy {
         AudioServerController(this, app.journal, applicationExecutor)
     }
+    private val mediaController by lazy {
+        MediaAccelerationController(this, app.journal, applicationExecutor)
+    }
+    private val mediaConfigurationStore by lazy { MediaAccelerationConfigurationStore(this) }
 
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -243,6 +250,7 @@ class RuntimeSupervisorService : Service() {
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
         stopApplicationProcesses()
+        mediaController.stop(app.runtimeState.current().bootId)
         audioController.stop(app.runtimeState.current().bootId)
         applicationExecutor.shutdownNow()
         val snapshot = app.runtimeState.current()
@@ -262,6 +270,8 @@ class RuntimeSupervisorService : Service() {
     fun currentDesktopSession(): DesktopSessionSnapshot = app.runtimeState.current().desktop
 
     fun currentAudioSession(): AudioSessionSnapshot = audioController.current()
+
+    fun currentMediaSession(): MediaAccelerationSnapshot = mediaController.current()
 
     fun applyAudioConfiguration(
         rootfsName: String,
@@ -456,6 +466,7 @@ class RuntimeSupervisorService : Service() {
                                 x11SocketDirectory = socketDirectory,
                                 application = application,
                                 audioEndpoint = audioController.endpoint(),
+                                mediaEndpoint = mediaController.endpoint(),
                             )
                         val process =
                             ProcessBuilder(launch.command)
@@ -595,6 +606,7 @@ class RuntimeSupervisorService : Service() {
                             environment = request.environment,
                             configuration = request.configuration,
                             audioEndpoint = audioController.endpoint(),
+                            mediaEndpoint = mediaController.endpoint(),
                         )
                     val pidFile =
                         File(cacheDir, "desktop-process-$launchToken.pid").apply {
@@ -973,6 +985,37 @@ class RuntimeSupervisorService : Service() {
                         fields = mapOf("exception" to error.javaClass.name),
                     )
                 }
+            val mediaEnabled =
+                runCatching { mediaConfigurationStore.load(rootfs.name).enabled }
+                    .getOrElse { error ->
+                        app.journal.append(
+                            component = "media",
+                            severity = "error",
+                            event = "configuration_load_failed",
+                            message =
+                                error.message ?: "Media acceleration settings could not be read",
+                            bootId = bootId,
+                            fields = mapOf("exception" to error.javaClass.name),
+                        )
+                        false
+                    }
+            val mediaEndpoint =
+                if (mediaEnabled) {
+                    runCatching { mediaController.start(rootfs, bootId) }
+                        .onFailure { error ->
+                            app.journal.append(
+                                component = "media",
+                                severity = "error",
+                                event = "server_start_failed",
+                                message = error.message ?: "Media acceleration failed to start",
+                                bootId = bootId,
+                                fields = mapOf("exception" to error.javaClass.name),
+                            )
+                        }.getOrNull()
+                } else {
+                    mediaController.stop(bootId)
+                    null
+                }
             val x11SocketDirectory = x11Controller.start(rootfs, bootId)
             ProotTerminalLaunchBuilder.create(
                 context = this,
@@ -980,6 +1023,7 @@ class RuntimeSupervisorService : Service() {
                 rootfs = rootfs,
                 x11SocketDirectory = x11SocketDirectory,
                 audioEndpoint = audioController.endpoint(),
+                mediaEndpoint = mediaEndpoint,
             )
         }.mapCatching { launch ->
             configureTerminalColors()
@@ -1089,6 +1133,7 @@ class RuntimeSupervisorService : Service() {
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
         stopApplicationProcesses()
         x11Controller.stop(beforeExit.bootId)
+        mediaController.stop(beforeExit.bootId)
         audioController.stop(beforeExit.bootId)
         publishState(next)
         app.journal.append(
@@ -1112,6 +1157,7 @@ class RuntimeSupervisorService : Service() {
         stopDesktopProcess(restarting = false)
         stopApplicationProcesses()
         x11Controller.stop(current.bootId)
+        mediaController.stop(current.bootId)
         audioController.stop(current.bootId)
         val stopping =
             app.runtimeState.update {
