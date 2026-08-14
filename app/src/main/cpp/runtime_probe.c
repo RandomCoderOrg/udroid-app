@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,32 +42,43 @@ static int read_exactly(int fd, uint8_t *buffer, size_t count) {
     return 0;
 }
 
-static int probe_x11_socket(const char *path, int force_denied) {
+static int probe_x11_socket(const char *path, int force_denied,
+                            int abstract_socket, const char *socket_namespace) {
     static const uint8_t setup_request[] = {
         0x6c, 0x00, 0x0b, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
     uint8_t setup_header[8];
     struct sockaddr_un address;
+    socklen_t address_size;
     struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
+    const int64_t started_ms = monotonic_ms();
 
     if (force_denied) {
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"connect_failed\","
-               "\"errno\":%d,\"detail\":\"Permission denied (injected)\"}\n",
-               EACCES);
+               "\"socket_namespace\":\"%s\",\"errno\":%d,"
+               "\"address_bytes\":0,\"elapsed_ms\":0,"
+               "\"detail\":\"Permission denied (injected)\"}\n",
+               socket_namespace, EACCES);
         return 20;
     }
     if (strlen(path) >= sizeof(address.sun_path)) {
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"invalid_path\","
-               "\"errno\":%d,\"detail\":\"Socket path is too long\"}\n",
-               ENAMETOOLONG);
+               "\"socket_namespace\":\"%s\",\"errno\":%d,"
+               "\"address_bytes\":0,\"elapsed_ms\":%lld,"
+               "\"detail\":\"Socket path is too long\"}\n",
+               socket_namespace, ENAMETOOLONG,
+               (long long)(monotonic_ms() - started_ms));
         return 21;
     }
 
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) {
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"socket_failed\","
-               "\"errno\":%d,\"detail\":\"%s\"}\n", errno, strerror(errno));
+               "\"socket_namespace\":\"%s\",\"errno\":%d,"
+               "\"address_bytes\":0,\"elapsed_ms\":%lld,\"detail\":\"%s\"}\n",
+               socket_namespace, errno,
+               (long long)(monotonic_ms() - started_ms), strerror(errno));
         return 22;
     }
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -74,12 +86,23 @@ static int probe_x11_socket(const char *path, int force_denied) {
 
     memset(&address, 0, sizeof(address));
     address.sun_family = AF_UNIX;
-    memcpy(address.sun_path, path, strlen(path) + 1);
-    if (connect(fd, (struct sockaddr *)&address, sizeof(address)) != 0) {
+    if (abstract_socket) {
+        size_t path_length = strlen(path);
+        address.sun_path[0] = '\0';
+        memcpy(address.sun_path + 1, path, path_length);
+        address_size = (socklen_t)(offsetof(struct sockaddr_un, sun_path) + 1 + path_length);
+    } else {
+        memcpy(address.sun_path, path, strlen(path) + 1);
+        /* libxcb 1.14 passes the complete structure for filesystem sockets. */
+        address_size = sizeof(address);
+    }
+    if (connect(fd, (struct sockaddr *)&address, address_size) != 0) {
         int saved_errno = errno;
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"connect_failed\","
-               "\"errno\":%d,\"detail\":\"%s\"}\n",
-               saved_errno, strerror(saved_errno));
+               "\"socket_namespace\":\"%s\",\"errno\":%d,"
+               "\"address_bytes\":%u,\"elapsed_ms\":%lld,\"detail\":\"%s\"}\n",
+               socket_namespace, saved_errno, (unsigned int)address_size,
+               (long long)(monotonic_ms() - started_ms), strerror(saved_errno));
         close(fd);
         return 23;
     }
@@ -87,8 +110,11 @@ static int probe_x11_socket(const char *path, int force_denied) {
         read_exactly(fd, setup_header, sizeof(setup_header)) != 0) {
         int saved_errno = errno;
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"handshake_failed\","
-               "\"errno\":%d,\"detail\":\"%s\"}\n",
-               saved_errno, saved_errno == 0 ? "Connection closed" : strerror(saved_errno));
+               "\"socket_namespace\":\"%s\",\"errno\":%d,"
+               "\"address_bytes\":%u,\"elapsed_ms\":%lld,\"detail\":\"%s\"}\n",
+               socket_namespace, saved_errno, (unsigned int)address_size,
+               (long long)(monotonic_ms() - started_ms),
+               saved_errno == 0 ? "Connection closed" : strerror(saved_errno));
         close(fd);
         return 24;
     }
@@ -100,21 +126,31 @@ static int probe_x11_socket(const char *path, int force_denied) {
         (unsigned int)setup_header[4] | ((unsigned int)setup_header[5] << 8U);
     if (setup_header[0] != 1) {
         printf("{\"event\":\"x11_guest_probe\",\"status\":\"rejected\","
-               "\"setup_status\":%u,\"protocol_major\":%u,\"protocol_minor\":%u}\n",
-               (unsigned int)setup_header[0], protocol_major, protocol_minor);
+               "\"socket_namespace\":\"%s\",\"setup_status\":%u,"
+               "\"protocol_major\":%u,\"protocol_minor\":%u,"
+               "\"address_bytes\":%u,\"elapsed_ms\":%lld}\n",
+               socket_namespace, (unsigned int)setup_header[0], protocol_major, protocol_minor,
+               (unsigned int)address_size, (long long)(monotonic_ms() - started_ms));
         return 25;
     }
     printf("{\"event\":\"x11_guest_probe\",\"status\":\"ready\","
-           "\"protocol_major\":%u,\"protocol_minor\":%u}\n",
-           protocol_major, protocol_minor);
+           "\"socket_namespace\":\"%s\",\"protocol_major\":%u,"
+           "\"protocol_minor\":%u,\"address_bytes\":%u,\"elapsed_ms\":%lld}\n",
+           socket_namespace, protocol_major, protocol_minor, (unsigned int)address_size,
+           (long long)(monotonic_ms() - started_ms));
     return 0;
 }
 
 int main(int argc, char **argv) {
+    if (argc >= 3 && strcmp(argv[1], "--x11-abstract") == 0) {
+        setvbuf(stdout, NULL, _IOLBF, 0);
+        return probe_x11_socket(argv[2], 0, 1, "abstract");
+    }
     if (argc >= 3 &&
         (strcmp(argv[1], "--x11") == 0 || strcmp(argv[1], "--x11-deny") == 0)) {
         setvbuf(stdout, NULL, _IOLBF, 0);
-        return probe_x11_socket(argv[2], strcmp(argv[1], "--x11-deny") == 0);
+        return probe_x11_socket(argv[2], strcmp(argv[1], "--x11-deny") == 0,
+                                0, "filesystem");
     }
 
     const char *boot_id = argc > 1 ? argv[1] : "unknown";

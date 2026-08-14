@@ -6,7 +6,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 object NativeProbeInstaller {
-    private const val PROBE_VERSION = "2"
+    private const val PROBE_VERSION = "4"
     private val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
 
     fun install(context: Context): File {

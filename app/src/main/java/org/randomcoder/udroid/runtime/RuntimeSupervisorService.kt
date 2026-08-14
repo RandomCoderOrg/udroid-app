@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
@@ -577,6 +578,7 @@ class RuntimeSupervisorService : Service() {
                     "touch_scale" to request.configuration.touchScaleEnabled,
                 ),
         )
+        val desktopRequestedAtMs = SystemClock.elapsedRealtime()
         x11Controller.whenReady { x11Endpoint ->
             if (desktopLaunchToken.get() != launchToken) return@whenReady
             if (x11Endpoint == null) {
@@ -590,14 +592,87 @@ class RuntimeSupervisorService : Service() {
                     if (desktopLaunchToken.get() != launchToken) return@runCatching null
                     val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
                     val prootRuntime = ProotRuntimeInstaller.install(this)
-                    when (
-                        val probe =
-                            guestX11TransportProbe.query(
-                                runtime = prootRuntime,
-                                rootfs = rootfs,
-                                endpoint = x11Endpoint,
+                    val probeReport =
+                        guestX11TransportProbe.query(
+                            runtime = prootRuntime,
+                            rootfs = rootfs,
+                            endpoint = x11Endpoint,
+                        )
+                    listOf(
+                        "abstract" to probeReport.abstractSocket,
+                        "filesystem" to probeReport.filesystemSocket,
+                    ).forEach { (socketNamespace, result) ->
+                        val resultFields =
+                            mutableMapOf<String, Any?>(
+                                "rootfs" to request.rootfsName,
+                                "display" to DISPLAY_NUMBER,
+                                "endpoint_transport" to x11Endpoint.transport.journalValue,
+                                "socket_namespace" to socketNamespace,
+                                "guest_socket" to "/tmp/.X11-unix/X0",
                             )
-                    ) {
+                        val message =
+                            when (result) {
+                                is GuestX11TransportResult.Ready -> {
+                                    resultFields["status"] = "ready"
+                                    resultFields["protocol_major"] = result.protocolMajor
+                                    resultFields["protocol_minor"] = result.protocolMinor
+                                    resultFields["address_bytes"] = result.addressBytes
+                                    resultFields["elapsed_ms"] = result.elapsedMs
+                                    "Guest $socketNamespace X11 probe completed protocol " +
+                                        "${result.protocolMajor}.${result.protocolMinor} setup"
+                                }
+
+                                is GuestX11TransportResult.Failed -> {
+                                    resultFields["status"] = result.stage
+                                    resultFields["errno"] = result.errno
+                                    resultFields["detail"] = result.detail
+                                    resultFields["address_bytes"] = result.addressBytes
+                                    resultFields["elapsed_ms"] = result.elapsedMs
+                                    "Guest $socketNamespace X11 probe ${result.stage}: ${result.detail}"
+                                }
+                            }
+                        app.journal.append(
+                            component = "x11",
+                            severity =
+                                if (
+                                    socketNamespace == "filesystem" &&
+                                    result is GuestX11TransportResult.Failed
+                                ) {
+                                    "error"
+                                } else {
+                                    "info"
+                                },
+                            event = "guest_transport_probe",
+                            message = message,
+                            bootId = runtime.bootId,
+                            fields = resultFields,
+                        )
+                    }
+                    val clientProbe = probeReport.client
+                    app.journal.append(
+                        component = "x11",
+                        severity = if (clientProbe.status == "ready") "info" else "warning",
+                        event = "guest_xrdb_probe",
+                        message =
+                            when (clientProbe.status) {
+                                "ready" -> "Guest xrdb connected through the distro X11 libraries"
+                                "unavailable" -> "Guest xrdb is unavailable"
+                                "timeout" -> "Guest xrdb connection timed out"
+                                else -> "Guest xrdb connection failed: ${clientProbe.output.ifBlank { clientProbe.status }}"
+                            },
+                        bootId = runtime.bootId,
+                        fields =
+                            buildMap<String, Any?> {
+                                put("rootfs", request.rootfsName)
+                                put("display", DISPLAY_NUMBER)
+                                put("endpoint_transport", x11Endpoint.transport.journalValue)
+                                put("status", clientProbe.status)
+                                put("probe_process_exit", clientProbe.exitCode)
+                                put("elapsed_ms", clientProbe.elapsedMs)
+                                clientProbe.fields.forEach { (key, value) -> put(key, value) }
+                            },
+                    )
+                    when (val probe = probeReport.filesystemSocket) {
                         is GuestX11TransportResult.Ready ->
                             app.journal.append(
                                 component = "x11",
@@ -715,6 +790,7 @@ class RuntimeSupervisorService : Service() {
                             mapOf(
                                 "rootfs" to owned.rootfsName,
                                 "display" to DISPLAY_NUMBER,
+                                "launch_ms" to SystemClock.elapsedRealtime() - desktopRequestedAtMs,
                             ),
                     )
                     monitorDesktop(owned)
