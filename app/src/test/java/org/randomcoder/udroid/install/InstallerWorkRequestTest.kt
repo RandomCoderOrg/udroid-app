@@ -40,6 +40,36 @@ class InstallerWorkRequestTest {
     }
 
     @Test
+    fun `archive variation keeps its independent installation identity`() {
+        val source =
+            DistroVariant(
+                suite = "jammy",
+                variant = "base",
+                internalName = "ubuntu-jammy",
+                friendlyName = "Ubuntu 22.04",
+                architecture = "aarch64",
+                downloadUrl = "https://example.test/ubuntu.tar.xz",
+                sha256 = "b".repeat(64),
+            )
+        val expected =
+            InstallerWorkRequest.Archive(
+                distro = source,
+                operationId = "variation-1234",
+                installationName = "ubuntu-jammy-v2",
+                displayName = "Ubuntu 22.04 · Variation 2",
+            )
+
+        val actual =
+            InstallerWorkRequestCodec.decode(
+                InstallerWorkRequestCodec.encode(expected),
+            )
+
+        assertEquals(expected, actual)
+        assertEquals("ubuntu-jammy", (actual as InstallerWorkRequest.Archive).distro.internalName)
+        assertEquals("ubuntu-jammy-v2", actual.installationName)
+    }
+
+    @Test
     fun `oci work survives service intent serialization without fake archive metadata`() {
         val expected =
             InstallerWorkRequest.Oci(

@@ -482,6 +482,7 @@ class RuntimeSupervisorService : Service() {
                                 mapOf(
                                     "desktop_id" to application.id,
                                     "executable" to application.executable,
+                                    "mounts" to launch.mounts.joinToString { it.argument },
                                 ),
                         )
                     }
@@ -660,6 +661,7 @@ class RuntimeSupervisorService : Service() {
                             rootfsName = request.rootfsName,
                             environment = request.environment,
                             gfxstreamHost = startingGfxstreamHost,
+                            mounts = launch.mounts,
                         )
                     check(ownedDesktop.compareAndSet(null, owned)) {
                         "Another desktop session won display :0"
@@ -697,13 +699,14 @@ class RuntimeSupervisorService : Service() {
                         event = "desktop_started",
                         message = "${owned.environment.name} started on display :0",
                         bootId = app.runtimeState.current().bootId,
-                            fields =
-                                mapOf(
-                                    "rootfs" to owned.rootfsName,
-                                    "display" to DISPLAY_NUMBER,
-                                    "graphics_profile" to
-                                        request.configuration.graphicsProfile.storageValue,
-                                ),
+                        fields =
+                            mapOf(
+                                "rootfs" to owned.rootfsName,
+                                "display" to DISPLAY_NUMBER,
+                                "graphics_profile" to
+                                    request.configuration.graphicsProfile.storageValue,
+                                "mounts" to owned.mounts.joinToString { it.argument },
+                            ),
                     )
                     monitorDesktop(owned)
                 }.onFailure { error ->
@@ -1128,6 +1131,7 @@ class RuntimeSupervisorService : Service() {
                         "pid" to session.pid,
                         "rootfs" to launch.rootfs.name,
                         "terminal" to "termux-v0.118.3",
+                        "mounts" to launch.mounts.joinToString { it.argument },
                     ),
             )
         }.onFailure { error ->
@@ -1556,5 +1560,6 @@ class RuntimeSupervisorService : Service() {
         val rootfsName: String,
         val environment: DesktopEnvironment,
         val gfxstreamHost: GfxstreamHostController?,
+        val mounts: List<ResolvedProotMount>,
     )
 }

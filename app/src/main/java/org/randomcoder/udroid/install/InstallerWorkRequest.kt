@@ -23,9 +23,9 @@ sealed interface InstallerWorkRequest {
     data class Archive(
         val distro: DistroVariant,
         override val operationId: String,
+        override val installationName: String = distro.internalName,
+        override val displayName: String = distro.releaseName,
     ) : InstallerWorkRequest {
-        override val installationName: String = distro.internalName
-        override val displayName: String = distro.releaseName
         override val architecture: String = distro.architecture
     }
 
@@ -55,6 +55,7 @@ object InstallerWorkRequestCodec {
             when (request) {
                 is InstallerWorkRequest.Archive -> {
                     put("source", SOURCE_ARCHIVE)
+                    put("source_internal_name", request.distro.internalName)
                     put("suite", request.distro.suite)
                     put("variant", request.distro.variant)
                     put("friendly_name", request.distro.friendlyName)
@@ -112,7 +113,11 @@ object InstallerWorkRequestCodec {
                         DistroVariant(
                             suite = value.requiredString("suite"),
                             variant = value.requiredString("variant"),
-                            internalName = installationName,
+                            internalName =
+                                value["source_internal_name"]
+                                    ?.jsonPrimitive
+                                    ?.contentOrNull
+                                    ?: installationName,
                             friendlyName = value.requiredString("friendly_name"),
                             architecture = architecture,
                             downloadUrl = value.requiredString("download_url"),
@@ -143,6 +148,8 @@ object InstallerWorkRequestCodec {
                                     ?.intOrNull
                                     ?: 0,
                         ),
+                    installationName = installationName,
+                    displayName = displayName,
                 )
 
             SOURCE_OCI ->

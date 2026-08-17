@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
@@ -64,6 +65,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -79,6 +85,7 @@ import org.json.JSONObject
 import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.linuxapps.LinuxApplication
@@ -92,7 +99,10 @@ import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopEnvironment
+import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.ProotMountProfile
+import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
@@ -109,6 +119,8 @@ enum class UdroidDestination(
     DISTROS("Linux", Icons.Rounded.Storage, Icons.Rounded.Storage),
     INSTALL("Install", Icons.Rounded.Storage, Icons.Rounded.Storage),
     SYSTEM("System", Icons.Rounded.Storage, Icons.Rounded.Storage),
+    MOUNTS("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
+    MOUNT_EDITOR("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     TERMINAL("Terminal", Icons.Rounded.Terminal, Icons.Rounded.Terminal),
     APPS("Apps", Icons.Rounded.Apps, Icons.Rounded.Apps),
     DESKTOP("Desktop", Icons.Rounded.DesktopWindows, Icons.Rounded.DesktopWindows),
@@ -141,6 +153,8 @@ private val UdroidDestination.navigationDepth: Int
             UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
             -> 1
+            UdroidDestination.MOUNTS -> 2
+            UdroidDestination.MOUNT_EDITOR -> 3
             else -> 0
         }
 
@@ -187,6 +201,7 @@ fun UdroidApp(
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
     onResetRootfs: (String, DistroVariant?) -> Unit,
+    onCreateRootfsVariation: (String, DistroVariant?, ProotMountProfile) -> Unit,
     onDeleteRootfs: (String) -> Unit,
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
@@ -211,6 +226,8 @@ fun UdroidApp(
     onInstallUpdate: () -> Unit,
     onOpenUpdateRelease: () -> Unit,
 ) {
+    var mountConfigurationSourceSystemId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedMountProfileSystemId by rememberSaveable { mutableStateOf<String?>(null) }
     val hasInstalledLinux = installedRootfsName != null
     val requestedJourney =
         workspaceJourney(
@@ -224,6 +241,9 @@ fun UdroidApp(
         when (activeDestination) {
             UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
+            -> UdroidDestination.DISTROS
+            UdroidDestination.MOUNTS,
+            UdroidDestination.MOUNT_EDITOR,
             -> UdroidDestination.DISTROS
             else -> activeDestination
         }
@@ -311,6 +331,8 @@ fun UdroidApp(
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
+                        mountConfigurationSourceSystemId = mountConfigurationSourceSystemId,
+                        selectedMountProfileSystemId = selectedMountProfileSystemId,
                         onDestinationSelected = onDestinationSelected,
                         onPrimaryDestinationSelected = onPrimaryDestinationSelected,
                         onStart = onStart,
@@ -325,7 +347,21 @@ fun UdroidApp(
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onSelectMountProfile = { systemId ->
+                            mountConfigurationSourceSystemId = systemId
+                            selectedMountProfileSystemId = null
+                            onDestinationSelected(UdroidDestination.MOUNTS)
+                        },
+                        onCreateMountProfile = {
+                            selectedMountProfileSystemId = null
+                            onDestinationSelected(UdroidDestination.MOUNT_EDITOR)
+                        },
+                        onEditMountProfile = { systemId ->
+                            selectedMountProfileSystemId = systemId
+                            onDestinationSelected(UdroidDestination.MOUNT_EDITOR)
+                        },
                         onResetRootfs = onResetRootfs,
+                        onCreateRootfsVariation = onCreateRootfsVariation,
                         onDeleteRootfs = onDeleteRootfs,
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
@@ -380,6 +416,8 @@ fun UdroidApp(
                         linuxApplicationsState = linuxApplicationsState,
                         linuxApplicationMessage = linuxApplicationMessage,
                         showInstallTerminal = showInstallTerminal,
+                        mountConfigurationSourceSystemId = mountConfigurationSourceSystemId,
+                        selectedMountProfileSystemId = selectedMountProfileSystemId,
                         onDestinationSelected = onDestinationSelected,
                         onPrimaryDestinationSelected = onPrimaryDestinationSelected,
                         onStart = onStart,
@@ -394,7 +432,21 @@ fun UdroidApp(
                         onOpenInstalledSystem = onOpenInstalledSystem,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onSelectMountProfile = { systemId ->
+                            mountConfigurationSourceSystemId = systemId
+                            selectedMountProfileSystemId = null
+                            onDestinationSelected(UdroidDestination.MOUNTS)
+                        },
+                        onCreateMountProfile = {
+                            selectedMountProfileSystemId = null
+                            onDestinationSelected(UdroidDestination.MOUNT_EDITOR)
+                        },
+                        onEditMountProfile = { systemId ->
+                            selectedMountProfileSystemId = systemId
+                            onDestinationSelected(UdroidDestination.MOUNT_EDITOR)
+                        },
                         onResetRootfs = onResetRootfs,
+                        onCreateRootfsVariation = onCreateRootfsVariation,
                         onDeleteRootfs = onDeleteRootfs,
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
@@ -463,6 +515,8 @@ private fun ManagementPane(
     linuxApplicationsState: LinuxApplicationsState,
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
+    mountConfigurationSourceSystemId: String?,
+    selectedMountProfileSystemId: String?,
     onDestinationSelected: (UdroidDestination) -> Unit,
     onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
@@ -477,7 +531,11 @@ private fun ManagementPane(
     onOpenInstalledSystem: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
+    onSelectMountProfile: (String) -> Unit,
+    onCreateMountProfile: () -> Unit,
+    onEditMountProfile: (String) -> Unit,
     onResetRootfs: (String, DistroVariant?) -> Unit,
+    onCreateRootfsVariation: (String, DistroVariant?, ProotMountProfile) -> Unit,
     onDeleteRootfs: (String) -> Unit,
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
@@ -593,6 +651,115 @@ private fun ManagementPane(
                             },
                         )
                     }
+                    UdroidDestination.MOUNTS -> {
+                        val sourceSystemId = mountConfigurationSourceSystemId
+                        if (sourceSystemId == null) {
+                            onDestinationSelected(UdroidDestination.DISTROS)
+                        } else {
+                            val sourceRootfs =
+                                installedRootfses.firstOrNull { it.name == sourceSystemId }
+                            val sourceDistro =
+                                (catalogueState as? DistroCatalogState.Ready)
+                                    ?.catalog
+                                    ?.variants
+                                    ?.firstOrNull { it.internalName == sourceSystemId }
+                            if (sourceRootfs == null) {
+                                onDestinationSelected(UdroidDestination.DISTROS)
+                            } else {
+                                ProotMountConfigurationsPage(
+                                    sourceSystemId = sourceSystemId,
+                                    sourceSystemTitle =
+                                        sourceDistro?.releaseName
+                                            ?: installedSystemTitle(sourceSystemId),
+                                    distribution =
+                                        sourceDistro?.distribution
+                                            ?: distributionFromSystemId(sourceSystemId),
+                                    installedRootfses = installedRootfses,
+                                    activeRootfsName = installedRootfsName,
+                                    installProgress = installProgress,
+                                    onBack = {
+                                        onDestinationSelected(UdroidDestination.SYSTEM)
+                                    },
+                                    onCreateConfiguration = {
+                                        onCreateMountProfile()
+                                    },
+                                    onEditConfiguration = { configurationSystemId ->
+                                        onEditMountProfile(configurationSystemId)
+                                    },
+                                    onLaunchDistro = onOpenInstalledSystem,
+                                    onDeleteConfiguration = onDeleteRootfs,
+                                )
+                            }
+                        }
+                    }
+                    UdroidDestination.MOUNT_EDITOR -> {
+                        val sourceSystemId = mountConfigurationSourceSystemId
+                        if (sourceSystemId == null) {
+                            onDestinationSelected(UdroidDestination.DISTROS)
+                        } else {
+                            val configurationSystemId = selectedMountProfileSystemId
+                            val targetSystemId = configurationSystemId ?: sourceSystemId
+                            val sourceDistro =
+                                (catalogueState as? DistroCatalogState.Ready)
+                                    ?.catalog
+                                    ?.variants
+                                    ?.firstOrNull { it.internalName == sourceSystemId }
+                            val runtimeBusy =
+                                snapshot.rootfsName == targetSystemId &&
+                                    snapshot.phase in
+                                    setOf(
+                                        RuntimePhase.STARTING,
+                                        RuntimePhase.RUNNING,
+                                        RuntimePhase.STOPPING,
+                                    )
+                            val desktopBusy =
+                                snapshot.desktop.rootfsName == targetSystemId &&
+                                    snapshot.desktop.phase in
+                                    setOf(
+                                        DesktopSessionPhase.STARTING,
+                                        DesktopSessionPhase.RUNNING,
+                                        DesktopSessionPhase.STOPPING,
+                                    )
+                            ProotMountConfigurationEditorPage(
+                                sourceSystemId = sourceSystemId,
+                                configurationSystemId = configurationSystemId,
+                                systemTitle =
+                                    if (configurationSystemId == null) {
+                                        sourceDistro?.releaseName
+                                            ?: installedSystemTitle(sourceSystemId)
+                                    } else {
+                                        installProgress
+                                            ?.takeIf {
+                                                it.installationName == configurationSystemId
+                                            }?.displayName
+                                            ?: installedSystemTitle(configurationSystemId)
+                                    },
+                                distribution =
+                                    sourceDistro?.distribution
+                                        ?: distributionFromSystemId(sourceSystemId),
+                                active = configurationSystemId == installedRootfsName,
+                                editingEnabled =
+                                    if (configurationSystemId == null) {
+                                        installProgress == null
+                                    } else {
+                                        !runtimeBusy &&
+                                            !desktopBusy &&
+                                            rootfsMaintenanceName != targetSystemId
+                                    },
+                                externalMessage = rootfsMaintenanceMessage,
+                                onBack = {
+                                    onDestinationSelected(UdroidDestination.MOUNTS)
+                                },
+                                onCreateDistro = { profile ->
+                                    onCreateRootfsVariation(
+                                        sourceSystemId,
+                                        sourceDistro,
+                                        profile,
+                                    )
+                                },
+                            )
+                        }
+                    }
                     UdroidDestination.DISTROS ->
                         selectedOciRepository?.let { repository ->
                             OciTagCataloguePage(
@@ -640,6 +807,16 @@ private fun ManagementPane(
                         if (selectedRootfs == null) {
                             onDestinationSelected(UdroidDestination.DISTROS)
                         } else {
+                            val context = LocalContext.current
+                            val mountProfileStore = remember(context) {
+                                ProotMountProfileStore(context)
+                            }
+                            val mountConfigurationSourceId =
+                                remember(selectedRootfs.name) {
+                                    runCatching {
+                                        mountProfileStore.load(selectedRootfs.name).sourceSystemId
+                                    }.getOrNull() ?: selectedRootfs.name
+                                }
                             LinuxSystemPage(
                                 rootfs = selectedRootfs,
                                 distro = selectedDistro,
@@ -684,6 +861,9 @@ private fun ManagementPane(
                                 onStopTerminal = onStop,
                                 onStopDesktop = onStopDesktop,
                                 onRestartDesktop = onRestartDesktop,
+                                onConfigureMounts = {
+                                    onSelectMountProfile(mountConfigurationSourceId)
+                                },
                                 onResetFilesystem = {
                                     onResetRootfs(selectedRootfs.name, selectedDistro)
                                 },
@@ -1501,6 +1681,17 @@ private fun installedSystemTitle(rootfsName: String): String =
         rootfsName.contains("focal", ignoreCase = true) -> "Ubuntu 20.04 LTS"
         else -> rootfsName
     }
+
+private fun distributionFromSystemId(systemId: String): LinuxDistribution {
+    val normalized = systemId.lowercase()
+    return when {
+        "debian" in normalized -> LinuxDistribution.DEBIAN
+        "arch" in normalized -> LinuxDistribution.ARCH
+        "alpine" in normalized -> LinuxDistribution.ALPINE
+        "void" in normalized -> LinuxDistribution.VOID
+        else -> LinuxDistribution.UBUNTU
+    }
+}
 
 private const val GITHUB_REPOSITORY_URL = "https://github.com/RandomCoderOrg/udroid-app"
 private const val GITHUB_SPONSOR_URL = "https://github.com/sponsors/RandomCoderOrg"

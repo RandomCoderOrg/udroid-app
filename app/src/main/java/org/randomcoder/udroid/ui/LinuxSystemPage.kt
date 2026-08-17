@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.AlertDialog
@@ -63,6 +64,9 @@ import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
+import org.randomcoder.udroid.runtime.ProotMountProfile
+import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import java.text.DateFormat
@@ -97,12 +101,19 @@ fun LinuxSystemPage(
     onStopTerminal: () -> Unit,
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
+    onConfigureMounts: () -> Unit,
     onResetFilesystem: () -> Unit,
     onDeleteFilesystem: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
     var confirmation by remember(rootfs.name) {
         mutableStateOf<FilesystemConfirmation?>(null)
+    }
+    val mountProfile = remember(rootfs.name) {
+        runCatching { mountProfileStore.load(rootfs.name) }
+            .getOrDefault(ProotMountProfile())
     }
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
@@ -391,6 +402,25 @@ fun LinuxSystemPage(
             }
         }
 
+        item(key = "mounts-label") {
+            UdroidSectionLabel(
+                text = "Mount mappings",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "mounts-settings") {
+            MountProfilePanel(
+                profile = mountProfile,
+                enabled = maintenanceEnabled,
+                crashed =
+                    snapshot.rootfsName == rootfs.name &&
+                        snapshot.phase == RuntimePhase.CRASHED,
+                message = null,
+                onConfigure = onConfigureMounts,
+                onRetry = onOpenTerminal,
+            )
+        }
+
         item(key = "filesystem-label") {
             UdroidSectionLabel(
                 text = "Storage",
@@ -570,11 +600,96 @@ fun LinuxSystemPage(
             },
         )
     }
+
 }
 
 private enum class FilesystemConfirmation {
     RESET,
     DELETE,
+}
+
+@Composable
+private fun MountProfilePanel(
+    profile: ProotMountProfile,
+    enabled: Boolean,
+    crashed: Boolean,
+    message: String?,
+    onConfigure: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val enabledDefaults = PROOT_DEFAULT_MOUNTS.count { profile.isDefaultEnabled(it.id) }
+    val enabledCustom = profile.customMounts.count { it.enabled }
+    Surface(
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                "$enabledDefaults of ${PROOT_DEFAULT_MOUNTS.size} defaults enabled",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                if (enabledCustom == 1) {
+                    "1 enabled custom mapping"
+                } else {
+                    "$enabledCustom enabled custom mappings"
+                },
+                modifier = Modifier.padding(top = 3.dp),
+                color = UdroidMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!enabled) {
+                Text(
+                    "Stop this Linux system before changing its launch profile.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (crashed) {
+                Text(
+                    "The last runtime exited unexpectedly. The saved profile was not changed.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = UdroidWarning,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            message?.let {
+                Text(
+                    it,
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = enabled,
+                    onClick = onConfigure,
+                ) {
+                    Icon(Icons.Rounded.Settings, contentDescription = null)
+                    Text("Configure mounts", modifier = Modifier.padding(start = 6.dp))
+                }
+                if (crashed) {
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = onRetry,
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = null)
+                        Text("Retry", modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

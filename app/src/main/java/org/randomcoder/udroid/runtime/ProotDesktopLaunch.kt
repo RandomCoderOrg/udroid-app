@@ -22,6 +22,15 @@ object ProotDesktopLaunchBuilder {
         }
         require(x11SocketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
         val guestHome = if (File(rootfs, "root").isDirectory) "/root" else "/"
+        val mounts =
+            ProotMountResolver.resolve(
+                profile = ProotMountProfileStore(context).load(rootfs.name),
+                sessionMounts =
+                    ProotMountResolver.sessionMounts(
+                        x11SocketDirectory = x11SocketDirectory.absolutePath,
+                        audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                    ),
+            )
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -32,6 +41,7 @@ object ProotDesktopLaunchBuilder {
                 configuration = configuration,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
+                mounts = mounts,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -59,6 +69,7 @@ object ProotDesktopLaunchBuilder {
                         val separator = it.indexOf('=')
                         it.substring(0, separator) to it.substring(separator + 1)
                     },
+            mounts = mounts,
         )
     }
 
@@ -72,6 +83,8 @@ object ProotDesktopLaunchBuilder {
         hasDbusRunSession: Boolean,
         audioAuthDirectory: String? = null,
         launchProfile: ProotLaunchProfile? = null,
+        mounts: List<ResolvedProotMount> =
+            ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
     ): List<String> =
         buildList {
             add(prootPath)
@@ -79,13 +92,8 @@ object ProotDesktopLaunchBuilder {
             add("--kill-on-exit")
             add("--root-id")
             add("--rootfs=$rootfsPath")
-            addAndroidProotBindMounts()
+            addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
-            addX11ProotBindMounts(x11SocketDirectory)
-            if (audioAuthDirectory != null) {
-                add("-b")
-                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
-            }
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
