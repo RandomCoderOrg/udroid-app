@@ -477,6 +477,7 @@ class RuntimeSupervisorService : Service() {
                                 mapOf(
                                     "desktop_id" to application.id,
                                     "executable" to application.executable,
+                                    "mounts" to launch.mounts.joinToString { it.argument },
                                 ),
                         )
                     }
@@ -626,6 +627,7 @@ class RuntimeSupervisorService : Service() {
                             pidFile = pidFile,
                             rootfsName = request.rootfsName,
                             environment = request.environment,
+                            mounts = launch.mounts,
                         )
                     check(ownedDesktop.compareAndSet(null, owned)) {
                         "Another desktop session won display :0"
@@ -666,6 +668,7 @@ class RuntimeSupervisorService : Service() {
                             mapOf(
                                 "rootfs" to owned.rootfsName,
                                 "display" to DISPLAY_NUMBER,
+                                "mounts" to owned.mounts.joinToString { it.argument },
                             ),
                     )
                     monitorDesktop(owned)
@@ -1038,6 +1041,7 @@ class RuntimeSupervisorService : Service() {
                         "pid" to session.pid,
                         "rootfs" to launch.rootfs.name,
                         "terminal" to "termux-v0.118.3",
+                        "mounts" to launch.mounts.joinToString { it.argument },
                     ),
             )
         }.onFailure { error ->
@@ -1465,5 +1469,6 @@ class RuntimeSupervisorService : Service() {
         val pidFile: File,
         val rootfsName: String,
         val environment: DesktopEnvironment,
+        val mounts: List<ResolvedProotMount>,
     )
 }

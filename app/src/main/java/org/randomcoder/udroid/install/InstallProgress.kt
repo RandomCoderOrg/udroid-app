@@ -116,21 +116,35 @@ data class InstallProgress(
 
 object InstallationSelection {
     fun initial(distro: DistroVariant): InstallProgress =
+        initial(
+            InstallerWorkRequest.Archive(
+                distro = distro,
+                operationId = UUID.randomUUID().toString(),
+            ),
+        )
+
+    fun initial(work: InstallerWorkRequest): InstallProgress =
         InstallProgress(
-            work =
-                InstallerWorkRequest.Archive(
-                    distro = distro,
-                    operationId = UUID.randomUUID().toString(),
-                ),
+            work = work,
             stage = InstallStage.READY,
             stageProgress = 0f,
-            currentDetail = "SHA-256 metadata is available for ${distro.architecture}",
+            currentDetail = "Configure this distro, then start its image download",
             terminalLines =
-                listOf(
-                    "\$ udroid pull --plan ${distro.id}",
-                    "[ready] ${distro.downloadUrl.substringAfterLast('/')}",
-                    "[ready] sha256 ${distro.sha256.take(16)}…",
-                ),
+                when (work) {
+                    is InstallerWorkRequest.Archive ->
+                        listOf(
+                            "\$ udroid pull --plan ${work.distro.id}",
+                            "[ready] ${work.distro.downloadUrl.substringAfterLast('/')}",
+                            "[ready] install as ${work.installationName}",
+                            "[ready] sha256 ${work.distro.sha256.take(16)}…",
+                        )
+                    is InstallerWorkRequest.Oci ->
+                        listOf(
+                            "\$ udroid pull --plan ${work.reference}",
+                            "[ready] install as ${work.installationName}",
+                            "[ready] platform ${work.platform.os}/${work.platform.architecture}",
+                        )
+                },
             previewOnly = false,
         )
 }

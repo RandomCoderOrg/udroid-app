@@ -1,18 +1,14 @@
 package org.randomcoder.udroid.runtime
 
 internal val ANDROID_PROOT_BIND_MOUNTS =
-    listOf(
-        "/system",
-        "/apex",
-        "/dev",
-        "/proc",
-        "/sys",
-        "/linkerconfig/ld.config.txt",
-    )
+    PROOT_DEFAULT_MOUNTS.map(ProotDefaultMount::hostSource)
 
-internal fun MutableList<String>.addAndroidProotBindMounts() {
-    ANDROID_PROOT_BIND_MOUNTS.forEach { path ->
+internal fun MutableList<String>.addProotBindMounts(mounts: List<ResolvedProotMount>) {
+    mounts.forEach { mount ->
         add("-b")
-        add(path)
+        add(mount.argument)
     }
 }
+
+internal fun MutableList<String>.addAndroidProotBindMounts() =
+    addProotBindMounts(ProotMountResolver.defaults())

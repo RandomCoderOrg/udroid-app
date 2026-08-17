@@ -146,6 +146,37 @@ class WorkspaceJourneyTest {
             NavigationMotion.BACK,
             navigationMotion(UdroidDestination.SYSTEM, UdroidDestination.DISTROS),
         )
+        assertEquals(
+            NavigationMotion.FORWARD,
+            navigationMotion(UdroidDestination.SYSTEM, UdroidDestination.MOUNTS),
+        )
+        assertEquals(
+            NavigationMotion.BACK,
+            navigationMotion(UdroidDestination.MOUNTS, UdroidDestination.SYSTEM),
+        )
+        assertEquals(
+            NavigationMotion.FORWARD,
+            navigationMotion(UdroidDestination.MOUNTS, UdroidDestination.MOUNT_EDITOR),
+        )
+        assertEquals(
+            NavigationMotion.BACK,
+            navigationMotion(UdroidDestination.MOUNT_EDITOR, UdroidDestination.MOUNTS),
+        )
+    }
+
+    @Test
+    fun `mount pages stay available without becoming navigation tabs`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.MOUNTS,
+                hasInstalledLinux = false,
+                hasInstallation = false,
+                compactNavigation = true,
+            )
+
+        assertEquals(UdroidDestination.DISTROS, journey.destination)
+        assertFalse(journey.destinations.contains(UdroidDestination.MOUNTS))
+        assertFalse(journey.destinations.contains(UdroidDestination.MOUNT_EDITOR))
     }
 
     @Test
