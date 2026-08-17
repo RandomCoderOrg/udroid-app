@@ -59,6 +59,8 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.ProotMountProfile
+import org.randomcoder.udroid.runtime.ProotMountProfileValidator
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
@@ -253,6 +255,9 @@ class MainActivity : ComponentActivity() {
                     onOpenRootfsApps = { openRootfsApps(it) },
                     onResetRootfs = { rootfsName, fallback ->
                         resetRootfs(rootfsName, fallback)
+                    },
+                    onCreateRootfsVariation = { rootfsName, fallback, profile ->
+                        createRootfsVariation(rootfsName, fallback, profile)
                     },
                     onDeleteRootfs = { deleteRootfs(it) },
                     onSelectDesktopEnvironment = { selectDesktopEnvironment(it) },
@@ -675,6 +680,118 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun createRootfsVariation(
+        rootfsName: String,
+        fallbackDistro: DistroVariant?,
+        profile: ProotMountProfile,
+    ) {
+        if (installProgress != null) {
+            rootfsMaintenanceMessage = "Finish the current Linux setup before creating another distro"
+            return
+        }
+        if (installedRootfses.none { it.name == rootfsName }) {
+            rootfsMaintenanceMessage = "Linux system $rootfsName is no longer installed"
+            return
+        }
+
+        val previousWork =
+            runCatching { app.rootfsInstallSources.load(rootfsName) }
+                .getOrNull()
+                ?: fallbackDistro
+                    ?.takeIf { it.internalName == rootfsName }
+                    ?.let {
+                        InstallerWorkRequest.Archive(
+                            distro = it,
+                            operationId = UUID.randomUUID().toString(),
+                        )
+                    }
+        if (previousWork == null) {
+            rootfsMaintenanceMessage =
+                "The original image source was not recorded for this legacy install. " +
+                "Install it again before creating a variation."
+            return
+        }
+
+        val variationProfile =
+            runCatching {
+                ProotMountProfileValidator.requireValid(
+                    profile.copy(sourceSystemId = profile.sourceSystemId ?: rootfsName),
+                )
+            }.getOrElse {
+                rootfsMaintenanceMessage = it.message ?: "The mount configuration is invalid"
+                return
+            }
+        val (installationName, _) = nextVariationIdentity(previousWork)
+        val variationDisplayName = "${previousWork.displayName} · ${variationProfile.name}"
+        val variationWork =
+            when (previousWork) {
+                is InstallerWorkRequest.Archive ->
+                    previousWork.copy(
+                        operationId = UUID.randomUUID().toString(),
+                        installationName = installationName,
+                        displayName = variationDisplayName,
+                    )
+                is InstallerWorkRequest.Oci ->
+                    previousWork.copy(
+                        operationId = UUID.randomUUID().toString(),
+                        installationName = installationName,
+                        displayName = variationDisplayName,
+                    )
+            }
+
+        lifecycleScope.launch {
+            val prepared =
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        app.mountProfiles.save(
+                            installationName,
+                            variationProfile.independentCopy(),
+                        )
+                    }
+                    app.installState.save(InstallationSelection.initial(variationWork))
+                }
+            prepared.fold(
+                onSuccess = { progress ->
+                    installProgress = progress
+                    showInstallTerminal = false
+                    rootfsMaintenanceMessage = null
+                    selectDestination(UdroidDestination.INSTALL)
+                },
+                onFailure = {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            app.mountProfiles.remove(installationName)
+                        }
+                    }
+                    rootfsMaintenanceMessage =
+                        it.message ?: "The Linux variation could not be prepared"
+                },
+            )
+        }
+    }
+
+    private fun nextVariationIdentity(work: InstallerWorkRequest): Pair<String, Int> {
+        val baseName =
+            when (work) {
+                is InstallerWorkRequest.Archive -> work.distro.internalName
+                is InstallerWorkRequest.Oci -> work.installationName.replace(VARIATION_SUFFIX, "")
+            }
+        val occupiedNames =
+            installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name).apply {
+                installProgress?.installationName?.let(::add)
+            }
+        for (number in 2..999) {
+            val suffix = "-v$number"
+            val prefix =
+                baseName
+                    .take(MAX_INSTALLATION_NAME_LENGTH - suffix.length)
+                    .trimEnd('.', '-', '_')
+            val candidate = "$prefix$suffix"
+            if (candidate !in occupiedNames) return candidate to number
+        }
+        error("No available variation name for $baseName")
+    }
+
     private fun maintainRootfs(
         rootfsName: String,
         resetWork: InstallProgress?,
@@ -724,6 +841,9 @@ class MainActivity : ComponentActivity() {
                 ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
 
             if (resetWork == null) {
+                runCatching { app.mountProfiles.remove(rootfsName) }
+                    .exceptionOrNull()
+                    ?.let { cleanupWarnings += it.message ?: "mount profile" }
                 runCatching { app.rootfsInstallSources.remove(rootfsName) }
                     .exceptionOrNull()
                     ?.let { cleanupWarnings += it.message ?: "install source" }
@@ -1264,5 +1384,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val NOTIFICATION_PERMISSION_REQUEST = 101
         const val STATE_OCI_REPOSITORY = "oci-repository"
+        const val MAX_INSTALLATION_NAME_LENGTH = 96
+        val VARIATION_SUFFIX = Regex("-v[2-9][0-9]*$")
     }
 }

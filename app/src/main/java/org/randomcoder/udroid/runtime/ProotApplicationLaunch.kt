@@ -10,6 +10,7 @@ data class ProotApplicationLaunch(
     val command: List<String>,
     val workingDirectory: File,
     val environment: Map<String, String>,
+    val mounts: List<ResolvedProotMount>,
 )
 
 object ProotApplicationLaunchBuilder {
@@ -28,6 +29,15 @@ object ProotApplicationLaunchBuilder {
             application.workingDirectory
                 .takeIf { guestPathExists(rootfs, it, directory = true) }
                 ?: guestHome
+        val mounts =
+            ProotMountResolver.resolve(
+                profile = ProotMountProfileStore(context).load(rootfs.name),
+                sessionMounts =
+                    ProotMountResolver.sessionMounts(
+                        x11SocketDirectory = x11SocketDirectory.absolutePath,
+                        audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                    ),
+            )
         val prootArguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -38,6 +48,7 @@ object ProotApplicationLaunchBuilder {
                 applicationArguments =
                     listOf(application.executable) + application.arguments,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                mounts = mounts,
             )
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -62,6 +73,7 @@ object ProotApplicationLaunchBuilder {
                         val separator = it.indexOf('=')
                         it.substring(0, separator) to it.substring(separator + 1)
                     },
+            mounts = mounts,
         )
     }
 
@@ -73,6 +85,8 @@ object ProotApplicationLaunchBuilder {
         guestWorkingDirectory: String,
         applicationArguments: List<String>,
         audioAuthDirectory: String? = null,
+        mounts: List<ResolvedProotMount> =
+            ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
     ): List<String> {
         require(applicationArguments.isNotEmpty())
         return buildList {
@@ -81,13 +95,7 @@ object ProotApplicationLaunchBuilder {
             add("--kill-on-exit")
             add("--root-id")
             add("--rootfs=$rootfsPath")
-            addAndroidProotBindMounts()
-            add("-b")
-            add("$x11SocketDirectory:/tmp/.X11-unix")
-            if (audioAuthDirectory != null) {
-                add("-b")
-                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
-            }
+            addProotBindMounts(mounts)
             add("--cwd=$guestWorkingDirectory")
             add("/usr/bin/env")
             add("-i")

@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,11 +38,13 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,7 +62,13 @@ import org.randomcoder.udroid.oci.OciHubTagPlatform
 import org.randomcoder.udroid.oci.OciHubTagsState
 import org.randomcoder.udroid.oci.OciPlatform
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
+import org.randomcoder.udroid.runtime.ProotMountProfile
+import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -855,6 +864,19 @@ fun InstallExperiencePage(
     onRetryDownload: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
+    val scope = rememberCoroutineScope()
+    var showMountProfile by remember(progress.installationName) { mutableStateOf(false) }
+    var mountProfile by remember(progress.installationName) {
+        mutableStateOf(
+            runCatching { mountProfileStore.load(progress.installationName) }
+                .getOrDefault(ProotMountProfile()),
+        )
+    }
+    var mountProfileMessage by remember(progress.installationName) {
+        mutableStateOf<String?>(null)
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier =
@@ -942,6 +964,56 @@ fun InstallExperiencePage(
                                 color = UdroidInk,
                                 style = MaterialTheme.typography.bodySmall,
                             )
+                        }
+                    }
+                }
+            }
+
+            item {
+                val enabledDefaults =
+                    PROOT_DEFAULT_MOUNTS.count { mountProfile.isDefaultEnabled(it.id) }
+                val enabledCustom = mountProfile.customMounts.count { it.enabled }
+                Surface(
+                    color = UdroidSurface,
+                    border = BorderStroke(1.dp, UdroidLine),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "Mount profile",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "$enabledDefaults of ${PROOT_DEFAULT_MOUNTS.size} defaults · " +
+                                "$enabledCustom custom",
+                            modifier = Modifier.padding(top = 3.dp),
+                            color = UdroidMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            if (progress.cancellable) {
+                                "The saved profile is locked while installation is running."
+                            } else {
+                                "This profile belongs only to ${progress.installationName}."
+                            },
+                            modifier = Modifier.padding(top = 3.dp),
+                            color = UdroidMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        mountProfileMessage?.let {
+                            Text(
+                                it,
+                                modifier = Modifier.padding(top = 6.dp),
+                                color = UdroidMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        OutlinedButton(
+                            modifier = Modifier.padding(top = 10.dp),
+                            enabled = !progress.cancellable,
+                            onClick = { showMountProfile = true },
+                        ) {
+                            Text("Configure mounts")
                         }
                     }
                 }
@@ -1207,6 +1279,35 @@ fun InstallExperiencePage(
                     }
                 }
             }
+        }
+
+        if (showMountProfile) {
+            ProotMountProfileDialog(
+                systemName = progress.displayName,
+                initialProfile = mountProfile,
+                onDismiss = { showMountProfile = false },
+                onSave = { profile ->
+                    scope.launch {
+                        val saved =
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    mountProfileStore.save(progress.installationName, profile)
+                                }
+                            }
+                        saved.fold(
+                            onSuccess = {
+                                mountProfile = it
+                                mountProfileMessage = "Profile saved for this distro."
+                                showMountProfile = false
+                            },
+                            onFailure = {
+                                mountProfileMessage =
+                                    it.message ?: "The mount profile could not be saved"
+                            },
+                        )
+                    }
+                },
+            )
         }
     }
 }

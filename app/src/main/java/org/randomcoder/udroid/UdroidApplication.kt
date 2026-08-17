@@ -7,6 +7,7 @@ import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.install.InstalledRootfsSourceStore
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.InstalledRootfsRegistry
+import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimeStateMachine
 import org.randomcoder.udroid.runtime.RuntimeStateStore
 import org.randomcoder.udroid.update.AppUpdateScheduler
@@ -32,6 +33,9 @@ class UdroidApplication : Application() {
     lateinit var rootfsRegistry: InstalledRootfsRegistry
         private set
 
+    lateinit var mountProfiles: ProotMountProfileStore
+        private set
+
     override fun onCreate() {
         super.onCreate()
         runtimeState = RuntimeStateStore(this)
@@ -40,6 +44,7 @@ class UdroidApplication : Application() {
         rootfsInstallSources = InstalledRootfsSourceStore(this)
         updateState = AppUpdateStateStore(this)
         rootfsRegistry = InstalledRootfsRegistry(this)
+        mountProfiles = ProotMountProfileStore(this)
         if (!isMainProcess()) return
 
         updateState.reconcileInstalledVersion(BuildConfig.VERSION_NAME)

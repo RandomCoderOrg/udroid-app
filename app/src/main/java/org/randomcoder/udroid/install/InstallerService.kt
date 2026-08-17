@@ -194,7 +194,7 @@ class InstallerService : Service() {
         val distro = work.distro
         val operationId = work.operationId
         val rootfsDirectory = File(filesDir, "rootfs")
-        val installedRootfs = File(rootfsDirectory, distro.internalName)
+        val installedRootfs = File(rootfsDirectory, work.installationName)
         if (File(installedRootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             publishCompleted(work, installedRootfs, reused = true)
             finishOperation(operation)
@@ -444,7 +444,7 @@ class InstallerService : Service() {
         val operationId = work.operationId
         RootfsInstallationPipeline.clearInterruptedInstallation(
             rootfsDirectory = rootfsDirectory,
-            installationName = distro.internalName,
+            installationName = work.installationName,
         )
         RootfsStoragePreflight.requireSpace(archive, rootfsDirectory)
         progressPublisher.configure(
@@ -479,7 +479,7 @@ class InstallerService : Service() {
                     RootfsInstallRequest(
                         archive = archive,
                         rootfsDirectory = rootfsDirectory,
-                        installationName = distro.internalName,
+                        installationName = work.installationName,
                         operationId = operationId,
                     ),
                 onExtractionProgress = progressPublisher::extract,

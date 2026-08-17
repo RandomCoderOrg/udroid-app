@@ -13,6 +13,7 @@ data class ProotTerminalLaunch(
     val arguments: Array<String>,
     val environment: Array<String>,
     val rootfs: File,
+    val mounts: List<ResolvedProotMount>,
 )
 
 object InstalledRootfsResolver {
@@ -49,6 +50,15 @@ object ProotTerminalLaunchBuilder {
         val guestShell =
             findGuestShell(rootfs)
                 ?: error("The installed Linux image has no supported shell")
+        val mounts =
+            ProotMountResolver.resolve(
+                profile = ProotMountProfileStore(context).load(rootfs.name),
+                sessionMounts =
+                    ProotMountResolver.sessionMounts(
+                        x11SocketDirectory = x11SocketDirectory?.absolutePath,
+                        audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                    ),
+            )
 
         val arguments =
             buildArguments(
@@ -59,6 +69,7 @@ object ProotTerminalLaunchBuilder {
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                mounts = mounts,
             )
         val environment =
             buildEnvironment(
@@ -73,6 +84,7 @@ object ProotTerminalLaunchBuilder {
             arguments = arguments,
             environment = environment,
             rootfs = rootfs,
+            mounts = mounts,
         )
     }
 
@@ -84,6 +96,8 @@ object ProotTerminalLaunchBuilder {
         guestShell: String,
         x11SocketDirectory: String? = null,
         audioAuthDirectory: String? = null,
+        mounts: List<ResolvedProotMount> =
+            ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
     ): Array<String> =
         buildList {
             // TerminalSession passes this complete vector to execvp(), including argv[0].
@@ -93,15 +107,7 @@ object ProotTerminalLaunchBuilder {
             add("--kill-on-exit")
             add("--root-id")
             add("--rootfs=$rootfsPath")
-            addAndroidProotBindMounts()
-            if (x11SocketDirectory != null) {
-                add("-b")
-                add("$x11SocketDirectory:/tmp/.X11-unix")
-            }
-            if (audioAuthDirectory != null) {
-                add("-b")
-                add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")
-            }
+            addProotBindMounts(mounts)
             add("--cwd=$guestHome")
             add("/usr/bin/env")
             add("-i")
