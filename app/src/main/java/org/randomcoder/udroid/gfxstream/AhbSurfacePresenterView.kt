@@ -2,6 +2,7 @@ package org.randomcoder.udroid.gfxstream
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.Choreographer
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -31,6 +32,17 @@ class AhbSurfacePresenterView
                 }
             }
         private var nativeHandle: Long = nativeCreate(transportSocket.absolutePath)
+        private var frameCallbackPosted = false
+        private val frameCallback =
+            object : Choreographer.FrameCallback {
+                override fun doFrame(frameTimeNanos: Long) {
+                    frameCallbackPosted = false
+                    val handle = nativeHandle
+                    if (handle == 0L || !holder.surface.isValid) return
+                    nativeDoFrame(handle, frameTimeNanos)
+                    startFrameCallbacks()
+                }
+            }
 
         init {
             holder.addCallback(this)
@@ -39,6 +51,7 @@ class AhbSurfacePresenterView
 
         override fun surfaceCreated(holder: SurfaceHolder) {
             attach(holder.surface)
+            startFrameCallbacks()
         }
 
         override fun surfaceChanged(
@@ -53,6 +66,7 @@ class AhbSurfacePresenterView
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
+            stopFrameCallbacks()
             if (nativeHandle != 0L) nativeSetSurface(nativeHandle, null)
         }
 
@@ -66,6 +80,7 @@ class AhbSurfacePresenterView
         override fun close() {
             val handle = nativeHandle
             if (handle == 0L) return
+            stopFrameCallbacks()
             holder.removeCallback(this)
             nativeSetSurface(handle, null)
             nativeDestroy(handle)
@@ -78,6 +93,18 @@ class AhbSurfacePresenterView
             }
         }
 
+        private fun startFrameCallbacks() {
+            if (frameCallbackPosted || nativeHandle == 0L) return
+            frameCallbackPosted = true
+            Choreographer.getInstance().postFrameCallback(frameCallback)
+        }
+
+        private fun stopFrameCallbacks() {
+            if (!frameCallbackPosted) return
+            Choreographer.getInstance().removeFrameCallback(frameCallback)
+            frameCallbackPosted = false
+        }
+
         private external fun nativeCreate(socketPath: String): Long
 
         private external fun nativeSetSurface(
@@ -86,6 +113,11 @@ class AhbSurfacePresenterView
         )
 
         private external fun nativeSurfaceResized(handle: Long)
+
+        private external fun nativeDoFrame(
+            handle: Long,
+            frameTimeNanos: Long,
+        )
 
         private external fun nativeGetStats(handle: Long): String
 

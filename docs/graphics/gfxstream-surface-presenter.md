@@ -61,11 +61,17 @@ The Android 17 Pixel 6a probe passed:
 - more than 12,000 presented frames at 59.8-60.1 FPS with zero transport or
   native-fence failures.
 
-The moving scan line can look stepped because it advances roughly 3.2 physical
-pixels per 60 Hz refresh. A SurfaceFlinger frame-timeline sample confirmed that
-this was probe content rather than present jitter: 62 intervals averaged
-16.674 ms, p95 was 16.743 ms, p99 was 16.816 ms, and no interval exceeded
-20 ms.
+The original moving scan line advanced roughly 3.2 physical pixels per 60 Hz
+refresh and the renderer paced itself with a free-running 16.667 ms sleep while
+EGL also used swap interval one. A later three-run sample exposed the phase
+drift: p95 reached 19.9-20.8 ms and 4-11 of 62 intervals exceeded 20 ms.
+
+The probe now takes frame timestamps from Android `Choreographer`, coalesces a
+late callback to the newest pending frame, and moves the scan line by less than
+one pixel per refresh. Three post-change samples averaged 16.698-16.719 ms,
+p95 was 17.864-18.111 ms, the maximum was 19.238 ms, and no interval exceeded
+20 ms. This pacing belongs to the Android presenter; it does not claim that a
+genuine gfxstream guest frame has reached the Surface.
 
 One pre-stress run produced a persistent black source image while EGL swaps and
 fence counters continued normally. A cold process restart recovered it. The

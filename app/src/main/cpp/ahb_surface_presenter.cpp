@@ -33,7 +33,6 @@
 namespace {
 
 constexpr char kLogTag[] = "uDroid-AHB";
-constexpr auto kFramePeriod = std::chrono::microseconds(16667);
 static_assert(sizeof(UdroidAhbTransportPacket) == 32);
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
@@ -165,7 +164,7 @@ void main() {
     vec3 dark = vec3(0.025, 0.055, 0.075);
     vec3 teal = vec3(0.05, 0.72, 0.55);
     vec3 color = mix(dark, teal, checker * 0.45);
-    float cursor = fract(uTime * 0.18);
+    float cursor = fract(uTime * 0.055);
     float bar = 1.0 - smoothstep(0.012, 0.025, abs(vUv.x - cursor));
     float pulse = 0.72 + 0.28 * sin(uTime * 2.2);
     color = mix(color, vec3(1.0, 0.35, 0.08) * pulse, bar);
@@ -236,6 +235,15 @@ public:
         condition_.notify_one();
     }
 
+    void doFrame(int64_t frame_time_nanos) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            pending_frame_time_nanos_ = frame_time_nanos;
+            frame_pending_ = true;
+        }
+        condition_.notify_one();
+    }
+
     std::string stats() const {
         std::lock_guard<std::mutex> lock(mutex_);
         char text[512];
@@ -244,6 +252,7 @@ public:
                 sizeof(text),
                 "uDroid gfxstream Surface probe\n"
                 "path: AHB socket -> EGLImage -> GPU blit -> Surface\n"
+                "pacing: Android Choreographer\n"
                 "surface generation: %u  size: %dx%d\n"
                 "GPU: %s\n"
                 "peer: uid %lld  %s\n"
@@ -907,19 +916,20 @@ private:
             return;
         }
         ANativeWindow *active_window = nullptr;
-        const auto started = std::chrono::steady_clock::now();
-        fps_sample_started_ = started;
-        auto next_frame = started;
+        fps_sample_started_ = std::chrono::steady_clock::now();
+        int64_t first_frame_time_nanos = 0;
 
         while (true) {
             ANativeWindow *replacement = nullptr;
             bool replace_window = false;
             bool resize = false;
+            bool draw_requested = false;
+            int64_t frame_time_nanos = 0;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
-                if (active_window == nullptr && !window_changed_ && !stopping_) {
-                    condition_.wait(lock, [this] { return stopping_ || window_changed_; });
-                }
+                condition_.wait(lock, [this] {
+                    return stopping_ || window_changed_ || resize_requested_ || frame_pending_;
+                });
                 if (stopping_) break;
                 if (window_changed_) {
                     replacement = pending_window_;
@@ -928,6 +938,10 @@ private:
                     replace_window = true;
                 }
                 resize = resize_requested_;
+                resize_requested_ = false;
+                draw_requested = frame_pending_;
+                frame_time_nanos = pending_frame_time_nanos_;
+                frame_pending_ = false;
             }
 
             if (replace_window) {
@@ -937,36 +951,19 @@ private:
                 if (active_window != nullptr && !createWindowSurface(active_window)) {
                     destroyWindowSurface();
                 }
-                next_frame = std::chrono::steady_clock::now();
             } else if (resize && active_window != nullptr &&
                        window_surface_ != EGL_NO_SURFACE) {
                 recreateFrameBuffer(active_window);
             }
 
             if (active_window == nullptr || window_surface_ == EGL_NO_SURFACE ||
-                frame_buffer_ == nullptr) {
-                // Surface creation can fail transiently while Android is replacing
-                // the window. Keep the worker bounded until a lifecycle event retries it.
-                std::this_thread::sleep_for(kFramePeriod);
-                continue;
-            }
+                frame_buffer_ == nullptr || !draw_requested) continue;
 
-            const auto now = std::chrono::steady_clock::now();
-            const float seconds =
-                    std::chrono::duration<float>(now - started).count();
+            if (first_frame_time_nanos == 0) first_frame_time_nanos = frame_time_nanos;
+            const float seconds = static_cast<float>(
+                    frame_time_nanos - first_frame_time_nanos) / 1000000000.0f;
             if (!drawFrame(seconds)) {
-                // A persistent EGL or fence error must not turn into a CPU-burning
-                // retry loop while Android is replacing or resizing the Surface.
-                std::this_thread::sleep_for(kFramePeriod);
-                next_frame = std::chrono::steady_clock::now();
                 continue;
-            }
-            next_frame += kFramePeriod;
-            const auto after_swap = std::chrono::steady_clock::now();
-            if (next_frame > after_swap) {
-                std::this_thread::sleep_until(next_frame);
-            } else {
-                next_frame = after_swap;
             }
         }
 
@@ -986,6 +983,8 @@ private:
     bool stopping_ = false;
     bool window_changed_ = false;
     bool resize_requested_ = false;
+    bool frame_pending_ = false;
+    int64_t pending_frame_time_nanos_ = 0;
     ANativeWindow *pending_window_ = nullptr;
     uint32_t surface_generation_ = 0;
     int frame_width_ = 0;
@@ -1068,6 +1067,13 @@ Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeSurfaceResiz
         JNIEnv *, jobject, jlong handle) {
     Presenter *presenter = fromHandle(handle);
     if (presenter != nullptr) presenter->requestResize();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeDoFrame(
+        JNIEnv *, jobject, jlong handle, jlong frame_time_nanos) {
+    Presenter *presenter = fromHandle(handle);
+    if (presenter != nullptr) presenter->doFrame(frame_time_nanos);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
