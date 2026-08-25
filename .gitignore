@@ -2,6 +2,7 @@
 .idea/
 build/
 **/build/
+**/.cxx/
 local.properties
 *.iml
 captures/
