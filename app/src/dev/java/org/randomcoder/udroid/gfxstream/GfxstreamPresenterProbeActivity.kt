@@ -12,11 +12,21 @@ import android.widget.TextView
 class GfxstreamPresenterProbeActivity : Activity() {
     private lateinit var presenter: AhbSurfacePresenterView
     private lateinit var stats: TextView
+    private var hostController: GfxstreamHostController? = null
     private val refreshStats =
         object : Runnable {
             override fun run() {
                 if (!isFinishing) {
-                    stats.text = presenter.presenterStats()
+                    stats.text =
+                        buildString {
+                            append(presenter.presenterStats())
+                            hostController?.current()?.let { host ->
+                                append("\nKumquat: ")
+                                append(host.state)
+                                append(" · ")
+                                append(host.detail)
+                            }
+                        }
                     stats.postDelayed(this, 500L)
                 }
             }
@@ -24,11 +34,18 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val externalProducer = intent.getBooleanExtra(EXTRA_EXTERNAL_PRODUCER, false)
         presenter =
             AhbSurfacePresenterView(
                 this,
-                externalProducer = intent.getBooleanExtra(EXTRA_EXTERNAL_PRODUCER, false),
+                externalProducer = externalProducer,
             )
+        if (externalProducer) {
+            hostController =
+                GfxstreamHostController(this).also {
+                    it.startAsync(presenter.transportSocketFile())
+                }
+        }
         stats =
             TextView(this).apply {
                 setTextColor(Color.WHITE)
@@ -59,6 +76,7 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     override fun onDestroy() {
         stats.removeCallbacks(refreshStats)
+        hostController?.close()
         presenter.close()
         super.onDestroy()
     }

@@ -56,6 +56,15 @@ adb shell am start -n \
   org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity
 ```
 
+The separately supervised Android-host Kumquat path remains opt-in and can be
+started only from the development Activity:
+
+```sh
+adb shell am start -n \
+  org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity \
+  --ez externalProducer true
+```
+
 ## Pixel 6a checkpoint
 
 The Android 17 Pixel 6a probe passed:
@@ -101,9 +110,22 @@ The external work is isolated in organization forks:
   renderer resource with `AHardwareBuffer_sendHandleToUnixSocket`. It does not
   inspect the private native handle or reconstruct allocation metadata.
 
-The Android cross-build exports the new gfxstream symbol, and the portable
-Kumquat protocol tests pass. This still does not constitute a gfxstream frame:
-the next checkpoint must connect the separately supervised Kumquat peer, carry
-a real acquire fence for each flushed resource, and return the presenter's
-release fence before gfxstream can reuse that resource. CPU upload and implicit
-resource reuse are not acceptable substitutes.
+The uDroid development APK now packages a stripped ARM64 Android Kumquat host
+and its matching NDK C++ runtime. An immutable manifest records the gfxstream,
+Rutabaga and guest-protocol revisions plus SHA-256 digests. Installation uses a
+private staging directory, verifies both binaries before activation, and then
+renames the complete runtime atomically. Other Android ABIs fail closed instead
+of borrowing an incompatible executable.
+
+With `externalProducer=true`, the development Activity owns Kumquat's lifetime
+and passes explicit private guest and presenter socket paths. A Pixel 6a device
+run verified the child process, both socket listeners and the same-UID presenter
+connection. Force-stopping uDroid removed the child and both sockets, so the
+experiment does not leave a renderer behind. The normal Termux:X11 path still
+does not start or install this host.
+
+This is not yet a genuine gfxstream frame. The next checkpoint must connect the
+matching Mesa guest to `kumquat-gpu.sock`, flush the blob resource backing a
+presented Vulkan image with a real acquire fence, and wait for the presenter's
+release fence before reusing it. CPU upload and implicit resource reuse are not
+acceptable substitutes.

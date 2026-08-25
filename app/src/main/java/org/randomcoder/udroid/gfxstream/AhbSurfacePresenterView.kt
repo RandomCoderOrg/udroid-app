@@ -79,6 +79,8 @@ class AhbSurfacePresenterView
                 nativeGetStats(nativeHandle)
             }
 
+        internal fun transportSocketFile(): File = transportSocket
+
         override fun close() {
             val handle = nativeHandle
             if (handle == 0L) return
