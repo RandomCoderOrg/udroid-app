@@ -38,6 +38,15 @@ system-wide AHardwareBuffer id on both sides of the socket and rejects an
 identity mismatch. The ancillary-data parser closes excess descriptors and
 rejects truncated or malformed fence messages.
 
+The presenter now also has a dormant external-producer mode. It waits for a
+same-UID supervised process without blocking Activity teardown, imports the
+producer's public AHardwareBuffer handle, waits on one matching acquire sync FD
+per frame, and returns a release sync FD before that resource may be reused.
+The mode is available only through the dev probe's `externalProducer` intent
+extra; normal uDroid graphics and the default deterministic probe remain
+unchanged. A transport connection or a registered AHardwareBuffer alone is not
+counted as a rendered gfxstream frame.
+
 ## Run the probe
 
 ```sh

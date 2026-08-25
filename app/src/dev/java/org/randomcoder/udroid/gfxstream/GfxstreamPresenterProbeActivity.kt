@@ -24,7 +24,11 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        presenter = AhbSurfacePresenterView(this)
+        presenter =
+            AhbSurfacePresenterView(
+                this,
+                externalProducer = intent.getBooleanExtra(EXTRA_EXTERNAL_PRODUCER, false),
+            )
         stats =
             TextView(this).apply {
                 setTextColor(Color.WHITE)
@@ -57,5 +61,9 @@ class GfxstreamPresenterProbeActivity : Activity() {
         stats.removeCallbacks(refreshStats)
         presenter.close()
         super.onDestroy()
+    }
+
+    companion object {
+        const val EXTRA_EXTERNAL_PRODUCER = "externalProducer"
     }
 }
