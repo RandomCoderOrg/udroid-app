@@ -14,9 +14,12 @@ experiment. `AhbSurfacePresenterView` is reusable production code, while
 `GfxstreamPresenterProbeActivity` exists only in the `dev` source set.
 
 The probe renders a deterministic checkerboard and moving scan line into an
-AHardwareBuffer, then samples that buffer into an app-owned Surface. Its overlay
-reports the actual GL renderer, recent frame rate, Surface generation, current
-buffer geometry, and swap failures.
+AHardwareBuffer from an independent producer EGL context, then samples that
+buffer into an app-owned Surface from a presenter EGL context. Every frame
+crosses explicit Android native acquire and release fences. The producer does
+not reuse the AHB until the presenter release fence has been consumed. Its
+overlay reports the actual GL renderer, recent frame rate, Surface generation,
+current buffer geometry, swap failures, and fence failures.
 
 ## Run the probe
 
@@ -35,9 +38,10 @@ The Android 17 Pixel 6a probe passed:
 - GPU rendering into and sampling from the same AHB;
 - app background and Surface recreation;
 - live display-size replacement from 1080x2400 to 720x1280 and back;
-- more than 9,000 presented frames with zero swap failures.
+- more than 9,000 presented frames with zero swap or native-fence failures.
 
-The probe currently uses same-context GL ordering. The next checkpoint imports
-gfxstream-owned buffers and their acquire fences into this presenter, retaining
-each AHB until the Android release fence completes. It must not substitute a
-CPU upload or depend on private native-handle reconstruction APIs.
+This remains a controlled same-process producer, not a gfxstream frame. The
+next checkpoint gives the presenter a production submission API for an actual
+renderer-owned `AHardwareBuffer`, resource generation, and acquire-fence fd,
+then returns the release fence to the renderer's scanout lifecycle. It must not
+substitute a CPU upload or depend on private native-handle reconstruction APIs.
