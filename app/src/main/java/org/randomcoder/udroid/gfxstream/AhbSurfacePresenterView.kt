@@ -6,6 +6,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.annotation.Keep
+import java.io.File
 
 /**
  * Android Surface boundary for the optional gfxstream renderer.
@@ -21,7 +22,15 @@ class AhbSurfacePresenterView
         context: Context,
         attrs: AttributeSet? = null,
     ) : SurfaceView(context, attrs), SurfaceHolder.Callback, AutoCloseable {
-        private var nativeHandle: Long = nativeCreate()
+        private val transportSocket =
+            File(context.noBackupFilesDir, "graphics/ahb-presenter.sock").also {
+                it.parentFile?.let { directory ->
+                    check(directory.isDirectory || directory.mkdirs()) {
+                        "Could not create the private graphics transport directory"
+                    }
+                }
+            }
+        private var nativeHandle: Long = nativeCreate(transportSocket.absolutePath)
 
         init {
             holder.addCallback(this)
@@ -69,7 +78,7 @@ class AhbSurfacePresenterView
             }
         }
 
-        private external fun nativeCreate(): Long
+        private external fun nativeCreate(socketPath: String): Long
 
         private external fun nativeSetSurface(
             handle: Long,

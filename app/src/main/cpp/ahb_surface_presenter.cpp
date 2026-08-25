@@ -13,6 +13,8 @@
 #include <jni.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -24,6 +26,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "ahb_transport_protocol.h"
 
@@ -188,7 +191,8 @@ const GLfloat kFullscreenQuad[] = {
 
 class Presenter {
 public:
-    Presenter() : worker_(&Presenter::run, this) {}
+    explicit Presenter(std::string transport_path)
+        : transport_path_(std::move(transport_path)), worker_(&Presenter::run, this) {}
 
     ~Presenter() {
         {
@@ -242,6 +246,7 @@ public:
                 "path: AHB socket -> EGLImage -> GPU blit -> Surface\n"
                 "surface generation: %u  size: %dx%d\n"
                 "GPU: %s\n"
+                "peer: uid %lld  %s\n"
                 "resource: %llu/%llu  AHB identity: %s\n"
                 "frames: %llu  recent fps: %.1f  swap failures: %llu\n"
                 "sync: socket acquire/release fences  failures: %llu/%llu\n"
@@ -250,6 +255,8 @@ public:
                 frame_width_,
                 frame_height_,
                 renderer_.c_str(),
+                static_cast<long long>(peer_uid_.load()),
+                peer_authenticated_.load() ? "authenticated" : "not authenticated",
                 static_cast<unsigned long long>(active_resource_id_.load()),
                 static_cast<unsigned long long>(buffer_generation_.load()),
                 buffer_identity_.c_str(),
@@ -263,12 +270,60 @@ public:
     }
 
 private:
-    bool initializeEgl() {
-        if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0,
-                       transport_sockets_) != 0) {
-            setStatus("AHardwareBuffer transport socket creation failed");
+    bool initializeTransport() {
+        sockaddr_un address = {};
+        if (transport_path_.empty() ||
+            transport_path_.size() >= sizeof(address.sun_path)) {
+            setStatus("private graphics socket path is invalid");
             return false;
         }
+
+        listener_socket_ = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+        transport_sockets_[0] =
+                socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+        if (listener_socket_ < 0 || transport_sockets_[0] < 0) {
+            setStatus("private graphics transport socket creation failed");
+            return false;
+        }
+
+        address.sun_family = AF_UNIX;
+        memcpy(address.sun_path, transport_path_.c_str(), transport_path_.size() + 1);
+        unlink(transport_path_.c_str());
+        if (bind(listener_socket_, reinterpret_cast<const sockaddr *>(&address),
+                 sizeof(address)) != 0 ||
+            chmod(transport_path_.c_str(), S_IRUSR | S_IWUSR) != 0 ||
+            listen(listener_socket_, 1) != 0) {
+            setStatus("private graphics listener setup failed");
+            return false;
+        }
+
+        if (connect(transport_sockets_[0],
+                    reinterpret_cast<const sockaddr *>(&address),
+                    sizeof(address)) != 0) {
+            setStatus("graphics producer could not connect to private listener");
+            return false;
+        }
+        transport_sockets_[1] = accept4(listener_socket_, nullptr, nullptr, SOCK_CLOEXEC);
+        if (transport_sockets_[1] < 0) {
+            setStatus("graphics presenter could not accept producer connection");
+            return false;
+        }
+
+        ucred credentials = {};
+        socklen_t credentials_size = sizeof(credentials);
+        if (getsockopt(transport_sockets_[1], SOL_SOCKET, SO_PEERCRED,
+                       &credentials, &credentials_size) != 0 ||
+            credentials_size != sizeof(credentials) || credentials.uid != getuid()) {
+            setStatus("graphics producer peer authentication failed");
+            return false;
+        }
+        peer_uid_.store(credentials.uid);
+        peer_authenticated_.store(true);
+        return true;
+    }
+
+    bool initializeEgl() {
+        if (!initializeTransport()) return false;
         display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (display_ == EGL_NO_DISPLAY || !eglInitialize(display_, nullptr, nullptr)) {
             setStatus("EGL display initialization failed");
@@ -839,6 +894,11 @@ private:
                 socket_fd = -1;
             }
         }
+        if (listener_socket_ >= 0) {
+            close(listener_socket_);
+            listener_socket_ = -1;
+        }
+        if (!transport_path_.empty()) unlink(transport_path_.c_str());
     }
 
     void run() {
@@ -919,6 +979,7 @@ private:
         status_ = status;
     }
 
+    const std::string transport_path_;
     mutable std::mutex mutex_;
     std::condition_variable condition_;
     std::thread worker_;
@@ -939,6 +1000,9 @@ private:
     std::atomic<uint64_t> transport_failures_{0};
     std::chrono::steady_clock::time_point fps_sample_started_;
     int transport_sockets_[2] = {-1, -1};
+    int listener_socket_ = -1;
+    std::atomic<int64_t> peer_uid_{-1};
+    std::atomic<bool> peer_authenticated_{false};
     uint64_t next_resource_id_ = 0;
     std::atomic<uint64_t> active_resource_id_{0};
     std::atomic<uint64_t> buffer_generation_{0};
@@ -979,8 +1043,14 @@ Presenter *fromHandle(jlong handle) {
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeCreate(
-        JNIEnv *, jobject) {
-    return static_cast<jlong>(reinterpret_cast<intptr_t>(new Presenter()));
+        JNIEnv *env, jobject, jstring socket_path) {
+    if (socket_path == nullptr) return 0;
+    const char *path = env->GetStringUTFChars(socket_path, nullptr);
+    if (path == nullptr) return 0;
+    std::string transport_path(path);
+    env->ReleaseStringUTFChars(socket_path, path);
+    return static_cast<jlong>(
+            reinterpret_cast<intptr_t>(new Presenter(std::move(transport_path))));
 }
 
 extern "C" JNIEXPORT void JNICALL

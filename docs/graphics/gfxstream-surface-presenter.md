@@ -25,6 +25,11 @@ Surface generation, current buffer geometry, swap failures, fence failures,
 and transport failures.
 
 The local protocol is defined in `app/src/main/cpp/ahb_transport_protocol.h`.
+The presenter binds a `0600` `SOCK_SEQPACKET` listener below the app's private
+no-backup directory and accepts only a peer whose `SO_PEERCRED` uid matches the
+uDroid app uid. The current deterministic producer connects from the same
+process; the listener boundary is ready for a separately supervised renderer
+running under that uid.
 A registration packet is followed by Android's public AHB handle message.
 Acquire and release packets each carry exactly one sync-file descriptor. Every
 packet includes a resource id and generation so stale resize or lifecycle
@@ -62,8 +67,7 @@ failure did not recur across the lifecycle, geometry, or reinstall matrix above,
 so this checkpoint records it as an unresolved visual-correctness observation
 rather than claiming that clean transport counters alone prove correct pixels.
 
-This remains a controlled socket pair in one process, not a gfxstream frame.
-The next checkpoint replaces the producer endpoint with an app-private Unix
-listener, authenticates the peer process, and connects a forked Kumquat
-scanout/flush producer. It must not substitute a CPU upload or depend on
-private native-handle reconstruction APIs.
+This remains a controlled producer in one process, not a gfxstream frame. The
+next checkpoint connects a separately supervised producer from the forked
+Kumquat tree and adds the missing scanout/flush message. It must not substitute
+a CPU upload or depend on private native-handle reconstruction APIs.
