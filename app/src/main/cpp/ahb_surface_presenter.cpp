@@ -8,26 +8,141 @@
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <jni.h>
 #include <poll.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 #include <mutex>
 #include <string>
 #include <thread>
 
+#include "ahb_transport_protocol.h"
+
 namespace {
 
 constexpr char kLogTag[] = "uDroid-AHB";
 constexpr auto kFramePeriod = std::chrono::microseconds(16667);
+static_assert(sizeof(UdroidAhbTransportPacket) == 32);
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
+
+bool sendPacket(int socket_fd, const UdroidAhbTransportPacket &packet) {
+    ssize_t sent;
+    do {
+        sent = send(socket_fd, &packet, sizeof(packet), MSG_NOSIGNAL);
+    } while (sent < 0 && errno == EINTR);
+    return sent == static_cast<ssize_t>(sizeof(packet));
+}
+
+bool receivePacket(int socket_fd, uint32_t expected_kind,
+                   uint64_t resource_id, uint64_t generation,
+                   UdroidAhbTransportPacket *packet) {
+    ssize_t received;
+    do {
+        received = recv(socket_fd, packet, sizeof(*packet), MSG_WAITALL);
+    } while (received < 0 && errno == EINTR);
+    if (received != static_cast<ssize_t>(sizeof(*packet))) {
+        return false;
+    }
+    return packet->magic == UDROID_AHB_TRANSPORT_MAGIC &&
+           packet->version == UDROID_AHB_TRANSPORT_VERSION &&
+           packet->kind == expected_kind &&
+           packet->reserved == 0 && packet->resource_id == resource_id &&
+           packet->generation == generation;
+}
+
+bool sendPacketWithFd(int socket_fd, const UdroidAhbTransportPacket &packet, int fd) {
+    if (fd < 0) return false;
+    iovec io = {const_cast<UdroidAhbTransportPacket *>(&packet), sizeof(packet)};
+    char control[CMSG_SPACE(sizeof(int))] = {};
+    msghdr message = {};
+    message.msg_iov = &io;
+    message.msg_iovlen = 1;
+    message.msg_control = control;
+    message.msg_controllen = sizeof(control);
+    cmsghdr *header = CMSG_FIRSTHDR(&message);
+    header->cmsg_level = SOL_SOCKET;
+    header->cmsg_type = SCM_RIGHTS;
+    header->cmsg_len = CMSG_LEN(sizeof(int));
+    memcpy(CMSG_DATA(header), &fd, sizeof(fd));
+    ssize_t sent;
+    do {
+        sent = sendmsg(socket_fd, &message, MSG_NOSIGNAL);
+    } while (sent < 0 && errno == EINTR);
+    return sent == static_cast<ssize_t>(sizeof(packet));
+}
+
+bool receivePacketWithFd(int socket_fd, uint32_t expected_kind,
+                         uint64_t resource_id, uint64_t generation, int *fd) {
+    *fd = -1;
+    UdroidAhbTransportPacket packet = {};
+    iovec io = {&packet, sizeof(packet)};
+    char control[CMSG_SPACE(sizeof(int) * 4)] = {};
+    msghdr message = {};
+    message.msg_iov = &io;
+    message.msg_iovlen = 1;
+    message.msg_control = control;
+    message.msg_controllen = sizeof(control);
+    ssize_t received;
+    do {
+        received = recvmsg(socket_fd, &message, MSG_CMSG_CLOEXEC);
+    } while (received < 0 && errno == EINTR);
+
+    size_t received_fd_count = 0;
+    if (received >= 0) {
+        for (cmsghdr *header = CMSG_FIRSTHDR(&message); header != nullptr;
+             header = CMSG_NXTHDR(&message, header)) {
+            if (header->cmsg_level != SOL_SOCKET ||
+                header->cmsg_type != SCM_RIGHTS ||
+                header->cmsg_len < CMSG_LEN(0)) {
+                continue;
+            }
+            const size_t payload_size = header->cmsg_len - CMSG_LEN(0);
+            if (payload_size % sizeof(int) != 0) continue;
+            const size_t count = payload_size / sizeof(int);
+            const int *received_fds =
+                    reinterpret_cast<const int *>(CMSG_DATA(header));
+            for (size_t index = 0; index < count; ++index) {
+                if (received_fd_count == 0) {
+                    *fd = received_fds[index];
+                } else {
+                    close(received_fds[index]);
+                }
+                ++received_fd_count;
+            }
+        }
+    }
+
+    if (received != static_cast<ssize_t>(sizeof(packet)) ||
+        (message.msg_flags & (MSG_TRUNC | MSG_CTRUNC)) != 0 ||
+        received_fd_count != 1 || *fd < 0 ||
+        packet.magic != UDROID_AHB_TRANSPORT_MAGIC ||
+        packet.version != UDROID_AHB_TRANSPORT_VERSION ||
+        packet.kind != expected_kind || packet.reserved != 0 ||
+        packet.resource_id != resource_id || packet.generation != generation) {
+        close(*fd);
+        *fd = -1;
+        return false;
+    }
+    return true;
+}
+
+using AHardwareBufferGetId = int (*)(const AHardwareBuffer *, uint64_t *);
+
+bool getHardwareBufferId(const AHardwareBuffer *buffer, uint64_t *id) {
+    static const auto get_id = reinterpret_cast<AHardwareBufferGetId>(
+            dlsym(RTLD_DEFAULT, "AHardwareBuffer_getId"));
+    return get_id != nullptr && get_id(buffer, id) == 0;
+}
 
 const char kVertexShader[] = R"(
 attribute vec2 aPosition;
@@ -124,26 +239,36 @@ public:
                 text,
                 sizeof(text),
                 "uDroid gfxstream Surface probe\n"
-                "path: AHB -> EGLImage -> GPU blit -> Surface\n"
+                "path: AHB socket -> EGLImage -> GPU blit -> Surface\n"
                 "surface generation: %u  size: %dx%d\n"
                 "GPU: %s\n"
+                "resource: %llu/%llu  AHB identity: %s\n"
                 "frames: %llu  recent fps: %.1f  swap failures: %llu\n"
-                "sync: native acquire/release fences  failures: %llu\n"
+                "sync: socket acquire/release fences  failures: %llu/%llu\n"
                 "status: %s",
                 surface_generation_,
                 frame_width_,
                 frame_height_,
                 renderer_.c_str(),
+                static_cast<unsigned long long>(active_resource_id_.load()),
+                static_cast<unsigned long long>(buffer_generation_.load()),
+                buffer_identity_.c_str(),
                 static_cast<unsigned long long>(frames_.load()),
                 static_cast<double>(fps_milli_.load()) / 1000.0,
                 static_cast<unsigned long long>(swap_failures_.load()),
                 static_cast<unsigned long long>(fence_failures_.load()),
+                static_cast<unsigned long long>(transport_failures_.load()),
                 status_.c_str());
         return text;
     }
 
 private:
     bool initializeEgl() {
+        if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0,
+                       transport_sockets_) != 0) {
+            setStatus("AHardwareBuffer transport socket creation failed");
+            return false;
+        }
         display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (display_ == EGL_NO_DISPLAY || !eglInitialize(display_, nullptr, nullptr)) {
             setStatus("EGL display initialization failed");
@@ -346,6 +471,99 @@ private:
         return recreateFrameBuffer(window);
     }
 
+    bool registerFrameBufferTransport() {
+        const uint64_t resource_id = ++next_resource_id_;
+        const uint64_t generation = buffer_generation_.fetch_add(1) + 1;
+        active_resource_id_.store(resource_id);
+        const UdroidAhbTransportPacket registration = {
+            UDROID_AHB_TRANSPORT_MAGIC,
+            UDROID_AHB_TRANSPORT_VERSION,
+            UDROID_AHB_REGISTER_BUFFER,
+            0,
+            resource_id,
+            generation,
+        };
+        if (!sendPacket(transport_sockets_[0], registration) ||
+            AHardwareBuffer_sendHandleToUnixSocket(frame_buffer_,
+                                                   transport_sockets_[0]) != 0) {
+            ++transport_failures_;
+            setStatus("producer failed to send AHardwareBuffer registration");
+            return false;
+        }
+
+        UdroidAhbTransportPacket received = {};
+        if (!receivePacket(transport_sockets_[1],
+                           UDROID_AHB_REGISTER_BUFFER,
+                           resource_id, generation, &received) ||
+            AHardwareBuffer_recvHandleFromUnixSocket(transport_sockets_[1],
+                                                     &present_frame_buffer_) != 0 ||
+            present_frame_buffer_ == nullptr) {
+            ++transport_failures_;
+            setStatus("presenter failed to receive AHardwareBuffer registration");
+            return false;
+        }
+
+        AHardwareBuffer_Desc producer_description = {};
+        AHardwareBuffer_Desc presenter_description = {};
+        AHardwareBuffer_describe(frame_buffer_, &producer_description);
+        AHardwareBuffer_describe(present_frame_buffer_, &presenter_description);
+        if (producer_description.width != presenter_description.width ||
+            producer_description.height != presenter_description.height ||
+            producer_description.layers != presenter_description.layers ||
+            producer_description.format != presenter_description.format ||
+            producer_description.usage != presenter_description.usage ||
+            producer_description.stride != presenter_description.stride) {
+            ++transport_failures_;
+            setStatus("AHardwareBuffer registration metadata changed in transport");
+            return false;
+        }
+
+        uint64_t producer_id = 0;
+        uint64_t presenter_id = 0;
+        const bool producer_has_id = getHardwareBufferId(frame_buffer_, &producer_id);
+        const bool presenter_has_id =
+                getHardwareBufferId(present_frame_buffer_, &presenter_id);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!producer_has_id || !presenter_has_id) {
+                buffer_identity_ = "unavailable (Android < 12)";
+            } else if (producer_id == presenter_id) {
+                buffer_identity_ = "matched";
+            } else {
+                buffer_identity_ = "MISMATCH";
+            }
+        }
+        if (producer_has_id && presenter_has_id && producer_id != presenter_id) {
+            ++transport_failures_;
+            setStatus("AHardwareBuffer identity changed in transport");
+            return false;
+        }
+        return true;
+    }
+
+    bool transferFence(uint32_t kind, int sender_socket,
+                       int receiver_socket, int fence_fd, int *received_fd) {
+        const uint64_t resource_id = active_resource_id_.load();
+        const uint64_t generation = buffer_generation_.load();
+        const UdroidAhbTransportPacket packet = {
+            UDROID_AHB_TRANSPORT_MAGIC,
+            UDROID_AHB_TRANSPORT_VERSION,
+            kind,
+            0,
+            resource_id,
+            generation,
+        };
+        const bool sent = sendPacketWithFd(sender_socket, packet, fence_fd);
+        close(fence_fd);
+        if (!sent || !receivePacketWithFd(receiver_socket, kind,
+                                          resource_id, generation,
+                                          received_fd)) {
+            ++transport_failures_;
+            return false;
+        }
+        return true;
+    }
+
     bool recreateFrameBuffer(ANativeWindow *window) {
         destroyFrameBuffer();
         int width = ANativeWindow_getWidth(window);
@@ -377,10 +595,10 @@ private:
             EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
             EGL_NONE,
         };
-        frame_image_ = egl_create_image_(display_, EGL_NO_CONTEXT,
-                                        EGL_NATIVE_BUFFER_ANDROID, client_buffer,
-                                        image_attributes);
-        if (frame_image_ == EGL_NO_IMAGE_KHR) {
+        producer_image_ = egl_create_image_(display_, EGL_NO_CONTEXT,
+                                           EGL_NATIVE_BUFFER_ANDROID, client_buffer,
+                                           image_attributes);
+        if (producer_image_ == EGL_NO_IMAGE_KHR) {
             setStatus("AHardwareBuffer EGLImage import failed");
             destroyFrameBuffer();
             return false;
@@ -392,7 +610,7 @@ private:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        gl_egl_image_target_texture_(GL_TEXTURE_2D, frame_image_);
+        gl_egl_image_target_texture_(GL_TEXTURE_2D, producer_image_);
 
         glGenFramebuffers(1, &producer_fbo_);
         glBindFramebuffer(GL_FRAMEBUFFER, producer_fbo_);
@@ -405,8 +623,22 @@ private:
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+        if (!registerFrameBufferTransport()) {
+            destroyFrameBuffer();
+            return false;
+        }
+
         if (!makePresenterCurrent(window_surface_)) {
             setStatus("presenter EGL context activation failed");
+            destroyFrameBuffer();
+            return false;
+        }
+        client_buffer = egl_get_native_client_buffer_(present_frame_buffer_);
+        present_image_ = egl_create_image_(display_, EGL_NO_CONTEXT,
+                                          EGL_NATIVE_BUFFER_ANDROID, client_buffer,
+                                          image_attributes);
+        if (present_image_ == EGL_NO_IMAGE_KHR) {
+            setStatus("transported AHardwareBuffer EGLImage import failed");
             destroyFrameBuffer();
             return false;
         }
@@ -416,14 +648,14 @@ private:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        gl_egl_image_target_texture_(GL_TEXTURE_2D, frame_image_);
+        gl_egl_image_target_texture_(GL_TEXTURE_2D, present_image_);
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
             frame_width_ = width;
             frame_height_ = height;
             resize_requested_ = false;
-            status_ = "cross-context AHB handoff is active";
+            status_ = "public AHB socket transport is active";
         }
         return true;
     }
@@ -456,12 +688,20 @@ private:
             return false;
         }
 
+        int presenter_acquire_fence = -1;
+        if (!transferFence(UDROID_AHB_ACQUIRE_FENCE,
+                           transport_sockets_[0], transport_sockets_[1],
+                           acquire_fence, &presenter_acquire_fence)) {
+            setStatus("AHB transport failed to carry acquire fence");
+            return false;
+        }
+
         if (!makePresenterCurrent(window_surface_)) {
-            close(acquire_fence);
+            close(presenter_acquire_fence);
             setStatus("presenter EGL context switch failed");
             return false;
         }
-        if (!waitNativeFence(acquire_fence)) {
+        if (!waitNativeFence(presenter_acquire_fence)) {
             ++fence_failures_;
             setStatus("presenter failed to wait for acquire fence");
             return false;
@@ -474,10 +714,16 @@ private:
         glUniform1i(glGetUniformLocation(present_program_, "uFrame"), 0);
         drawQuad();
 
-        release_fence_fd_ = exportNativeFence();
-        if (release_fence_fd_ < 0) {
+        const int presenter_release_fence = exportNativeFence();
+        if (presenter_release_fence < 0) {
             ++fence_failures_;
             setStatus("presenter failed to export release fence");
+            return false;
+        }
+        if (!transferFence(UDROID_AHB_RELEASE_FENCE,
+                           transport_sockets_[1], transport_sockets_[0],
+                           presenter_release_fence, &release_fence_fd_)) {
+            setStatus("AHB transport failed to return release fence");
             return false;
         }
 
@@ -535,13 +781,21 @@ private:
                 present_texture_ = 0;
             }
         }
-        if (frame_image_ != EGL_NO_IMAGE_KHR && egl_destroy_image_ != nullptr) {
-            egl_destroy_image_(display_, frame_image_);
-            frame_image_ = EGL_NO_IMAGE_KHR;
+        if (producer_image_ != EGL_NO_IMAGE_KHR && egl_destroy_image_ != nullptr) {
+            egl_destroy_image_(display_, producer_image_);
+            producer_image_ = EGL_NO_IMAGE_KHR;
+        }
+        if (present_image_ != EGL_NO_IMAGE_KHR && egl_destroy_image_ != nullptr) {
+            egl_destroy_image_(display_, present_image_);
+            present_image_ = EGL_NO_IMAGE_KHR;
         }
         if (frame_buffer_ != nullptr) {
             AHardwareBuffer_release(frame_buffer_);
             frame_buffer_ = nullptr;
+        }
+        if (present_frame_buffer_ != nullptr) {
+            AHardwareBuffer_release(present_frame_buffer_);
+            present_frame_buffer_ = nullptr;
         }
     }
 
@@ -578,6 +832,12 @@ private:
                 eglDestroyContext(display_, presenter_context_);
             }
             eglTerminate(display_);
+        }
+        for (int &socket_fd : transport_sockets_) {
+            if (socket_fd >= 0) {
+                close(socket_fd);
+                socket_fd = -1;
+            }
         }
     }
 
@@ -671,11 +931,17 @@ private:
     int frame_height_ = 0;
     std::string status_ = "starting EGL presenter";
     std::string renderer_ = "initializing";
+    std::string buffer_identity_ = "pending";
     std::atomic<uint64_t> frames_{0};
     std::atomic<uint64_t> fps_milli_{0};
     std::atomic<uint64_t> swap_failures_{0};
     std::atomic<uint64_t> fence_failures_{0};
+    std::atomic<uint64_t> transport_failures_{0};
     std::chrono::steady_clock::time_point fps_sample_started_;
+    int transport_sockets_[2] = {-1, -1};
+    uint64_t next_resource_id_ = 0;
+    std::atomic<uint64_t> active_resource_id_{0};
+    std::atomic<uint64_t> buffer_generation_{0};
 
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLConfig config_ = nullptr;
@@ -685,7 +951,9 @@ private:
     EGLSurface presenter_pbuffer_ = EGL_NO_SURFACE;
     EGLSurface window_surface_ = EGL_NO_SURFACE;
     AHardwareBuffer *frame_buffer_ = nullptr;
-    EGLImageKHR frame_image_ = EGL_NO_IMAGE_KHR;
+    AHardwareBuffer *present_frame_buffer_ = nullptr;
+    EGLImageKHR producer_image_ = EGL_NO_IMAGE_KHR;
+    EGLImageKHR present_image_ = EGL_NO_IMAGE_KHR;
     GLuint producer_texture_ = 0;
     GLuint producer_fbo_ = 0;
     GLuint present_texture_ = 0;

@@ -19,6 +19,7 @@ target_link_libraries(
     udroid_ahb_presenter
     PRIVATE
     android
+    dl
     EGL
     GLESv2
     log
