@@ -35,6 +35,11 @@ namespace {
 constexpr char kLogTag[] = "uDroid-AHB";
 static_assert(sizeof(UdroidAhbTransportPacket) == 32);
 
+enum class ProducerMode {
+    kInternalProbe,
+    kExternalSupervisor,
+};
+
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
 
 bool sendPacket(int socket_fd, const UdroidAhbTransportPacket &packet) {
@@ -190,13 +195,15 @@ const GLfloat kFullscreenQuad[] = {
 
 class Presenter {
 public:
-    explicit Presenter(std::string transport_path)
-        : transport_path_(std::move(transport_path)), worker_(&Presenter::run, this) {}
+    Presenter(std::string transport_path, ProducerMode producer_mode)
+        : transport_path_(std::move(transport_path)),
+          producer_mode_(producer_mode),
+          worker_(&Presenter::run, this) {}
 
     ~Presenter() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            stopping_ = true;
+            stopping_.store(true);
             window_changed_ = true;
         }
         condition_.notify_one();
@@ -288,9 +295,7 @@ private:
         }
 
         listener_socket_ = socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-        transport_sockets_[0] =
-                socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
-        if (listener_socket_ < 0 || transport_sockets_[0] < 0) {
+        if (listener_socket_ < 0) {
             setStatus("private graphics transport socket creation failed");
             return false;
         }
@@ -306,17 +311,44 @@ private:
             return false;
         }
 
-        if (connect(transport_sockets_[0],
-                    reinterpret_cast<const sockaddr *>(&address),
-                    sizeof(address)) != 0) {
-            setStatus("graphics producer could not connect to private listener");
-            return false;
+        if (producer_mode_ == ProducerMode::kInternalProbe) {
+            transport_sockets_[0] =
+                    socket(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0);
+            if (transport_sockets_[0] < 0 ||
+                connect(transport_sockets_[0],
+                        reinterpret_cast<const sockaddr *>(&address),
+                        sizeof(address)) != 0) {
+                setStatus("graphics producer could not connect to private listener");
+                return false;
+            }
+        } else {
+            setStatus("waiting for supervised graphics producer");
         }
-        transport_sockets_[1] = accept4(listener_socket_, nullptr, nullptr, SOCK_CLOEXEC);
-        if (transport_sockets_[1] < 0) {
-            setStatus("graphics presenter could not accept producer connection");
-            return false;
+
+        while (!stopping_.load()) {
+            pollfd descriptor = {listener_socket_, POLLIN, 0};
+            int result;
+            do {
+                result = poll(&descriptor, 1, 100);
+            } while (result < 0 && errno == EINTR);
+            if (result < 0) {
+                setStatus("graphics presenter listener poll failed");
+                return false;
+            }
+            if (result == 0) continue;
+            if ((descriptor.revents & POLLIN) == 0) {
+                setStatus("graphics presenter listener closed unexpectedly");
+                return false;
+            }
+            transport_sockets_[1] =
+                    accept4(listener_socket_, nullptr, nullptr, SOCK_CLOEXEC);
+            if (transport_sockets_[1] >= 0) break;
+            if (errno != EINTR && errno != EAGAIN) {
+                setStatus("graphics presenter could not accept producer connection");
+                return false;
+            }
         }
+        if (stopping_.load()) return false;
 
         ucred credentials = {};
         socklen_t credentials_size = sizeof(credentials);
@@ -928,9 +960,10 @@ private:
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 condition_.wait(lock, [this] {
-                    return stopping_ || window_changed_ || resize_requested_ || frame_pending_;
+                    return stopping_.load() || window_changed_ || resize_requested_ ||
+                           frame_pending_;
                 });
-                if (stopping_) break;
+                if (stopping_.load()) break;
                 if (window_changed_) {
                     replacement = pending_window_;
                     pending_window_ = nullptr;
@@ -977,10 +1010,11 @@ private:
     }
 
     const std::string transport_path_;
+    const ProducerMode producer_mode_;
     mutable std::mutex mutex_;
     std::condition_variable condition_;
     std::thread worker_;
-    bool stopping_ = false;
+    std::atomic<bool> stopping_{false};
     bool window_changed_ = false;
     bool resize_requested_ = false;
     bool frame_pending_ = false;
@@ -1049,7 +1083,8 @@ Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeCreate(
     std::string transport_path(path);
     env->ReleaseStringUTFChars(socket_path, path);
     return static_cast<jlong>(
-            reinterpret_cast<intptr_t>(new Presenter(std::move(transport_path))));
+            reinterpret_cast<intptr_t>(new Presenter(
+                    std::move(transport_path), ProducerMode::kInternalProbe)));
 }
 
 extern "C" JNIEXPORT void JNICALL
