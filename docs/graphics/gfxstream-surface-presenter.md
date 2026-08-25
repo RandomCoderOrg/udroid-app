@@ -61,13 +61,34 @@ The Android 17 Pixel 6a probe passed:
 - more than 12,000 presented frames at 59.8-60.1 FPS with zero transport or
   native-fence failures.
 
+The moving scan line can look stepped because it advances roughly 3.2 physical
+pixels per 60 Hz refresh. A SurfaceFlinger frame-timeline sample confirmed that
+this was probe content rather than present jitter: 62 intervals averaged
+16.674 ms, p95 was 16.743 ms, p99 was 16.816 ms, and no interval exceeded
+20 ms.
+
 One pre-stress run produced a persistent black source image while EGL swaps and
 fence counters continued normally. A cold process restart recovered it. The
 failure did not recur across the lifecycle, geometry, or reinstall matrix above,
 so this checkpoint records it as an unresolved visual-correctness observation
 rather than claiming that clean transport counters alone prove correct pixels.
 
-This remains a controlled producer in one process, not a gfxstream frame. The
-next checkpoint connects a separately supervised producer from the forked
-Kumquat tree and adds the missing scanout/flush message. It must not substitute
-a CPU upload or depend on private native-handle reconstruction APIs.
+## Forked renderer checkpoint
+
+The external work is isolated in organization forks:
+
+- `RandomCoderOrg/rutabaga_gfx`, branch `feat/kumquat-resource-flush`, defines
+  a collision-free resource-flush command, parses its damage rectangle, waits
+  for an explicit no-data response, and forwards the resource to gfxstream's
+  existing `stream_renderer_flush()` path.
+- `RandomCoderOrg/gfxstream`, branch `feat/android-ahb-socket-export`, exposes
+  an Android-only unstable function that sends an AHardwareBuffer-backed
+  renderer resource with `AHardwareBuffer_sendHandleToUnixSocket`. It does not
+  inspect the private native handle or reconstruct allocation metadata.
+
+The Android cross-build exports the new gfxstream symbol, and the portable
+Kumquat protocol tests pass. This still does not constitute a gfxstream frame:
+the next checkpoint must connect the separately supervised Kumquat peer, carry
+a real acquire fence for each flushed resource, and return the presenter's
+release fence before gfxstream can reuse that resource. CPU upload and implicit
+resource reuse are not acceptable substitutes.
