@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+runtime=/opt/udroid/gfxstream
+icd="$runtime/share/vulkan/icd.d/gfxstream_icd.json"
+
+export VIRTGPU_KUMQUAT=1
+export VK_DRIVER_FILES="$icd"
+export VK_ICD_FILENAMES="$icd"
+export LD_LIBRARY_PATH="$runtime/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+exec "$@"

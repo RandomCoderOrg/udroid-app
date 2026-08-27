@@ -49,6 +49,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
     private val executor = Executors.newSingleThreadExecutor()
     private val process = AtomicReference<Process?>(null)
+    private val guestRuntime = AtomicReference<GfxstreamGuestRuntime?>(null)
     private val snapshot = AtomicReference(GfxstreamHostSnapshot())
     private val closed = AtomicBoolean(false)
     private val lock = Any()
@@ -66,6 +67,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
         }
         executor.execute {
             runCatching {
+                val guest = GfxstreamGuestRuntimeInstaller.install(appContext)
                 val runtime = GfxstreamHostRuntimeInstaller.install(appContext)
                 gpuSocket.delete()
                 logFile.delete()
@@ -95,10 +97,12 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
                         launched.destroyForcibly()
                         "The gfxstream host was cancelled before startup completed"
                     }
+                    guestRuntime.set(guest)
                     snapshot.set(
                         GfxstreamHostSnapshot(
                             "running",
-                            "Kumquat ${runtime.version} · guest socket ${gpuSocket.name}",
+                            "Kumquat ${runtime.version} · guest ${guest.version} · " +
+                                "socket ${gpuSocket.name}",
                         ),
                     )
                 }
@@ -126,6 +130,11 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
 
     fun current(): GfxstreamHostSnapshot = snapshot.get()
 
+    fun currentGuestRuntime(): GfxstreamGuestRuntime? = guestRuntime.get()
+
+    fun currentGpuSocket(): File? =
+        gpuSocket.takeIf { snapshot.get().state == "running" && it.exists() }
+
     override fun close() {
         synchronized(lock) {
             closed.set(true)
@@ -135,6 +144,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
                     if (owned.isAlive) owned.destroyForcibly()
                 }
             }
+            guestRuntime.set(null)
             snapshot.set(GfxstreamHostSnapshot())
         }
         gpuSocket.delete()
