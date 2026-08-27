@@ -20,6 +20,7 @@ object ProotApplicationLaunchBuilder {
         x11SocketDirectory: File,
         application: LinuxApplication,
         audioEndpoint: AudioEndpoint? = null,
+        launchProfile: ProotLaunchProfile? = null,
     ): ProotApplicationLaunch {
         require(application.executable.isNotBlank()) { "Application executable is empty" }
         require(x11SocketDirectory.isDirectory) { "The X11 socket directory is unavailable" }
@@ -38,6 +39,7 @@ object ProotApplicationLaunchBuilder {
                 applicationArguments =
                     listOf(application.executable) + application.arguments,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                launchProfile = launchProfile,
             )
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -73,6 +75,7 @@ object ProotApplicationLaunchBuilder {
         guestWorkingDirectory: String,
         applicationArguments: List<String>,
         audioAuthDirectory: String? = null,
+        launchProfile: ProotLaunchProfile? = null,
     ): List<String> {
         require(applicationArguments.isNotEmpty())
         return buildList {
@@ -82,6 +85,7 @@ object ProotApplicationLaunchBuilder {
             add("--root-id")
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
+            launchProfile?.addBindings(this)
             add("-b")
             add("$x11SocketDirectory:/tmp/.X11-unix")
             if (audioAuthDirectory != null) {
@@ -105,7 +109,7 @@ object ProotApplicationLaunchBuilder {
             add("XDG_CURRENT_DESKTOP=UDROID")
             add("GDK_BACKEND=x11")
             add("QT_QPA_PLATFORM=xcb")
-            addAll(applicationArguments)
+            addAll(launchProfile?.wrapGuestCommand(applicationArguments) ?: applicationArguments)
         }
     }
 

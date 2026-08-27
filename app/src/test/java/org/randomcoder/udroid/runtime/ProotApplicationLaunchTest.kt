@@ -38,4 +38,42 @@ class ProotApplicationLaunchTest {
         assertFalse(arguments.contains("sh"))
         assertFalse(arguments.contains("-c"))
     }
+
+    @Test
+    fun appliesAnOptionalProfileOnlyToTheSelectedCommand() {
+        val profile =
+            object : ProotLaunchProfile {
+                override fun addBindings(arguments: MutableList<String>) {
+                    arguments += "-b"
+                    arguments += "/data/runtime:/opt/runtime"
+                }
+
+                override fun wrapGuestCommand(command: List<String>): List<String> =
+                    listOf("/opt/runtime/bin/run") + command
+            }
+
+        val arguments =
+            ProotApplicationLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                guestWorkingDirectory = "/root",
+                applicationArguments = listOf("/usr/bin/vulkaninfo", "--summary"),
+                launchProfile = profile,
+            )
+
+        assertTrue(arguments.contains("/data/runtime:/opt/runtime"))
+        assertTrue(
+            arguments.indexOf("/data/runtime:/opt/runtime") < arguments.indexOf("--cwd=/root"),
+        )
+        assertEquals(
+            listOf(
+                "/opt/runtime/bin/run",
+                "/usr/bin/vulkaninfo",
+                "--summary",
+            ),
+            arguments.takeLast(3),
+        )
+    }
 }
