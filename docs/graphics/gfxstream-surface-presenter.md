@@ -156,7 +156,40 @@ capture the rendered red image:
 
 ![Verified gfxstream guest frame](evidence/gfxstream-clean-optimal-frame.png)
 
-This proves the first real guest frame and synchronization boundary. It does
-not yet make gfxstream a selectable desktop driver: the next checkpoint is a
-matched guest-runtime package, distro installation/delegation, rollback, and
-ordinary Vulkan/Zink application tests. Termux:X11 remains uDroid's default.
+This proves the first real guest frame and synchronization boundary. Termux:X11
+remains uDroid's default.
+
+## Standard Vulkan loader checkpoint
+
+The development APK now includes a matching, stripped ARM64 guest runtime:
+
+- Mesa's gfxstream Vulkan ICD from commit `636bbd628a9`;
+- its `libdrm` and `libexpat` runtime dependencies;
+- a standard Vulkan ICD JSON file; and
+- a small opt-in launcher that scopes `VIRTGPU_KUMQUAT`, `VK_DRIVER_FILES`,
+  `VK_ICD_FILENAMES`, and `LD_LIBRARY_PATH` to one guest command.
+
+The host and guest bundles share the same digest-verified, atomic asset
+installer. An APK build gate checks every declared SHA-256 digest and also
+requires the guest library to contain the Mesa revision declared by its
+manifest. This prevents a stale binary from being packaged under a newer
+runtime version.
+
+The guest profile binds the immutable runtime at `/opt/udroid/gfxstream` and
+the app-private Kumquat socket at `/tmp/kumquat-gpu-0`; it does not copy files
+into or modify the distro rootfs. On the Pixel 6a, Debian Trixie's unmodified
+Vulkan loader and `vulkaninfo --summary` reported:
+
+```text
+deviceType         = PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU
+deviceName         = Virtio-GPU GFXStream (Mali-G78)
+driverName         = gfxstream (Mali-G78)
+driverInfo         = Mesa 26.3.0-devel (git-636bbd628a)
+```
+
+This is the first standard-loader proof; it no longer relies on the private
+direct-link frame probe to discover the driver. It does not yet prove X11 WSI,
+Zink, KDE, or Firefox presentation. The profile remains dormant until an
+individual command is explicitly launched with it, and the existing
+Termux:X11 graphics path is unchanged. The next gate is an ordinary Vulkan
+application followed by a separately validated X11 WSI path.
