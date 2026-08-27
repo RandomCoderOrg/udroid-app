@@ -1015,7 +1015,11 @@ private:
             setStatus("presenter EGL context switch failed");
             return false;
         }
-        if (!waitNativeFence(received_fd)) {
+        // Kumquat's non-shareable fence is an eventfd, while Android native
+        // fences are sync_file descriptors. Both become readable when the
+        // producer is complete, so poll is the common explicit-sync boundary.
+        // Importing an eventfd as EGL_SYNC_NATIVE_FENCE_ANDROID is invalid.
+        if (!waitNativeFenceOnCpu(received_fd)) {
             ++fence_failures_;
             setStatus("presenter failed to wait for external acquire fence");
             return false;
