@@ -31,10 +31,24 @@ data class DesktopEnvironment(
     val kind: DesktopEnvironmentKind,
 )
 
+enum class DesktopGraphicsProfile(
+    val storageValue: String,
+) {
+    STANDARD("standard"),
+    GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): DesktopGraphicsProfile =
+            entries.firstOrNull { it.storageValue == value } ?: STANDARD
+    }
+}
+
 data class DesktopConfiguration(
     val environmentId: String?,
     val compositingEnabled: Boolean,
     val touchScaleEnabled: Boolean,
+    val graphicsProfile: DesktopGraphicsProfile = DesktopGraphicsProfile.STANDARD,
 )
 
 enum class DesktopSessionPhase {
@@ -89,6 +103,10 @@ class DesktopConfigurationStore(context: Context) {
                 },
             touchScaleEnabled =
                 preferences.getBoolean(key(rootfsName, KEY_TOUCH_SCALE), true),
+            graphicsProfile =
+                DesktopGraphicsProfile.fromStorage(
+                    preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
+                ),
         )
     }
 
@@ -111,6 +129,9 @@ class DesktopConfigurationStore(context: Context) {
                 ).putBoolean(
                     key(rootfsName, KEY_TOUCH_SCALE),
                     configuration.touchScaleEnabled,
+                ).putString(
+                    key(rootfsName, KEY_GRAPHICS_PROFILE),
+                    configuration.graphicsProfile.storageValue,
                 ).commit(),
         ) {
             "Could not save desktop settings for $rootfsName"
@@ -145,6 +166,7 @@ class DesktopConfigurationStore(context: Context) {
         const val KEY_ENVIRONMENT = "environment"
         const val KEY_COMPOSITING = "compositing"
         const val KEY_TOUCH_SCALE = "touch-scale"
+        const val KEY_GRAPHICS_PROFILE = "graphics-profile"
     }
 }
 

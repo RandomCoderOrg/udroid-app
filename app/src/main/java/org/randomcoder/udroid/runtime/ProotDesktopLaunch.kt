@@ -15,6 +15,7 @@ object ProotDesktopLaunchBuilder {
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
         audioEndpoint: AudioEndpoint? = null,
+        launchProfile: ProotLaunchProfile? = null,
     ): ProotApplicationLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -30,6 +31,7 @@ object ProotDesktopLaunchBuilder {
                 environment = environment,
                 configuration = configuration,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
+                launchProfile = launchProfile,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -69,6 +71,7 @@ object ProotDesktopLaunchBuilder {
         configuration: DesktopConfiguration,
         hasDbusRunSession: Boolean,
         audioAuthDirectory: String? = null,
+        launchProfile: ProotLaunchProfile? = null,
     ): List<String> =
         buildList {
             add(prootPath)
@@ -77,6 +80,7 @@ object ProotDesktopLaunchBuilder {
             add("--root-id")
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
+            launchProfile?.addBindings(this)
             add("-b")
             add("$x11SocketDirectory:/tmp/.X11-unix")
             if (audioAuthDirectory != null) {
@@ -107,15 +111,19 @@ object ProotDesktopLaunchBuilder {
                 add("QT_SCALE_FACTOR=2")
                 add("XCURSOR_SIZE=48")
             }
-            if (hasDbusRunSession) {
-                add("/usr/bin/dbus-run-session")
-                add("--")
-            }
-            add("/bin/sh")
-            add("-lc")
-            add(compositorScript(environment.kind, configuration.compositingEnabled))
-            add("udroid-desktop")
-            addAll(environment.command)
+            val desktopCommand =
+                buildList {
+                    if (hasDbusRunSession) {
+                        add("/usr/bin/dbus-run-session")
+                        add("--")
+                    }
+                    add("/bin/sh")
+                    add("-lc")
+                    add(compositorScript(environment.kind, configuration.compositingEnabled))
+                    add("udroid-desktop")
+                    addAll(environment.command)
+                }
+            addAll(launchProfile?.wrapGuestCommand(desktopCommand) ?: desktopCommand)
         }
 
     internal fun compositorScript(
