@@ -124,8 +124,39 @@ connection. Force-stopping uDroid removed the child and both sockets, so the
 experiment does not leave a renderer behind. The normal Termux:X11 path still
 does not start or install this host.
 
-This is not yet a genuine gfxstream frame. The next checkpoint must connect the
-matching Mesa guest to `kumquat-gpu.sock`, flush the blob resource backing a
-presented Vulkan image with a real acquire fence, and wait for the presenter's
-release fence before reusing it. CPU upload and implicit resource reuse are not
-acceptable substitutes.
+## Verified guest-frame checkpoint
+
+The matching Mesa guest now renders a genuine Vulkan image through the
+supervised host:
+
+```text
+guest Vulkan command -> gfxstream -> Android Mali Vulkan driver
+  -> AHardwareBuffer -> uDroid EGLImage presenter -> SurfaceFlinger
+```
+
+The device probe creates an optimal-tiling, DMA-BUF-exportable RGBA image,
+clears it on the guest Vulkan queue, and presents its backing Kumquat resource.
+Mesa preserves the dedicated-image allocation chain required by Android AHB
+imports and records the image-to-memory binding used by the private development
+present call. The virtual resource uses the packed 32-bit transport stride
+instead of querying a vendor-private optimal image layout.
+
+Kumquat's current acquire fence is a pollable eventfd, not an Android
+`sync_file`. The uDroid presenter therefore waits for it with blocking
+`poll(2)` before sampling the AHB. Android still returns a native release fence,
+which the guest waits on before reusing the image. This is explicit ordering
+without a busy loop or CPU pixel upload. Exporting a native host Vulkan sync FD
+would remove the CPU-side acquire wait later, but is not required for correct
+pixels.
+
+On the Pixel 6a, the clean committed build reported `Virtio-GPU GFXStream
+(Mali-G78)`, completed 180/180 explicit-fence frames, and showed zero swap and
+fence failures. A second run held the final optimal-tiling frame long enough to
+capture the rendered red image:
+
+![Verified gfxstream guest frame](evidence/gfxstream-clean-optimal-frame.png)
+
+This proves the first real guest frame and synchronization boundary. It does
+not yet make gfxstream a selectable desktop driver: the next checkpoint is a
+matched guest-runtime package, distro installation/delegation, rollback, and
+ordinary Vulkan/Zink application tests. Termux:X11 remains uDroid's default.
