@@ -55,6 +55,7 @@ import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
 import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopConfigurationStore
+import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
@@ -258,6 +259,7 @@ class MainActivity : ComponentActivity() {
                     onSelectDesktopEnvironment = { selectDesktopEnvironment(it) },
                     onCompositingChanged = { updateCompositing(it) },
                     onTouchScaleChanged = { updateTouchScale(it) },
+                    onGraphicsProfileChanged = { updateGraphicsProfile(it) },
                     onAudioOutputChanged = { updateAudioOutput(it) },
                     onMicrophoneChanged = { updateMicrophone(it) },
                     onStartDesktop = { startSelectedDesktop() },
@@ -885,6 +887,14 @@ class MainActivity : ComponentActivity() {
         saveDesktopConfiguration(
             rootfsName,
             desktopConfiguration.copy(touchScaleEnabled = enabled),
+        )
+    }
+
+    private fun updateGraphicsProfile(profile: DesktopGraphicsProfile) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        saveDesktopConfiguration(
+            rootfsName,
+            desktopConfiguration.copy(graphicsProfile = profile),
         )
     }
 

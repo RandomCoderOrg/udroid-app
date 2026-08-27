@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.ui
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
 import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopEnvironment
+import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -88,6 +90,7 @@ fun LinuxSystemPage(
     onSelectEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -310,6 +313,7 @@ fun LinuxSystemPage(
                     desktopRunning = desktopRunning,
                     onCompositingChanged = onCompositingChanged,
                     onTouchScaleChanged = onTouchScaleChanged,
+                    onGraphicsProfileChanged = onGraphicsProfileChanged,
                 )
             }
             item(key = "desktop-controls") {
@@ -834,6 +838,7 @@ private fun DesktopSettingsPanel(
     desktopRunning: Boolean,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
 ) {
     val compositorSupport = environment.kind.compositorSupport
     val compositorConfigurable =
@@ -878,6 +883,85 @@ private fun DesktopSettingsPanel(
                 checked = configuration.touchScaleEnabled,
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
+            )
+            Divider(color = UdroidLine)
+            GraphicsProfileSelector(
+                selected = configuration.graphicsProfile,
+                desktopRunning = desktopRunning,
+                onSelected = onGraphicsProfileChanged,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraphicsProfileSelector(
+    selected: DesktopGraphicsProfile,
+    desktopRunning: Boolean,
+    onSelected: (DesktopGraphicsProfile) -> Unit,
+) {
+    val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            "Graphics driver",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            color = UdroidInk,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        GraphicsProfileRow(
+            title = "Standard",
+            detail = "Use the distro's normal graphics stack.",
+            selected = selected == DesktopGraphicsProfile.STANDARD,
+            enabled = true,
+            onClick = { onSelected(DesktopGraphicsProfile.STANDARD) },
+        )
+        GraphicsProfileRow(
+            title = "gfxstream (experimental)",
+            detail =
+                if (gfxstreamSupported) {
+                    "Route Vulkan through Android's device driver." +
+                        if (desktopRunning) " Applies after restart." else ""
+                } else {
+                    "The packaged experiment currently requires an arm64 device."
+                },
+            selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
+            enabled = gfxstreamSupported,
+            onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+        )
+    }
+}
+
+@Composable
+private fun GraphicsProfileRow(
+    title: String,
+    detail: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            enabled = enabled,
+            onClick = onClick,
+        )
+        Column(modifier = Modifier.padding(start = 4.dp)) {
+            Text(
+                title,
+                color = if (enabled) UdroidInk else UdroidMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                detail,
+                color = UdroidMuted,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }

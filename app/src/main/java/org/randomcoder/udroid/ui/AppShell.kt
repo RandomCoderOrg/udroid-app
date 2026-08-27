@@ -100,6 +100,7 @@ import org.randomcoder.udroid.oci.OciHubTagsState
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.CapabilityStatus
 import org.randomcoder.udroid.runtime.DesktopConfiguration
+import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -200,6 +201,7 @@ fun UdroidApp(
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -338,6 +340,7 @@ fun UdroidApp(
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
+                        onGraphicsProfileChanged = onGraphicsProfileChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -406,6 +409,7 @@ fun UdroidApp(
                         onSelectDesktopEnvironment = onSelectDesktopEnvironment,
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
+                        onGraphicsProfileChanged = onGraphicsProfileChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -488,6 +492,7 @@ private fun ManagementPane(
     onSelectDesktopEnvironment: (String) -> Unit,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
+    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -710,6 +715,7 @@ private fun ManagementPane(
                                 onSelectEnvironment = onSelectDesktopEnvironment,
                                 onCompositingChanged = onCompositingChanged,
                                 onTouchScaleChanged = onTouchScaleChanged,
+                                onGraphicsProfileChanged = onGraphicsProfileChanged,
                                 onAudioOutputChanged = onAudioOutputChanged,
                                 onMicrophoneChanged = onMicrophoneChanged,
                                 onStartDesktop = onStartDesktop,
