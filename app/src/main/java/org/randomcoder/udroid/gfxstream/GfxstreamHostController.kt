@@ -22,6 +22,26 @@ internal object GfxstreamHostLaunch {
             "--gpu-socket-path=${gpuSocket.absolutePath}",
             "--presenter-socket-path=${presenterSocket.absolutePath}",
         )
+
+    fun environment(
+        home: File,
+        libraryDirectory: File,
+        temporaryDirectory: File,
+        is64Bit: Boolean,
+    ): Map<String, String> =
+        mapOf(
+            "ANDROID_DATA" to "/data",
+            "ANDROID_ROOT" to "/system",
+            "ANDROID_RUNTIME_ROOT" to "/apex/com.android.runtime",
+            "ANDROID_TZDATA_ROOT" to "/apex/com.android.tzdata",
+            "ANDROID_EMUGL_VERBOSE" to "1",
+            "ANDROID_EMU_VK_LOADER_PATH" to
+                if (is64Bit) "/system/lib64/libvulkan.so" else "/system/lib/libvulkan.so",
+            "HOME" to home.absolutePath,
+            "LD_LIBRARY_PATH" to libraryDirectory.absolutePath,
+            "PATH" to "/system/bin",
+            "TMPDIR" to temporaryDirectory.absolutePath,
+        )
 }
 
 /** Activity-owned supervisor for the dormant gfxstream development path. */
@@ -62,15 +82,11 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
                         .apply {
                             environment().clear()
                             environment().putAll(
-                                mapOf(
-                                    "ANDROID_DATA" to "/data",
-                                    "ANDROID_ROOT" to "/system",
-                                    "ANDROID_RUNTIME_ROOT" to "/apex/com.android.runtime",
-                                    "ANDROID_TZDATA_ROOT" to "/apex/com.android.tzdata",
-                                    "HOME" to appContext.filesDir.absolutePath,
-                                    "LD_LIBRARY_PATH" to runtime.libraryDirectory.absolutePath,
-                                    "PATH" to "/system/bin",
-                                    "TMPDIR" to appContext.cacheDir.absolutePath,
+                                GfxstreamHostLaunch.environment(
+                                    home = appContext.filesDir,
+                                    libraryDirectory = runtime.libraryDirectory,
+                                    temporaryDirectory = appContext.cacheDir,
+                                    is64Bit = android.os.Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
                                 ),
                             )
                         }.start()

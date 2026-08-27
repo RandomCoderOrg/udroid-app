@@ -90,6 +90,7 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".dev"
             versionNameSuffix = "+dev"
+            isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
         }
