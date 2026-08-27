@@ -35,6 +35,8 @@ import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.audio.AudioConfigurationStore
 import org.randomcoder.udroid.audio.AudioServerController
 import org.randomcoder.udroid.audio.AudioSessionSnapshot
+import org.randomcoder.udroid.gfxstream.GfxstreamHostController
+import org.randomcoder.udroid.gfxstream.GfxstreamProotLaunchProfile
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.x11.X11ServerController
@@ -53,6 +55,7 @@ class RuntimeSupervisorService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ownedSession = AtomicReference<TerminalSession?>(null)
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
+    private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val desktopLaunchToken = AtomicReference<String?>(null)
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
@@ -242,6 +245,7 @@ class RuntimeSupervisorService : Service() {
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
+        closeGfxstreamHost()
         stopApplicationProcesses()
         audioController.stop(app.runtimeState.current().bootId)
         applicationExecutor.shutdownNow()
@@ -572,6 +576,7 @@ class RuntimeSupervisorService : Service() {
                     "display" to DISPLAY_NUMBER,
                     "compositing" to request.configuration.compositingEnabled,
                     "touch_scale" to request.configuration.touchScaleEnabled,
+                    "graphics_profile" to request.configuration.graphicsProfile.storageValue,
                 ),
         )
         x11Controller.whenReady { socketDirectory ->
@@ -583,9 +588,30 @@ class RuntimeSupervisorService : Service() {
                 return@whenReady
             }
             applicationExecutor.execute {
+                var startingGfxstreamHost: GfxstreamHostController? = null
                 runCatching {
                     if (desktopLaunchToken.get() != launchToken) return@runCatching null
                     val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
+                    val launchProfile =
+                        when (request.configuration.graphicsProfile) {
+                            DesktopGraphicsProfile.STANDARD -> null
+                            DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
+                                val host = GfxstreamHostController(this)
+                                check(ownedGfxstreamHost.compareAndSet(null, host)) {
+                                    host.close()
+                                    "Another gfxstream host is already active"
+                                }
+                                startingGfxstreamHost = host
+                                val session = host.start()
+                                check(desktopLaunchToken.get() == launchToken) {
+                                    "The desktop start was cancelled while gfxstream was starting"
+                                }
+                                GfxstreamProotLaunchProfile(
+                                    runtime = session.guestRuntime,
+                                    gpuSocket = session.gpuSocket,
+                                )
+                            }
+                        }
                     val launch =
                         ProotDesktopLaunchBuilder.create(
                             context = this,
@@ -595,6 +621,7 @@ class RuntimeSupervisorService : Service() {
                             environment = request.environment,
                             configuration = request.configuration,
                             audioEndpoint = audioController.endpoint(),
+                            launchProfile = launchProfile,
                         )
                     val pidFile =
                         File(cacheDir, "desktop-process-$launchToken.pid").apply {
@@ -617,6 +644,7 @@ class RuntimeSupervisorService : Service() {
                     if (desktopLaunchToken.get() != launchToken) {
                         runCatching { Os.kill(hostPid, OsConstants.SIGKILL) }
                         pidFile.delete()
+                        releaseGfxstreamHost(startingGfxstreamHost)
                         return@runCatching null
                     }
                     val owned =
@@ -626,6 +654,7 @@ class RuntimeSupervisorService : Service() {
                             pidFile = pidFile,
                             rootfsName = request.rootfsName,
                             environment = request.environment,
+                            gfxstreamHost = startingGfxstreamHost,
                         )
                     check(ownedDesktop.compareAndSet(null, owned)) {
                         "Another desktop session won display :0"
@@ -636,6 +665,7 @@ class RuntimeSupervisorService : Service() {
                     if (!desktopLaunchToken.compareAndSet(launchToken, null)) {
                         ownedDesktop.compareAndSet(owned, null)
                         terminateDesktopProcess(owned, OsConstants.SIGKILL)
+                        releaseGfxstreamHost(owned.gfxstreamHost)
                         return@onSuccess
                     }
                     publishState(
@@ -662,14 +692,17 @@ class RuntimeSupervisorService : Service() {
                         event = "desktop_started",
                         message = "${owned.environment.name} started on display :0",
                         bootId = app.runtimeState.current().bootId,
-                        fields =
-                            mapOf(
-                                "rootfs" to owned.rootfsName,
-                                "display" to DISPLAY_NUMBER,
-                            ),
+                            fields =
+                                mapOf(
+                                    "rootfs" to owned.rootfsName,
+                                    "display" to DISPLAY_NUMBER,
+                                    "graphics_profile" to
+                                        request.configuration.graphicsProfile.storageValue,
+                                ),
                     )
                     monitorDesktop(owned)
                 }.onFailure { error ->
+                    releaseGfxstreamHost(startingGfxstreamHost)
                     if (desktopLaunchToken.compareAndSet(launchToken, null)) {
                         publishDesktopFailure(
                             request,
@@ -686,6 +719,7 @@ class RuntimeSupervisorService : Service() {
         val current = ownedDesktop.get()
         if (current == null || !current.process.isAlive) {
             ownedDesktop.compareAndSet(current, null)
+            closeGfxstreamHost()
             publishState(
                 app.runtimeState.update {
                     it.copy(
@@ -779,6 +813,7 @@ class RuntimeSupervisorService : Service() {
     ) {
         if (!ownedDesktop.compareAndSet(owned, null)) return
         owned.pidFile.delete()
+        releaseGfxstreamHost(owned.gfxstreamHost)
         val previous = app.runtimeState.current().desktop
         val expected =
             previous.phase == DesktopSessionPhase.STOPPING ||
@@ -818,6 +853,16 @@ class RuntimeSupervisorService : Service() {
                 ),
         )
         pendingDesktopRestart.getAndSet(null)?.let(::startDesktopInternal)
+    }
+
+    private fun releaseGfxstreamHost(host: GfxstreamHostController?) {
+        if (host != null && ownedGfxstreamHost.compareAndSet(host, null)) {
+            host.close()
+        }
+    }
+
+    private fun closeGfxstreamHost() {
+        ownedGfxstreamHost.getAndSet(null)?.close()
     }
 
     private fun publishDesktopFailure(
@@ -1465,5 +1510,6 @@ class RuntimeSupervisorService : Service() {
         val pidFile: File,
         val rootfsName: String,
         val environment: DesktopEnvironment,
+        val gfxstreamHost: GfxstreamHostController?,
     )
 }

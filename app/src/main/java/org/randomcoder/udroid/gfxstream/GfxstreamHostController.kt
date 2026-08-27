@@ -12,16 +12,23 @@ data class GfxstreamHostSnapshot(
     val detail: String = "gfxstream host is stopped",
 )
 
+data class GfxstreamHostSession(
+    val guestRuntime: GfxstreamGuestRuntime,
+    val gpuSocket: File,
+)
+
 internal object GfxstreamHostLaunch {
     fun arguments(
         gpuSocket: File,
-        presenterSocket: File,
+        presenterSocket: File? = null,
     ): List<String> =
-        listOf(
-            "--capset-names=gfxstream-vulkan",
-            "--gpu-socket-path=${gpuSocket.absolutePath}",
-            "--presenter-socket-path=${presenterSocket.absolutePath}",
-        )
+        buildList {
+            add("--capset-names=gfxstream-vulkan")
+            add("--gpu-socket-path=${gpuSocket.absolutePath}")
+            presenterSocket?.let {
+                add("--presenter-socket-path=${it.absolutePath}")
+            }
+        }
 
     fun environment(
         home: File,
@@ -44,7 +51,7 @@ internal object GfxstreamHostLaunch {
         )
 }
 
-/** Activity-owned supervisor for the dormant gfxstream development path. */
+/** Owns one optional gfxstream host process for a selected runtime consumer. */
 class GfxstreamHostController(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
     private val executor = Executors.newSingleThreadExecutor()
@@ -60,71 +67,113 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
     private val gpuSocket = File(graphicsDirectory, "kumquat-gpu.sock")
     private val logFile = File(graphicsDirectory, "kumquat.log")
 
-    fun startAsync(presenterSocket: File) {
+    fun startAsync(presenterSocket: File? = null) {
+        executor.execute {
+            runCatching { start(presenterSocket) }
+        }
+    }
+
+    /** Starts Kumquat and returns only after its private guest socket accepts launches. */
+    fun start(presenterSocket: File? = null): GfxstreamHostSession {
         synchronized(lock) {
-            if (closed.get() || snapshot.get().state != "stopped") return
+            check(!closed.get()) { "The gfxstream host controller is closed" }
+            check(snapshot.get().state == "stopped") { "The gfxstream host is already active" }
             snapshot.set(GfxstreamHostSnapshot("starting", "installing the Android gfxstream host"))
         }
-        executor.execute {
-            runCatching {
-                val guest = GfxstreamGuestRuntimeInstaller.install(appContext)
-                val runtime = GfxstreamHostRuntimeInstaller.install(appContext)
-                gpuSocket.delete()
-                logFile.delete()
-                val command =
-                    AndroidExecutableCommand.create(
-                        runtime.executable,
-                        *GfxstreamHostLaunch.arguments(gpuSocket, presenterSocket).toTypedArray(),
-                    )
-                val launched =
-                    ProcessBuilder(command)
-                        .directory(graphicsDirectory)
-                        .redirectErrorStream(true)
-                        .redirectOutput(logFile)
-                        .apply {
-                            environment().clear()
-                            environment().putAll(
-                                GfxstreamHostLaunch.environment(
-                                    home = appContext.filesDir,
-                                    libraryDirectory = runtime.libraryDirectory,
-                                    temporaryDirectory = appContext.cacheDir,
-                                    is64Bit = android.os.Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
-                                ),
-                            )
-                        }.start()
-                synchronized(lock) {
-                    check(!closed.get() && process.compareAndSet(null, launched)) {
-                        launched.destroyForcibly()
-                        "The gfxstream host was cancelled before startup completed"
-                    }
-                    guestRuntime.set(guest)
-                    snapshot.set(
-                        GfxstreamHostSnapshot(
-                            "running",
-                            "Kumquat ${runtime.version} · guest ${guest.version} · " +
-                                "socket ${gpuSocket.name}",
-                        ),
-                    )
+        return try {
+            val guest = GfxstreamGuestRuntimeInstaller.install(appContext)
+            val runtime = GfxstreamHostRuntimeInstaller.install(appContext)
+            gpuSocket.delete()
+            logFile.delete()
+            val command =
+                AndroidExecutableCommand.create(
+                    runtime.executable,
+                    *GfxstreamHostLaunch.arguments(gpuSocket, presenterSocket).toTypedArray(),
+                )
+            val launched =
+                ProcessBuilder(command)
+                    .directory(graphicsDirectory)
+                    .redirectErrorStream(true)
+                    .redirectOutput(logFile)
+                    .apply {
+                        environment().clear()
+                        environment().putAll(
+                            GfxstreamHostLaunch.environment(
+                                home = appContext.filesDir,
+                                libraryDirectory = runtime.libraryDirectory,
+                                temporaryDirectory = appContext.cacheDir,
+                                is64Bit = android.os.Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+                            ),
+                        )
+                    }.start()
+            synchronized(lock) {
+                check(!closed.get() && process.compareAndSet(null, launched)) {
+                    launched.destroyForcibly()
+                    "The gfxstream host was cancelled before startup completed"
                 }
-                val exitCode = launched.waitFor()
-                if (process.compareAndSet(launched, null)) {
-                    snapshot.set(
-                        GfxstreamHostSnapshot(
-                            if (exitCode == 0) "stopped" else "failed",
-                            "Kumquat exited with $exitCode · ${logFile.absolutePath}",
-                        ),
-                    )
-                }
-            }.onFailure { error ->
-                if (!closed.get()) {
-                    snapshot.set(
-                        GfxstreamHostSnapshot(
-                            "failed",
-                            error.message ?: error.javaClass.simpleName,
-                        ),
-                    )
-                }
+                guestRuntime.set(guest)
             }
+            awaitGuestSocket(launched)
+            synchronized(lock) {
+                check(!closed.get() && process.get() === launched) {
+                    "The gfxstream host was cancelled during startup"
+                }
+                snapshot.set(
+                    GfxstreamHostSnapshot(
+                        "running",
+                        "Kumquat ${runtime.version} · guest ${guest.version} · " +
+                            "socket ${gpuSocket.name}",
+                    ),
+                )
+            }
+            executor.execute { monitor(launched) }
+            GfxstreamHostSession(guest, gpuSocket)
+        } catch (error: Throwable) {
+            process.getAndSet(null)?.let { owned ->
+                if (owned.isAlive) owned.destroyForcibly()
+            }
+            guestRuntime.set(null)
+            gpuSocket.delete()
+            if (!closed.get()) {
+                snapshot.set(
+                    GfxstreamHostSnapshot(
+                        "failed",
+                        error.message ?: error.javaClass.simpleName,
+                    ),
+                )
+            }
+            throw error
+        }
+    }
+
+    private fun awaitGuestSocket(launched: Process) {
+        repeat(GUEST_SOCKET_ATTEMPTS) {
+            if (gpuSocket.exists()) return
+            check(launched.isAlive) {
+                "Kumquat exited before publishing its guest socket · ${logFile.absolutePath}"
+            }
+            Thread.sleep(GUEST_SOCKET_POLL_MS)
+        }
+        error("Kumquat did not publish its guest socket · ${logFile.absolutePath}")
+    }
+
+    private fun monitor(launched: Process) {
+        val exitCode =
+            try {
+                launched.waitFor()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            }
+        if (process.compareAndSet(launched, null)) {
+            guestRuntime.set(null)
+            gpuSocket.delete()
+            snapshot.set(
+                GfxstreamHostSnapshot(
+                    if (exitCode == 0) "stopped" else "failed",
+                    "Kumquat exited with $exitCode · ${logFile.absolutePath}",
+                ),
+            )
         }
     }
 
@@ -149,5 +198,10 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
         }
         gpuSocket.delete()
         executor.shutdownNow()
+    }
+
+    private companion object {
+        const val GUEST_SOCKET_ATTEMPTS = 250
+        const val GUEST_SOCKET_POLL_MS = 20L
     }
 }

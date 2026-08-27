@@ -21,6 +21,19 @@ class GfxstreamHostLaunchTest {
     }
 
     @Test
+    fun `omits the private presenter for standard X11 WSI`() {
+        assertEquals(
+            listOf(
+                "--capset-names=gfxstream-vulkan",
+                "--gpu-socket-path=/private/graphics/kumquat-gpu.sock",
+            ),
+            GfxstreamHostLaunch.arguments(
+                File("/private/graphics/kumquat-gpu.sock"),
+            ),
+        )
+    }
+
+    @Test
     fun `selects the Android Vulkan loader explicitly`() {
         val environment =
             GfxstreamHostLaunch.environment(
