@@ -11,7 +11,7 @@ data class GfxstreamHostRuntime(
 
 /** Installs the optional Android-host Kumquat runtime from signed APK assets. */
 object GfxstreamHostRuntimeInstaller {
-    internal const val RUNTIME_VERSION = "2-0435a83-9bdcb4585"
+    internal const val RUNTIME_VERSION = "3-0435a83-a7487790a"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "gfxstream host",
