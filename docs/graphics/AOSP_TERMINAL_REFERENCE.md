@@ -66,9 +66,11 @@ defers that Present request until the Android renderer reconnects. A packaged
 Pixel 6a run survived detached startup and three detach/reattach cycles without
 restarting X11, Kumquat, PRoot or the Vulkan client.
 
-The immediate experiments are now resize/recreate coverage, simultaneous
-Vulkan and GLX clients, and a compositor micro-workload. These must remain
-smaller and instrumented before KDE is used as the next system-level test.
+Four forced portrait/landscape surface recreations now also preserve the app,
+X11 and Vulkan-client processes while keeping every measured Present copy on
+the GPU. The immediate experiments are now simultaneous Vulkan and GLX clients
+and a compositor micro-workload. These must remain smaller and instrumented
+before KDE is used as the next system-level test.
 
 ## Checkpoints
 

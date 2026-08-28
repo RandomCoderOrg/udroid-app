@@ -294,7 +294,13 @@ remained alive throughout, the original cyan LunarG texture resumed on every
 reattach, and the log contained no gralloc lock, `PrepareAccess`, or X-server
 termination failure.
 
+The same session then passed four forced WindowManager rotations between
+1080x2400 and 2400x1080. The app, X11 and `vkcube` retained the same process IDs,
+Lorie reported 58.2-60.0 FPS with every measured Present copy GPU-offloaded,
+and no lifecycle-failure signature appeared. Android auto-rotation was restored
+after the probe.
+
 ![gfxstream Vulkan cube after repeated Display detach and reattach](evidence/gfxstream-x11-detach-reattach-vkcube.png)
 
-Resize/recreate, simultaneous Vulkan and GLX clients, and a compositor workload
-remain the next promotion gates.
+Simultaneous Vulkan and GLX clients, followed by a compositor workload, remain
+the next promotion gates.
