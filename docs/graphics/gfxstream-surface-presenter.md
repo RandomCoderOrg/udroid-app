@@ -2,6 +2,11 @@
 
 Status: experimental, dev-build probe only.
 
+The Android behavior and promotion gates for this work are defined in
+[AOSP Terminal graphics reference](AOSP_TERMINAL_REFERENCE.md). New presenter
+patches must preserve those surface lifecycle, buffer ownership, allocator
+geometry and input contracts.
+
 This checkpoint proves the public Android presentation boundary needed by the
 optional gfxstream graphics profile:
 
