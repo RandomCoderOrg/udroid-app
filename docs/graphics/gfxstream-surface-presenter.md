@@ -263,12 +263,11 @@ content semantics, and GPU-copy support. It deliberately does not advertise
 an explicit sync-file capability: this checkpoint uses Vulkan external queue
 ownership plus Android DMA-BUF implicit synchronization.
 
-The remaining gates are repeated resize/recreate tests, multiple simultaneous
-Vulkan and GLX windows, and a compositor workload before the profile can move
-out of development-only status. Gfxstream still reports two capability issues
-that must be resolved rather than hidden: the guest/host `pLayeredApis`
-unmarshal mismatch and missing `fillModeNonSolid`/`shaderClipDistance` in the
-virtual physical-device feature set.
+The lifecycle, multi-client and compositor gates below now pass. Gfxstream
+still reports two capability issues that must be resolved rather than hidden:
+the guest/host `pLayeredApis` unmarshal mismatch and missing
+`fillModeNonSolid`/`shaderClipDistance` in the virtual physical-device feature
+set.
 
 ## Detached display lifecycle checkpoint
 
@@ -313,4 +312,14 @@ loop is not display-paced and must not be presented as visible frame rate.
 
 ![gfxstream Vulkan cube after repeated Display detach and reattach](evidence/gfxstream-x11-detach-reattach-vkcube.png)
 
-A compositor micro-workload remains the next promotion gate.
+The compositor micro-workload added Debian's 26 KB `xcompmgr` package and ran
+client-side Composite redirection with shadows and fades over both windows.
+The redirected Vulkan and Zink/GLX pixmaps remained correct, Lorie held
+59.8-60.0 FPS, and every one of 1,542-1,836 Present copies in each measured
+five-second sample was GPU-offloaded. No lifecycle-failure signature appeared.
+
+![xcompmgr redirecting the Vulkan and Zink GLX windows](evidence/gfxstream-xcompmgr-micro-workload.png)
+
+The next system-level gate is an opt-in desktop session using the same packaged
+profile. The known protocol and virtual-feature warnings remain tracked
+separately and must not be hidden by the launcher.

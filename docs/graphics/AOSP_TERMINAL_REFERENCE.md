@@ -70,8 +70,11 @@ Four forced portrait/landscape surface recreations now also preserve the app,
 X11 and Vulkan-client processes while keeping every measured Present copy on
 the GPU. A simultaneous Vulkan plus Zink/GLX run also rendered both clients
 correctly through one Kumquat host and offloaded every measured Present copy.
-The immediate experiment is now a compositor micro-workload, which must remain
-small and instrumented before KDE is used as the next system-level test.
+A small X Composite/Damage workload with shadows and fades then kept both
+redirected clients correct at the display's 60 FPS while offloading every
+measured Present copy. An opt-in desktop session is now the next system-level
+test; the existing gfxstream protocol and virtual-feature warnings remain
+visible promotion blockers rather than launcher workarounds.
 
 ## Checkpoints
 
