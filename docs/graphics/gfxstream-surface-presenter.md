@@ -198,3 +198,74 @@ Zink, KDE, or Firefox presentation. The profile remains dormant until an
 individual command is explicitly launched with it, and the existing
 Termux:X11 graphics path is unchanged. The next gate is an ordinary Vulkan
 application followed by a separately validated X11 WSI path.
+
+## AHardwareBuffer X11 WSI checkpoint
+
+The standard X11 WSI now presents the same Vulkan image rendered by gfxstream,
+without a CPU pixel copy:
+
+```text
+Linux Vulkan application -> Mesa gfxstream -> Android Mali Vulkan
+  -> AHardwareBuffer -> Termux:X11 EGLImage -> Android Surface
+```
+
+The black-window failure was an ownership bug. Rendering and guest-side image
+readback were correct, and the same AHardwareBuffer reached Termux:X11, but the
+guest queue never released the image to `VK_QUEUE_FAMILY_EXTERNAL`. Mesa now
+records one release command buffer per swapchain image and queue family, and
+submits it after application rendering and before X11 Present. The Android
+DMA-BUF implicit-fence path then orders Termux:X11's EGL consumer without a
+per-frame CPU wait.
+
+On the Pixel 6a, an unmodified Debian `vkcube --wsi xcb` selected
+`Virtio-GPU GFXStream (Mali-G78)`, remained visually correct without the former
+`UDROID_GFXSTREAM_WSI_WAIT` serialization, and Termux:X11 reported 59.8-60.0
+FPS with every sampled Present copy GPU-offloaded. The packaged launcher no
+longer enables the byte-dump or CPU-wait probes.
+
+![gfxstream Vulkan cube through Termux:X11](evidence/gfxstream-x11-ahb-vkcube.png)
+
+This first validated one Vulkan X11 application, not yet a complete desktop.
+
+Host and guest runtime IDs are versioned independently of their source commit
+labels. A dirty-tree rebuild can change the Kumquat or Mesa payload without
+changing the pinned commit, so every packaged binary change must also advance
+its runtime ID and digest. This prevents the verified installer from reusing a
+previous host with a newer guest protocol implementation.
+
+## Zink and buffer-format checkpoint
+
+The GLX gate now passes through the same host runtime. Debian's unmodified
+`glxinfo -B` reports direct rendering, `Accelerated: yes`, and
+`zink Vulkan 1.4 (Virtio-GPU GFXStream (Mali-G78))`. `glxgears` renders with
+the expected red, green, and blue channels. Its uncapped result was roughly
+295-305 FPS on the Pixel 6a; this proves work is reaching the display but is
+not a frame-pacing benchmark.
+
+![Zink GLX gears through gfxstream](evidence/gfxstream-x11-zink-glxgears.png)
+
+Android gralloc on this device rejects deprecated BGRA AHardwareBuffer
+allocation. The guest therefore keeps the application's BGRA image semantics
+while backing scanout with a mutable RGBA Vulkan image. The private X11
+transport now separates the physical buffer format from its content semantics:
+
+- `1255`: RGBA AHardwareBuffer carrying BGRA-compatible content; the X11
+  renderer applies its channel swizzle.
+- `1257`: RGBA AHardwareBuffer carrying native RGBA content; the X11 renderer
+  samples it without the swizzle.
+
+Before `1257`, direct Vulkan rendered the LunarG texture with visibly swapped
+brown channels. The paired client/server change restores its cyan/teal colors
+without regressing GLX. The server publishes the versioned root-window
+property `_UDROID_X11_BUFFER_TRANSPORT`; the verified value is
+`1, 11, 1255, 0, 1257, 0`, advertising AHardwareBuffer socket transport, RGBA
+content semantics, and GPU-copy support. It deliberately does not advertise
+an explicit sync-file capability: this checkpoint uses Vulkan external queue
+ownership plus Android DMA-BUF implicit synchronization.
+
+The remaining gates are repeated resize/recreate tests, multiple simultaneous
+Vulkan and GLX windows, and a compositor workload before the profile can move
+out of development-only status. Gfxstream still reports two capability issues
+that must be resolved rather than hidden: the guest/host `pLayeredApis`
+unmarshal mismatch and missing `fillModeNonSolid`/`shaderClipDistance` in the
+virtual physical-device feature set.

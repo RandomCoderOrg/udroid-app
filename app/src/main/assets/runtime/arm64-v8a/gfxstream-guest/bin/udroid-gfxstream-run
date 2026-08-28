@@ -9,4 +9,10 @@ export VK_DRIVER_FILES="$icd"
 export VK_ICD_FILENAMES="$icd"
 export LD_LIBRARY_PATH="$runtime/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# Mesa's OpenGL/EGL consumers need an explicit Gallium-to-Vulkan route because
+# this profile deliberately does not install or replace files inside the rootfs.
+export MESA_LOADER_DRIVER_OVERRIDE=zink
+export GALLIUM_DRIVER=zink
+export LIBGL_KOPPER_DRI2=true
+
 exec "$@"

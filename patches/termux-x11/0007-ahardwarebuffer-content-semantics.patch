@@ -1,0 +1,148 @@
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -14,6 +14,8 @@
+ 
+ #include <sys/eventfd.h>
+ #include <sys/errno.h>
++#include <poll.h>
++#include <sys/socket.h>
+ #include <libxcvt/libxcvt.h>
+ #include <X11/X.h>
+ #include <X11/Xmd.h>
+@@ -49,6 +51,18 @@
+ extern DeviceIntPtr lorieMouse, lorieKeyboard;
+ 
+ #define CREATE_PIXMAP_USAGE_LORIEBUFFER_BACKED 5
++#define AHB_HANDSHAKE_TIMEOUT_MS 3000
++
++static int lorieWaitForSocketEvent(int fd, short events) {
++    struct pollfd descriptor = { .fd = fd, .events = events, .revents = 0 };
++    int result;
++    do {
++        result = poll(&descriptor, 1, AHB_HANDSHAKE_TIMEOUT_MS);
++    } while (result < 0 && errno == EINTR);
++
++    return result == 1 && (descriptor.revents & events) != 0 &&
++           (descriptor.revents & (POLLERR | POLLNVAL)) == 0;
++}
+ 
+ struct vblank {
+     struct xorg_list link;
+@@ -1094,13 +1109,16 @@
+ #define check(cond, msg, ...) if ((cond)) fail(msg, ##__VA_ARGS__)
+     const CARD64 AHARDWAREBUFFER_SOCKET_FD = 1255;
+     const CARD64 AHARDWAREBUFFER_FLIPPED_SOCKET_FD = 1256;
++    const CARD64 AHARDWAREBUFFER_RGBA_SOCKET_FD = 1257;
+     const CARD64 RAW_MMAPPABLE_FD = 1274;
+     AHardwareBuffer_Desc desc = {0};
++    AHardwareBuffer *received_buffer = NULL;
+     PixmapPtr pixmap = NullPixmap;
+     LoriePixmapPriv *priv = NULL;
+ 
+     check(num_fds > 1, "DRI3: More than 1 fd");
+     check(modifier != RAW_MMAPPABLE_FD && modifier != AHARDWAREBUFFER_SOCKET_FD && modifier != AHARDWAREBUFFER_FLIPPED_SOCKET_FD &&
++          modifier != AHARDWAREBUFFER_RGBA_SOCKET_FD &&
+           modifier != DRM_FORMAT_MOD_INVALID && modifier != DRM_FORMAT_MOD_LINEAR, "DRI3: Modifier is not RAW_MMAPPABLE_FD or AHARDWAREBUFFER_SOCKET_FD");
+ 
+     pixmap = screen->CreatePixmap(screen, 0, 0, depth, 0);
+@@ -1119,26 +1137,37 @@
+         return pixmap;
+     }
+ 
+-    if (modifier == AHARDWAREBUFFER_SOCKET_FD || modifier == AHARDWAREBUFFER_FLIPPED_SOCKET_FD) {
+-        AHardwareBuffer* buffer;
++    if (modifier == AHARDWAREBUFFER_SOCKET_FD || modifier == AHARDWAREBUFFER_FLIPPED_SOCKET_FD ||
++        modifier == AHARDWAREBUFFER_RGBA_SOCKET_FD) {
+         struct stat info;
+         uint8_t buf = 1;
+         int r;
++        ssize_t write_result;
+ 
+         priv->flipped = modifier == AHARDWAREBUFFER_FLIPPED_SOCKET_FD;
+         check(fstat(fds[0], &info) != 0, "DRI3: fstat failed: %s", strerror(errno));
+         check(!S_ISSOCK(info.st_mode), "DRI3: modifier is AHARDWAREBUFFER_SOCKET_FD but fd is not a socket");
+         // Sending signal to other end of socket to send buffer.
+-        check(write(fds[0], &buf, 1) != 1, "DRI3: AHARDWAREBUFFER_SOCKET_FD: failed to write to socket: %s", strerror(errno));
+-        check((r = AHardwareBuffer_recvHandleFromUnixSocket(fds[0], &buffer)) != 0,
++        check(!lorieWaitForSocketEvent(fds[0], POLLOUT),
++              "DRI3: AHARDWAREBUFFER_SOCKET_FD: timed out sending acknowledgement");
++        do {
++            write_result = write(fds[0], &buf, 1);
++        } while (write_result < 0 && errno == EINTR);
++        check(write_result != 1, "DRI3: AHARDWAREBUFFER_SOCKET_FD: failed to write to socket: %s", strerror(errno));
++        check(!lorieWaitForSocketEvent(fds[0], POLLIN),
++              "DRI3: AHARDWAREBUFFER_SOCKET_FD: timed out waiting for buffer handle");
++        check((r = AHardwareBuffer_recvHandleFromUnixSocket(fds[0], &received_buffer)) != 0,
+               "DRI3: AHARDWAREBUFFER_SOCKET_FD: failed to obtain AHardwareBuffer from socket: %d", r);
+-        check(!buffer, "DRI3: AHARDWAREBUFFER_SOCKET_FD: did not receive AHardwareSocket from buffer");
+-        AHardwareBuffer_describe(buffer, &desc);
++        check(!received_buffer, "DRI3: AHARDWAREBUFFER_SOCKET_FD: did not receive AHardwareSocket from buffer");
++        AHardwareBuffer_describe(received_buffer, &desc);
+         check(desc.format != AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM
+             && desc.format != AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM
+             && desc.format != AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
+             "DRI3: AHARDWAREBUFFER_SOCKET_FD: wrong format of AHardwareBuffer. Must be one of: AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM, AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM (stands for 5).");
+-        check(!(priv->buffer = LorieBuffer_wrapAHardwareBuffer(buffer)), "DRI3: LorieBuffer_wrapAHardwareBuffer failed.");
++        check(!(priv->buffer = LorieBuffer_wrapAHardwareBuffer(received_buffer)), "DRI3: LorieBuffer_wrapAHardwareBuffer failed.");
++        received_buffer = NULL;
++        if (modifier == AHARDWAREBUFFER_RGBA_SOCKET_FD)
++            LorieBuffer_setNeedsBgraSwizzle(priv->buffer, false);
+ 
+         screen->ModifyPixmapHeader(pixmap, desc.width, desc.height, 0, 0, desc.stride * 4, NULL);
+         if (lorieServerDebugEnabled)
+@@ -1148,6 +1177,8 @@
+     return pixmap;
+ 
+     fail:
++    if (received_buffer)
++        AHardwareBuffer_release(received_buffer);
+     if (pixmap)
+         screen->DestroyPixmap(pixmap);
+ 
+--- a/buffer.c
++++ b/buffer.c
+@@ -178,7 +178,9 @@
+     AHardwareBuffer_Desc desc = {0};
+     static uint64_t id = 0;
+     bool acceptable = (format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM || format == AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM) && width > 0 && height > 0;
+-    LorieBuffer b = { .desc = { .width = width, .stride = stride, .height = height, .format = format, .type = type, .buffer = buf, .id = id++ }, .fd = takeFd ? fd : dup(fd), .size = size, .offset = offset };
++    LorieBuffer b = { .desc = { .width = width, .stride = stride, .height = height, .format = format, .type = type,
++            .needsBgraSwizzle = format != AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM, .buffer = buf, .id = id++ },
++            .fd = takeFd ? fd : dup(fd), .size = size, .offset = offset };
+ 
+     if (type != LORIEBUFFER_AHARDWAREBUFFER && !acceptable)
+         return NULL;
+@@ -547,7 +549,12 @@
+ }
+ 
+ __LIBC_HIDDEN__ bool LorieBuffer_isRgba(LorieBuffer *buffer) {
+-    return LorieBuffer_description(buffer)->format != AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM;
++    return LorieBuffer_description(buffer)->needsBgraSwizzle;
++}
++
++__LIBC_HIDDEN__ void LorieBuffer_setNeedsBgraSwizzle(LorieBuffer *buffer, bool value) {
++    if (buffer)
++        buffer->desc.needsBgraSwizzle = value;
+ }
+ 
+ __LIBC_HIDDEN__ void LorieBuffer_addToList(LorieBuffer* _Nullable buffer, struct xorg_list* _Nullable list) {
+--- a/buffer.h
++++ b/buffer.h
+@@ -17,6 +17,7 @@
+ typedef struct {
+     int32_t width, height, stride;
+     uint8_t format, type;
++    uint8_t needsBgraSwizzle;
+     uint64_t id;
+     AHardwareBuffer* _Nullable buffer;
+     void* _Nullable data;
+@@ -196,6 +197,9 @@
+  */
+ bool LorieBuffer_isRgba(LorieBuffer* _Nullable buffer);
+ 
++/** Override display channel semantics for an imported producer buffer. */
++void LorieBuffer_setNeedsBgraSwizzle(LorieBuffer* _Nullable buffer, bool value);
++
+ struct xorg_list;
+ 
+ /**

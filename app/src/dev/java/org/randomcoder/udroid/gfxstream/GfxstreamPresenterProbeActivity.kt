@@ -7,12 +7,17 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import org.randomcoder.udroid.UdroidApplication
+import org.randomcoder.udroid.runtime.InstalledRootfsResolver
+import org.randomcoder.udroid.x11.X11ServerController
 
 /** Dev-build-only deterministic AHardwareBuffer to Android Surface probe. */
 class GfxstreamPresenterProbeActivity : Activity() {
     private lateinit var presenter: AhbSurfacePresenterView
     private lateinit var stats: TextView
     private var hostController: GfxstreamHostController? = null
+    private var x11Controller: X11ServerController? = null
+    private var x11Detail = "disabled"
     private val refreshStats =
         object : Runnable {
             override fun run() {
@@ -25,6 +30,10 @@ class GfxstreamPresenterProbeActivity : Activity() {
                                 append(host.state)
                                 append(" · ")
                                 append(host.detail)
+                            }
+                            if (x11Controller != null) {
+                                append("\nX11: ")
+                                append(x11Detail)
                             }
                         }
                     stats.postDelayed(this, 500L)
@@ -45,6 +54,30 @@ class GfxstreamPresenterProbeActivity : Activity() {
                 GfxstreamHostController(this).also {
                     it.startAsync(presenter.transportSocketFile())
                 }
+        }
+        if (intent.getBooleanExtra(EXTRA_X11_SERVER, false)) {
+            runCatching {
+                val rootfs =
+                    InstalledRootfsResolver.resolve(
+                        this,
+                        intent.getStringExtra(EXTRA_ROOTFS_NAME),
+                    )
+                X11ServerController(
+                    this,
+                    (application as UdroidApplication).journal,
+                ).also { controller ->
+                    x11Controller = controller
+                    val socketDirectory = controller.start(rootfs, PROBE_BOOT_ID)
+                    x11Detail = "starting · ${socketDirectory.absolutePath}"
+                    controller.whenReady { readyDirectory ->
+                        x11Detail =
+                            readyDirectory?.let { "ready · ${it.absolutePath}" }
+                                ?: "failed"
+                    }
+                }
+            }.onFailure { error ->
+                x11Detail = "failed · ${error.message ?: error.javaClass.simpleName}"
+            }
         }
         stats =
             TextView(this).apply {
@@ -76,6 +109,7 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     override fun onDestroy() {
         stats.removeCallbacks(refreshStats)
+        x11Controller?.stop(PROBE_BOOT_ID)
         hostController?.close()
         presenter.close()
         super.onDestroy()
@@ -83,5 +117,8 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     companion object {
         const val EXTRA_EXTERNAL_PRODUCER = "externalProducer"
+        const val EXTRA_X11_SERVER = "x11Server"
+        const val EXTRA_ROOTFS_NAME = "rootfsName"
+        private const val PROBE_BOOT_ID = "gfxstream-x11-probe"
     }
 }

@@ -1,0 +1,60 @@
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -40,6 +40,9 @@
+ #include "drm_fourcc.h"
+ 
+ #include "lorie.h"
++#include <X11/Xatom.h>
++#include "dix.h"
++#include "property.h"
+ 
+ #define DRM_FORMAT_MOD_LINEAR 0
+ 
+@@ -118,6 +121,36 @@
+ }, *pvfb = &lorieScreen;
+ static char *xstartup = NULL;
+ 
++#define UDROID_X11_BUFFER_TRANSPORT_ATOM "_UDROID_X11_BUFFER_TRANSPORT"
++
++enum {
++    UDROID_X11_TRANSPORT_AHB_SOCKET = 1U << 0,
++    UDROID_X11_TRANSPORT_AHB_RGBA = 1U << 1,
++    UDROID_X11_TRANSPORT_GPU_COPY = 1U << 3,
++};
++
++static void loriePublishBufferTransportCapabilities(unused CallbackListPtr *callbacks,
++                                                    unused void *closure, void *data) {
++    ScreenPtr pScreen = data;
++    const CARD32 protocol[] = {
++        1,
++        UDROID_X11_TRANSPORT_AHB_SOCKET |
++            UDROID_X11_TRANSPORT_AHB_RGBA |
++            UDROID_X11_TRANSPORT_GPU_COPY,
++        1255, 0,
++        1257, 0,
++    };
++    Atom property = MakeAtom(UDROID_X11_BUFFER_TRANSPORT_ATOM,
++                             strlen(UDROID_X11_BUFFER_TRANSPORT_ATOM), TRUE);
++
++    if (property == BAD_RESOURCE ||
++        dixChangeWindowProperty(serverClient, pScreen->root, property,
++                                XA_CARDINAL, 32, PropModeReplace,
++                                sizeof(protocol) / sizeof(protocol[0]),
++                                protocol, FALSE) != Success)
++        log(ERROR, "Failed to publish uDroid X11 buffer transport capabilities");
++}
++
+ // Owned by the activity process, handed to us over the connection socket. Points at a placeholder until
+ // the first connection so callers don't need a NULL check.
+ static pthread_cond_t rendererCondPlaceholder = PTHREAD_COND_INITIALIZER;
+@@ -749,6 +784,10 @@
+     ShmRegisterFbFuncs(pScreen);
+     miSyncShmScreenInit(pScreen);
+ 
++    if (!AddCallback(&RootWindowFinalizeCallback,
++                     loriePublishBufferTransportCapabilities, NULL))
++        return FALSE;
++
+     return TRUE;
+ }                               /* end lorieScreenInit */
+ 

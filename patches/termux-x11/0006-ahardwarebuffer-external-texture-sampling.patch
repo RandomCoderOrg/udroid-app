@@ -1,0 +1,241 @@
+--- a/buffer.c
++++ b/buffer.c
+@@ -42,6 +42,7 @@ struct LorieBuffer {
+     uint32_t debugUploadCount;
+ 
+     GLuint id;
++    GLuint externalId;
+     EGLImage image;
+     struct xorg_list link;
+ };
+@@ -332,6 +333,8 @@ __LIBC_HIDDEN__ void __LorieBuffer_free(LorieBuffer* buffer) {
+ 
+     if (eglGetCurrentContext())
+         glDeleteTextures(1, &buffer->id);
++    if (eglGetCurrentContext() && buffer->externalId)
++        glDeleteTextures(1, &buffer->externalId);
+ 
+     if (eglGetCurrentDisplay() && buffer->image)
+         eglDestroyImageKHR(eglGetCurrentDisplay(), buffer->image);
+@@ -428,6 +431,8 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
+ 
+     read(socketFd, &buffer, sizeof(buffer));
+     buffer.image = NULL; // Only for process-local use
++    buffer.id = 0;
++    buffer.externalId = 0;
+     buffer.dmaBufSyncSupport = DMA_BUF_SYNC_UNKNOWN;
+     buffer.debugUploadCount = 0;
+     if (buffer.desc.type == LORIEBUFFER_FD) {
+@@ -489,6 +494,22 @@ __LIBC_HIDDEN__ void LorieBuffer_attachToGL(LorieBuffer* buffer) {
+         // The image will be updated in redraw call because of `drawRequested` flag, so we are not uploading pixels
+         glTexImage2D(GL_TEXTURE_2D, 0, format, buffer->desc.stride, buffer->desc.height, 0, format, GL_UNSIGNED_BYTE, NULL);
+     }
++
++    /* Android's BufferQueue consumers expose AHardwareBuffer-backed images as
++     * external textures. Keep the ordinary 2D view above for framebuffer
++     * attachment, and create a second view for sampling. This mirrors
++     * GLConsumer without preventing the same buffer from being a GPU-copy
++     * destination. */
++    const char *extensions = (const char *) glGetString(GL_EXTENSIONS);
++    if (buffer->image && extensions && strstr(extensions, "GL_OES_EGL_image_external")) {
++        glGenTextures(1, &buffer->externalId);
++        glBindTexture(GL_TEXTURE_EXTERNAL_OES, buffer->externalId);
++        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++        glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, buffer->image);
++    }
+ }
+ 
+ __LIBC_HIDDEN__ void LorieBuffer_bindTexture(LorieBuffer *buffer) {
+@@ -505,6 +526,14 @@ __LIBC_HIDDEN__ void LorieBuffer_bindTexture(LorieBuffer *buffer) {
+     }
+ }
+ 
++__LIBC_HIDDEN__ bool LorieBuffer_bindExternalTexture(LorieBuffer *buffer) {
++    if (!buffer || !buffer->externalId)
++        return false;
++
++    glBindTexture(GL_TEXTURE_EXTERNAL_OES, buffer->externalId);
++    return true;
++}
++
+ __LIBC_HIDDEN__ unsigned int LorieBuffer_getGLTextureId(LorieBuffer *buffer) {
+     return buffer ? buffer->id : 0;
+ }
+--- a/buffer.h
++++ b/buffer.h
+@@ -164,6 +164,14 @@ void LorieBuffer_attachToGL(LorieBuffer* _Nullable buffer);
+  */
+ void LorieBuffer_bindTexture(LorieBuffer* _Nullable buffer);
+ 
++/**
++ * Bind the external-OES sampling view of an AHardwareBuffer, when supported.
++ * The ordinary 2D view remains available for framebuffer attachment.
++ *
++ * @return true when the external view was bound.
++ */
++bool LorieBuffer_bindExternalTexture(LorieBuffer* _Nullable buffer);
++
+ /**
+  * Get the GL texture id the buffer is attached to (see LorieBuffer_attachToGL).
+  * Returns 0 if the buffer was not attached to GL yet.
+--- a/renderer.c
++++ b/renderer.c
+@@ -113,6 +113,18 @@ static const char vertexShaderSrc[] =
+ 
+ static const char fragmentShaderSrc[] = FRAGMENT_SHADER();
+ static const char fragmentShaderBgraSrc[] = FRAGMENT_SHADER(".bgra");
++
++#define EXTERNAL_FRAGMENT_SHADER(texture) \
++    "#extension GL_OES_EGL_image_external : require\n" \
++    "precision mediump float;\n" \
++    "varying vec2 outTexCoords;\n" \
++    "uniform samplerExternalOES texture;\n" \
++    "void main(void) {\n" \
++    "   gl_FragColor = texture2D(texture, outTexCoords)" texture ";\n" \
++    "}\n"
++
++static const char externalFragmentShaderSrc[] = EXTERNAL_FRAGMENT_SHADER();
++static const char externalFragmentShaderBgraSrc[] = EXTERNAL_FRAGMENT_SHADER(".bgra");
+ 
+ static EGLDisplay egl_display = EGL_NO_DISPLAY;
+ static EGLContext ctx = EGL_NO_CONTEXT;
+@@ -163,6 +175,8 @@ static struct {
+ 
+ GLuint g_texture_program = 0, gv_pos = 0, gv_coords = 0;
+ GLuint g_texture_program_bgra = 0, gv_pos_bgra = 0, gv_coords_bgra = 0;
++GLuint g_external_texture_program = 0, gv_external_pos = 0, gv_external_coords = 0;
++GLuint g_external_texture_program_bgra = 0, gv_external_pos_bgra = 0, gv_external_coords_bgra = 0;
+ 
+ static void* rendererThread(void);
+ 
+@@ -293,6 +307,14 @@ int rendererInitThread(void* cookie) {
+     g_texture_program_bgra = createProgram(vertexShaderSrc, fragmentShaderBgraSrc);
+     if (!g_texture_program_bgra)
+         log("Xlorie: GLESv2: Unable to create bgra shader program.\n");
++
++    const char *extensions = (const char *) glGetString(GL_EXTENSIONS);
++    if (extensions && strstr(extensions, "GL_OES_EGL_image_external")) {
++        g_external_texture_program = createProgram(vertexShaderSrc, externalFragmentShaderSrc);
++        g_external_texture_program_bgra = createProgram(vertexShaderSrc, externalFragmentShaderBgraSrc);
++        if (!g_external_texture_program || !g_external_texture_program_bgra)
++            log("Xlorie: GLESv2: Unable to create external texture shader programs.\n");
++    }
+ 
+     gv_pos = (GLuint) glGetAttribLocation(g_texture_program, "position");
+     gv_coords = (GLuint) glGetAttribLocation(g_texture_program, "texCoords");
+@@ -300,6 +322,15 @@ int rendererInitThread(void* cookie) {
+     gv_pos_bgra = (GLuint) glGetAttribLocation(g_texture_program_bgra, "position");
+     gv_coords_bgra = (GLuint) glGetAttribLocation(g_texture_program_bgra, "texCoords");
+ 
++    if (g_external_texture_program) {
++        gv_external_pos = (GLuint) glGetAttribLocation(g_external_texture_program, "position");
++        gv_external_coords = (GLuint) glGetAttribLocation(g_external_texture_program, "texCoords");
++    }
++    if (g_external_texture_program_bgra) {
++        gv_external_pos_bgra = (GLuint) glGetAttribLocation(g_external_texture_program_bgra, "position");
++        gv_external_coords_bgra = (GLuint) glGetAttribLocation(g_external_texture_program_bgra, "texCoords");
++    }
++
+     glActiveTexture(GL_TEXTURE0);
+     glGenTextures(1, &cursor.id);
+ 
+@@ -630,7 +661,7 @@ static void rendererHandleWindowChange(void) {
+     log("Xlorie: new surface applied: %p\n", sfc);
+ }
+ 
+-static void drawRegion(GLuint id, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, uint8_t flip);
++static void drawRegion(GLuint id, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, uint8_t flip, bool external);
+ static void drawCursor(float displayWidth, float displayHeight, float sourceLeft, float sourceTop);
+ 
+ // Drains the deferred GPU copy queue (filled by present_execute_copy) into the root texture via
+@@ -717,7 +748,10 @@ static uint64_t rendererApplyPendingGpuCopiesLocked(void) {
+                 }
+             }
+ 
+-            LorieBuffer_bindTexture(src);
++            bool external = g_external_texture_program && g_external_texture_program_bgra &&
++                            LorieBuffer_bindExternalTexture(src);
++            if (!external)
++                LorieBuffer_bindTexture(src);
+             {
+                 static uint64_t srcSizeLogCount = 0;
+                 if (lorieDebugEnabled && (srcSizeLogCount++ & 15) == 0 && srcDesc->buffer) {
+@@ -747,7 +781,7 @@ static uint64_t rendererApplyPendingGpuCopiesLocked(void) {
+                 log("rendererApplyPendingGpuCopies: rect (%d,%d)-(%d,%d) off=(%d,%d) -> ndc=(%.3f,%.3f)-(%.3f,%.3f) uv=(%.3f,%.3f)-(%.3f,%.3f) srcTex=%u dstTex=%u swizzle=%d\n",
+                     r.x1, r.y1, r.x2, r.y2, entry.xOff, entry.yOff, x0, y0, x1, y1, u0, v0, u1, v1,
+                     LorieBuffer_getGLTextureId(src), LorieBuffer_getGLTextureId(dst), needsSwizzle);
+-                drawRegion(0, x0, y0, x1, y1, u0, v0, u1, v1, needsSwizzle);
++                drawRegion(0, x0, y0, x1, y1, u0, v0, u1, v1, needsSwizzle, external);
+             }
+         }
+ 
+@@ -895,14 +929,17 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
+     uint64_t gpuCopySerial = rendererApplyPendingGpuCopiesLocked();
+     state->drawRequested = FALSE;
+ 
+-    LorieBuffer_bindTexture(buffer);
++    bool external = g_external_texture_program && g_external_texture_program_bgra &&
++                    LorieBuffer_bindExternalTexture(buffer);
++    if (!external)
++        LorieBuffer_bindTexture(buffer);
+     if (desc->type == LORIEBUFFER_FD)
+         xfactor = (float) desc->width/(float) desc->stride;
+     drawRegion(0, -1.f, -1.f, 1.f, 1.f,
+                sourceLeft / (float) desc->width * xfactor, sourceTop / (float) desc->height,
+                (sourceLeft + sourceWidth) / (float) desc->width * xfactor,
+                (sourceTop + sourceHeight) / (float) desc->height,
+-               LorieBuffer_isRgba(buffer));
++               LorieBuffer_isRgba(buffer), external);
+     fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
+     glFlush();
+ 
+@@ -1090,7 +1127,7 @@ static GLuint createProgram(const char* p_vertex_source, const char* p_fragment_s
+     return 0;
+ }
+ 
+-static void drawRegion(GLuint id, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, uint8_t flip) {
++static void drawRegion(GLuint id, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, uint8_t flip, bool external) {
+     float coords[16] = {
+         x0, -y0, u0, v0,
+         x1, -y0, u1, v0,
+@@ -1098,15 +1135,24 @@ static void drawRegion(GLuint id, float x0, float y0, float x1, float y1, float u
+         x1, -y1, u1, v1,
+     };
+ 
+-    GLuint p = flip ? gv_pos_bgra : gv_pos, c = flip ? gv_coords_bgra : gv_coords;
++    GLuint program = external
++        ? (flip ? g_external_texture_program_bgra : g_external_texture_program)
++        : (flip ? g_texture_program_bgra : g_texture_program);
++    GLuint p = external
++        ? (flip ? gv_external_pos_bgra : gv_external_pos)
++        : (flip ? gv_pos_bgra : gv_pos);
++    GLuint c = external
++        ? (flip ? gv_external_coords_bgra : gv_external_coords)
++        : (flip ? gv_coords_bgra : gv_coords);
++    GLenum target = external ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
+ 
+     glActiveTexture(GL_TEXTURE0);
+-    glUseProgram(flip ? g_texture_program_bgra : g_texture_program);
++    glUseProgram(program);
+     if (id)
+-        glBindTexture(GL_TEXTURE_2D, id);
++        glBindTexture(target, id);
+ 
+-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering);
+-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering);
++    glTexParameteri(target, GL_TEXTURE_MIN_FILTER, filtering);
++    glTexParameteri(target, GL_TEXTURE_MAG_FILTER, filtering);
+     glVertexAttribPointer(p, 2, GL_FLOAT, GL_FALSE, 16, coords);
+     glVertexAttribPointer(c, 2, GL_FLOAT, GL_FALSE, 16, &coords[2]);
+     glEnableVertexAttribArray(p);
+@@ -1126,7 +1172,7 @@ __unused static void drawCursor(float displayWidth, float displayHeight, float so
+     h = 2.f * (float) state->cursor.height / displayHeight;
+     glEnable(GL_BLEND);
+     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+-    drawRegion(cursor.id, x, y, x + w, y + h, 0.f, 0.f, 1.f, 1.f, false);
++    drawRegion(cursor.id, x, y, x + w, y + h, 0.f, 0.f, 1.f, 1.f, false, false);
+     glDisable(GL_BLEND);
+ }

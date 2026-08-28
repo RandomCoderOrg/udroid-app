@@ -12,6 +12,14 @@ fi
 apply_once() {
     local source_dir="$1"
     local patch_file="$2"
+    local applied_marker="${3:-}"
+
+    # Later patches can legitimately change context introduced by an earlier
+    # patch, making a reverse dry-run fail even though the earlier patch is
+    # present. Prefer a patch-specific semantic marker when one is supplied.
+    if [[ -n "$applied_marker" ]] && grep -R -F -q -- "$applied_marker" "$source_dir"; then
+        return
+    fi
 
     if patch -p1 -f -R --dry-run -d "$source_dir" -i "$patch_file" >/dev/null 2>&1; then
         return
@@ -32,20 +40,37 @@ apply_once "$cpp_root/libxkbfile" "$cpp_root/patches/xkbfile.patch"
 apply_once "$cpp_root/libx11" "$cpp_root/patches/x11.patch"
 apply_once \
     "$cpp_root/libx11" \
-    "$repo_root/patches/termux-x11/0001-android-xlocale-include-order.patch"
+    "$repo_root/patches/termux-x11/0001-android-xlocale-include-order.patch" \
+    '#include_next <xlocale.h>'
 apply_once "$cpp_root/xserver" "$cpp_root/patches/xserver.patch"
 apply_once "$cpp_root/libepoxy" "$cpp_root/patches/libepoxy.patch"
 apply_once \
     "$cpp_root/lorie" \
-    "$repo_root/patches/termux-x11/0002-udroid-native-server-entrypoint.patch"
+    "$repo_root/patches/termux-x11/0002-udroid-native-server-entrypoint.patch" \
+    'Java_org_randomcoder_udroid_x11_X11NativeBridge_start'
 apply_once \
     "$cpp_root/lorie" \
-    "$repo_root/patches/termux-x11/0003-udroid-renderer-bridge.patch"
+    "$repo_root/patches/termux-x11/0003-udroid-renderer-bridge.patch" \
+    'Java_org_randomcoder_udroid_x11_X11NativeBridge_getXConnection'
 apply_once \
     "$cpp_root/lorie" \
-    "$repo_root/patches/termux-x11/0004-udroid-batched-native-touch.patch"
+    "$repo_root/patches/termux-x11/0004-udroid-batched-native-touch.patch" \
+    'EVENT_TOUCH_FRAME'
 apply_once \
     "$cpp_root/lorie" \
-    "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch"
+    "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch" \
+    'DMA_BUF_IOCTL_SYNC'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0006-ahardwarebuffer-external-texture-sampling.patch" \
+    'GL_TEXTURE_EXTERNAL_OES'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0007-ahardwarebuffer-content-semantics.patch" \
+    'AHARDWAREBUFFER_RGBA_SOCKET_FD'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0008-advertise-buffer-transport-protocol.patch" \
+    'UDROID_X11_BUFFER_TRANSPORT_ATOM'
 
 echo "Termux:X11 native source patches are ready."
