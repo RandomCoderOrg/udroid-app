@@ -1,0 +1,51 @@
+--- a/lorie/InitOutput.c
++++ b/lorie/InitOutput.c
+@@ -988,6 +988,19 @@ Bool lorieGpuCopyIsDone(uint64_t serial) {
+     return pvfb->state->gpuCopyQueue.completedSerial >= serial;
+ }
+ 
++Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {
++    LoriePixmapPriv *priv = pixmap ? LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap) : NULL;
++    const LorieBuffer_Desc *desc = priv ? LorieBuffer_description(priv->buffer) : NULL;
++
++    /* A DRI3 AHardwareBuffer may be allocated without CPU read/write usage. In
++     * particular, gfxstream scanout images are valid GPU textures but Android
++     * gralloc rejects AHardwareBuffer_lock() for them. Never let a temporarily
++     * detached renderer turn that expected lifecycle state into a CPU-copy
++     * fallback; Present will wait for the renderer to reconnect instead. */
++    return priv && priv->imported && desc &&
++           desc->type == LORIEBUFFER_AHARDWAREBUFFER;
++}
++
+ void lorieGpuCopyAck(PixmapPtr pixmap, void *dst_buffer) {
+     LoriePixmapPriv *priv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap);
+     if (priv && priv->buffer)
+--- a/xserver/present/present_execute.c
++++ b/xserver/present/present_execute.c
+@@ -125,6 +125,17 @@ present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc)
+         /* Failed to requeue for polling (e.g. OOM) - release our extra ref and treat the
+          * presumably still in-flight GPU copy as done; same best-effort fallback as above. */
+         lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);
++    } else if (loriePixmapRequiresGpuCopy(vblank->pixmap)) {
++        /* Imported AHardwareBuffers are not guaranteed to be CPU-mappable. If
++         * the Android renderer is detached or its queue is temporarily full,
++         * preserve the Present request until a later fake-vblank instead of
++         * entering EXA's CPU path and fatally failing PrepareAccess. */
++        if (Success == screen_priv->queue_vblank(screen, window, vblank->crtc,
++                                                 vblank->event_id, crtc_msc + 1)) {
++            vblank->queued = TRUE;
++            return;
++        }
+     } else {
+         present_copy_region(&window->drawable, vblank->pixmap, vblank->update, vblank->x_off, vblank->y_off);
+ 
+--- a/xserver/present/present_priv.h
++++ b/xserver/present/present_priv.h
+@@ -106,6 +106,7 @@ extern Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr u
+                                      uint64_t *out_serial, void **out_dst_buffer);
+ extern Bool lorieGpuCopyIsDone(uint64_t serial);
+ extern void lorieGpuCopyAck(PixmapPtr pixmap, void *dst_buffer);
++extern Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap);
+ /* lorie: implemented in lorie/cmdentrypoint.c. Avoids waiting forever on a GPU copy that a dead renderer will never finish. */
+ extern bool lorieConnectionAlive(void);
+ 

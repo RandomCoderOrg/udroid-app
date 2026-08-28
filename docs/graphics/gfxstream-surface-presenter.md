@@ -269,3 +269,32 @@ out of development-only status. Gfxstream still reports two capability issues
 that must be resolved rather than hidden: the guest/host `pLayeredApis`
 unmarshal mismatch and missing `fillModeNonSolid`/`shaderClipDistance` in the
 virtual physical-device feature set.
+
+## Detached display lifecycle checkpoint
+
+The first launch through uDroid's normal desktop supervisor exposed a lifecycle
+failure that the manually attached Termux:X11 tests could not reveal. Starting
+`vkcube` while the Display page was closed left the Android renderer detached.
+Lorie then treated the missing renderer as permission to fall back from its GPU
+Present queue to an EXA CPU copy. The imported gfxstream AHardwareBuffer was a
+valid GPU texture but intentionally lacked CPU read/write usage, so Android
+gralloc rejected `AHardwareBuffer_lock()` and EXA terminated the X server after
+`PrepareAccess` failed on its pinned pixmap.
+
+Imported AHardwareBuffer pixmaps now retain their pending Present request when
+the renderer is detached or its queue is temporarily full. The request is
+rechecked on the normal fake-vblank cadence and resumes through the GPU copy
+queue after a renderer reconnects. There is no CPU map, pixel upload, or busy
+wait, and the guest naturally stops producing when its swapchain fills while
+the display remains detached.
+
+The packaged dev APK passed the original detached-start reproduction followed
+by three Display detach/reattach cycles. X11, Kumquat, PRoot and `vkcube`
+remained alive throughout, the original cyan LunarG texture resumed on every
+reattach, and the log contained no gralloc lock, `PrepareAccess`, or X-server
+termination failure.
+
+![gfxstream Vulkan cube after repeated Display detach and reattach](evidence/gfxstream-x11-detach-reattach-vkcube.png)
+
+Resize/recreate, simultaneous Vulkan and GLX clients, and a compositor workload
+remain the next promotion gates.

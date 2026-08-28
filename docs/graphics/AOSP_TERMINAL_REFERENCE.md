@@ -52,24 +52,23 @@ and synchronization rules.
 
 ## Current correctness boundary
 
-The standard Vulkan loader and gfxstream host work, and an X11 Vulkan window is
-created. The embedded display can render the X11 root framebuffer, but the
-gfxstream window remains black. The current X11 WSI exports a linear/raw
-DMA-BUF that Lorie maps and uploads on the CPU. That reader does not currently
-perform the DMA-BUF CPU-access synchronization transition.
+The standard Vulkan loader, gfxstream host and AHardwareBuffer-backed X11 WSI
+now render ordinary Vulkan and Zink/GLX applications through Android's vendor
+Vulkan driver. Termux:X11 imports the physical Android buffer and performs the
+final Present copy on the GPU; the former linear/raw DMA-BUF upload remains a
+fallback rather than the primary gfxstream path.
 
-The immediate experiment is intentionally narrow:
+The first normal uDroid supervisor launch also validated an AOSP lifecycle
+lesson that manually attached display tests missed. When the Display page was
+closed, a GPU-only imported AHardwareBuffer fell into EXA's CPU copy path and
+terminated X11 because Android correctly refused to map it. The X server now
+defers that Present request until the Android renderer reconnects. A packaged
+Pixel 6a run survived detached startup and three detach/reattach cycles without
+restarting X11, Kumquat, PRoot or the Vulkan client.
 
-1. Record import format, dimensions, stride, modifier and buffer generation.
-2. Record whether the producer submission has completed before Present.
-3. Sample the mapped buffer before and after a standard
-   `DMA_BUF_IOCTL_SYNC` read START/END pair.
-4. Compare non-zero bytes and a bounded checksum without logging frame data.
-5. Accept a synchronization patch only if it makes ordinary Vulkan pixels
-   visible and leaves shared-memory X11 buffers unchanged.
-
-This is a correctness baseline, not the final performance route. A working
-raw-buffer upload still copies the frame on the CPU.
+The immediate experiments are now resize/recreate coverage, simultaneous
+Vulkan and GLX clients, and a compositor micro-workload. These must remain
+smaller and instrumented before KDE is used as the next system-level test.
 
 ## Checkpoints
 
