@@ -1,0 +1,125 @@
+--- a/buffer.c
++++ b/buffer.c
+@@ -7,12 +7,17 @@
+ #define GL_GLEXT_PROTOTYPES
+ #include <string.h>
+ #include <stdlib.h>
++#include <stdio.h>
+ #include <math.h>
+ #include <pixman.h>
+ #include <stdbool.h>
++#include <stdint.h>
++#include <linux/dma-buf.h>
+ #include <linux/memfd.h>
++#include <sys/ioctl.h>
+ #include <sys/mman.h>
+ #include <sys/socket.h>
++#include <unistd.h>
+ #include <errno.h>
+ #include <EGL/egl.h>
+ #include <EGL/eglext.h>
+@@ -33,12 +38,80 @@ struct LorieBuffer {
+     int fd;
+     size_t size;
+     off_t offset;
++    int8_t dmaBufSyncSupport;
++    uint32_t debugUploadCount;
+ 
+     GLuint id;
+     EGLImage image;
+     struct xorg_list link;
+ };
+ 
++enum {
++    DMA_BUF_SYNC_UNKNOWN = 0,
++    DMA_BUF_SYNC_SUPPORTED = 1,
++    DMA_BUF_SYNC_UNSUPPORTED = -1,
++};
++
++static bool dmaBufCpuReadBegin(LorieBuffer *buffer) {
++    if (!buffer || buffer->desc.type != LORIEBUFFER_FD ||
++        buffer->dmaBufSyncSupport == DMA_BUF_SYNC_UNSUPPORTED)
++        return false;
++
++    struct dma_buf_sync sync = {
++        .flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ,
++    };
++    if (ioctl(buffer->fd, DMA_BUF_IOCTL_SYNC, &sync) == 0) {
++        buffer->dmaBufSyncSupport = DMA_BUF_SYNC_SUPPORTED;
++        return true;
++    }
++
++    int error = errno;
++    if (buffer->dmaBufSyncSupport == DMA_BUF_SYNC_UNKNOWN &&
++        (error == ENOTTY || error == EINVAL || error == ENOSYS)) {
++        buffer->dmaBufSyncSupport = DMA_BUF_SYNC_UNSUPPORTED;
++        if (getenv("TERMUX_X11_DEBUG"))
++            dprintf(2, "LorieBuffer: fd %d is not a DMA-BUF; using shared-memory upload\n",
++                    buffer->fd);
++    } else if (getenv("TERMUX_X11_DEBUG")) {
++        dprintf(2, "LorieBuffer: DMA-BUF read START failed for fd %d: %s\n",
++                buffer->fd, strerror(error));
++    }
++    return false;
++}
++
++static void dmaBufCpuReadEnd(LorieBuffer *buffer) {
++    struct dma_buf_sync sync = {
++        .flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ,
++    };
++    if (ioctl(buffer->fd, DMA_BUF_IOCTL_SYNC, &sync) != 0 &&
++        getenv("TERMUX_X11_DEBUG")) {
++        dprintf(2, "LorieBuffer: DMA-BUF read END failed for fd %d: %s\n",
++                buffer->fd, strerror(errno));
++    }
++}
++
++static void debugMappedBuffer(LorieBuffer *buffer) {
++    if (!getenv("TERMUX_X11_DEBUG") || (buffer->debugUploadCount++ % 120) != 0)
++        return;
++
++    const uint32_t *words = buffer->desc.data;
++    size_t wordCount = buffer->size / sizeof(*words);
++    size_t step = wordCount > 256 ? wordCount / 256 : 1;
++    uint32_t hash = 2166136261u;
++    uint32_t nonzero = 0;
++    for (size_t index = 0; index < wordCount; index += step) {
++        uint32_t value = words[index];
++        nonzero += value != 0;
++        hash = (hash ^ value) * 16777619u;
++    }
++
++    dprintf(2,
++            "LorieBuffer: fd %d DMA-BUF=%s sampled_nonzero=%u hash=%08x size=%zu\n",
++            buffer->fd,
++            buffer->dmaBufSyncSupport == DMA_BUF_SYNC_SUPPORTED ? "yes" : "no",
++            nonzero, hash, buffer->size);
++}
++
+ __attribute__((unused))
+ static int memfd_create(const char *name, unsigned int flags) {
+ #ifndef __NR_memfd_create
+@@ -356,6 +429,8 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
+ 
+     read(socketFd, &buffer, sizeof(buffer));
+     buffer.image = NULL; // Only for process-local use
++    buffer.dmaBufSyncSupport = DMA_BUF_SYNC_UNKNOWN;
++    buffer.debugUploadCount = 0;
+     if (buffer.desc.type == LORIEBUFFER_FD) {
+         size_t size = buffer.desc.stride * buffer.desc.height * sizeof(uint32_t);
+         buffer.fd = ancil_recv_fd(socketFd);
+@@ -421,8 +496,13 @@ __LIBC_HIDDEN__ void LorieBuffer_bindTexture(LorieBuffer *buffer) {
+         return;
+ 
+     glBindTexture(GL_TEXTURE_2D, buffer->id);
+-    if (buffer->desc.type == LORIEBUFFER_FD)
++    if (buffer->desc.type == LORIEBUFFER_FD) {
++        bool dmaBufRead = dmaBufCpuReadBegin(buffer);
++        debugMappedBuffer(buffer);
+         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, buffer->desc.stride, buffer->desc.height, buffer->desc.format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM ? GL_BGRA_EXT : GL_RGBA, GL_UNSIGNED_BYTE, buffer->desc.data);
++        if (dmaBufRead)
++            dmaBufCpuReadEnd(buffer);
++    }
+ }
+ 
+ __LIBC_HIDDEN__ unsigned int LorieBuffer_getGLTextureId(LorieBuffer *buffer) {
