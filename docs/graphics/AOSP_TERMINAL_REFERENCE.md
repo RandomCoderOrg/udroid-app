@@ -68,9 +68,10 @@ restarting X11, Kumquat, PRoot or the Vulkan client.
 
 Four forced portrait/landscape surface recreations now also preserve the app,
 X11 and Vulkan-client processes while keeping every measured Present copy on
-the GPU. The immediate experiments are now simultaneous Vulkan and GLX clients
-and a compositor micro-workload. These must remain smaller and instrumented
-before KDE is used as the next system-level test.
+the GPU. A simultaneous Vulkan plus Zink/GLX run also rendered both clients
+correctly through one Kumquat host and offloaded every measured Present copy.
+The immediate experiment is now a compositor micro-workload, which must remain
+small and instrumented before KDE is used as the next system-level test.
 
 ## Checkpoints
 

@@ -300,7 +300,17 @@ Lorie reported 58.2-60.0 FPS with every measured Present copy GPU-offloaded,
 and no lifecycle-failure signature appeared. Android auto-rotation was restored
 after the probe.
 
+The multi-client gate kept that Vulkan client alive while a second PRoot
+process ran stock Debian `glxinfo` and `glxgears` through the same packaged
+guest, Kumquat host and X server. `glxinfo` reported direct rendering through
+Zink and `Virtio-GPU GFXStream (Mali-G78)`. Both windows rendered correctly;
+Lorie remained near 60 FPS and offloaded every one of 1,958-2,684 Present copies
+per five-second sample. No fatal lifecycle signature appeared. `glxgears`
+reported 398-488 application loops per second, which is evidence that its swap
+loop is not display-paced and must not be presented as visible frame rate.
+
+![simultaneous Vulkan and Zink GLX clients](evidence/gfxstream-vulkan-glx-multiclient.png)
+
 ![gfxstream Vulkan cube after repeated Display detach and reattach](evidence/gfxstream-x11-detach-reattach-vkcube.png)
 
-Simultaneous Vulkan and GLX clients, followed by a compositor workload, remain
-the next promotion gates.
+A compositor micro-workload remains the next promotion gate.
