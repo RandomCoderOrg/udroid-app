@@ -45,5 +45,20 @@ class GfxstreamHostLaunchTest {
 
         assertEquals("/system/lib64/libvulkan.so", environment["ANDROID_EMU_VK_LOADER_PATH"])
         assertEquals("1", environment["ANDROID_EMUGL_VERBOSE"])
+        assertEquals(null, environment["UDROID_WINSYS_TRACE"])
+    }
+
+    @Test
+    fun `enables producer tracing only for a contract probe`() {
+        val environment =
+            GfxstreamHostLaunch.environment(
+                home = File("/private/files"),
+                libraryDirectory = File("/private/lib"),
+                temporaryDirectory = File("/private/cache"),
+                is64Bit = true,
+                contractTrace = true,
+            )
+
+        assertEquals("1", environment["UDROID_WINSYS_TRACE"])
     }
 }

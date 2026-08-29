@@ -56,7 +56,10 @@ class GfxstreamPresenterProbeActivity : Activity() {
         if (externalProducer) {
             hostController =
                 GfxstreamHostController(this).also {
-                    it.startAsync(presenter.transportSocketFile())
+                    it.startAsync(
+                        presenter.transportSocketFile(),
+                        contractTrace = contractTrace,
+                    )
                 }
         }
         if (intent.getBooleanExtra(EXTRA_X11_SERVER, false)) {

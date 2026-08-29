@@ -35,20 +35,26 @@ internal object GfxstreamHostLaunch {
         libraryDirectory: File,
         temporaryDirectory: File,
         is64Bit: Boolean,
+        contractTrace: Boolean = false,
     ): Map<String, String> =
-        mapOf(
-            "ANDROID_DATA" to "/data",
-            "ANDROID_ROOT" to "/system",
-            "ANDROID_RUNTIME_ROOT" to "/apex/com.android.runtime",
-            "ANDROID_TZDATA_ROOT" to "/apex/com.android.tzdata",
-            "ANDROID_EMUGL_VERBOSE" to "1",
-            "ANDROID_EMU_VK_LOADER_PATH" to
-                if (is64Bit) "/system/lib64/libvulkan.so" else "/system/lib/libvulkan.so",
-            "HOME" to home.absolutePath,
-            "LD_LIBRARY_PATH" to libraryDirectory.absolutePath,
-            "PATH" to "/system/bin",
-            "TMPDIR" to temporaryDirectory.absolutePath,
-        )
+        buildMap {
+            putAll(
+                mapOf(
+                    "ANDROID_DATA" to "/data",
+                    "ANDROID_ROOT" to "/system",
+                    "ANDROID_RUNTIME_ROOT" to "/apex/com.android.runtime",
+                    "ANDROID_TZDATA_ROOT" to "/apex/com.android.tzdata",
+                    "ANDROID_EMUGL_VERBOSE" to "1",
+                    "ANDROID_EMU_VK_LOADER_PATH" to
+                        if (is64Bit) "/system/lib64/libvulkan.so" else "/system/lib/libvulkan.so",
+                    "HOME" to home.absolutePath,
+                    "LD_LIBRARY_PATH" to libraryDirectory.absolutePath,
+                    "PATH" to "/system/bin",
+                    "TMPDIR" to temporaryDirectory.absolutePath,
+                ),
+            )
+            if (contractTrace) put("UDROID_WINSYS_TRACE", "1")
+        }
 }
 
 /** Owns one optional gfxstream host process for a selected runtime consumer. */
@@ -67,14 +73,20 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
     private val gpuSocket = File(graphicsDirectory, "kumquat-gpu.sock")
     private val logFile = File(graphicsDirectory, "kumquat.log")
 
-    fun startAsync(presenterSocket: File? = null) {
+    fun startAsync(
+        presenterSocket: File? = null,
+        contractTrace: Boolean = false,
+    ) {
         executor.execute {
-            runCatching { start(presenterSocket) }
+            runCatching { start(presenterSocket, contractTrace) }
         }
     }
 
     /** Starts Kumquat and returns only after its private guest socket accepts launches. */
-    fun start(presenterSocket: File? = null): GfxstreamHostSession {
+    fun start(
+        presenterSocket: File? = null,
+        contractTrace: Boolean = false,
+    ): GfxstreamHostSession {
         synchronized(lock) {
             check(!closed.get()) { "The gfxstream host controller is closed" }
             check(snapshot.get().state == "stopped") { "The gfxstream host is already active" }
@@ -103,6 +115,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
                                 libraryDirectory = runtime.libraryDirectory,
                                 temporaryDirectory = appContext.cacheDir,
                                 is64Bit = android.os.Build.SUPPORTED_64_BIT_ABIS.isNotEmpty(),
+                                contractTrace = contractTrace,
                             ),
                         )
                     }.start()

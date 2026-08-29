@@ -16,7 +16,7 @@ to succeed while layout, synchronization, reuse or device selection disagreed.
 The recurring result was recognizable but corrupted output, followed by a
 mixed session where KWin and Plasma selected different rendering paths.
 
-The clean recovery point is the committed runtime pair:
+The last protocol-v1 recovery point is the committed runtime pair:
 
 - host runtime `5-0d9d623-1f2939dc0`;
 - guest runtime `7-fb349a2d3b5`.
@@ -24,6 +24,19 @@ The clean recovery point is the committed runtime pair:
 The later host-10/guest-8 modifier experiment is preserved in the original
 dirty worktree. It is evidence, not a new baseline: its X11 root capture was
 already corrupted before Termux:X11 reached the Android Surface.
+
+Protocol-v2 development uses reproducible source checkpoints instead of that
+dirty worktree:
+
+- uDroid presenter `e4271e2`;
+- Kumquat resource lifecycle and producer trace `5605f4c`;
+- gfxstream imported-resource source `36967251d`;
+- packaged host runtime `7-5605f4c-36967251d`.
+
+This pair is a test candidate, not a promoted desktop runtime. The internal
+producer and the first external gfxstream swapchain passed the v2 lifecycle;
+the independently timestamped producer/presenter merge still has to clear the
+gate below.
 
 ## Production reference
 
@@ -168,6 +181,22 @@ Android side must own a registry keyed by `(resource, generation)` and retain
 each imported AHardwareBuffer independently of the current Surface. Surface
 loss pauses presentation; it does not silently retire producer resources.
 
+The v2 implementation now exists on both endpoints. Kumquat assigns a frame id
+per registered resource, waits for the matching release before announcing
+reuse, and retires the resource on final context detach. The Android presenter
+keeps a multi-resource registry across Surface replacement and rejects early
+reuse, stale frames, stale generations, and retirement while a release is
+pending. The opt-in contract mode also records a producer-side monotonic trace
+in `no_backup/graphics/kumquat.log`; normal desktop launches leave this tracing
+disabled.
+
+Validate the two independent captures with:
+
+```sh
+python3 tools/graphics/winsys_dual_trace_validator.py \
+  kumquat-producer.log android-presenter.log
+```
+
 The external gate passes only when a merged monotonic-clock trace proves all of
 the following:
 
@@ -179,3 +208,30 @@ the following:
   registration;
 - stale frame, generation, reuse, and retire packets are rejected by both
   endpoints.
+
+### External measured checkpoint
+
+Pixel 6a (`bluejay`, Mali-G78), 2026-08-29, runtime
+`7-5605f4c-36967251d` and guest `7-fb349a2d3b5`:
+
+| Probe | Frames | Resources | Producer/presenter mismatches | Result |
+| --- | ---: | ---: | ---: | --- |
+| rotating external Vulkan images | 1,200 | 3 | 0 | pass |
+| Surface detach/reattach while rendering | 600 | 3 | 0 | pass |
+
+The first capture correlated 3,606 independent Kumquat events with 6,006
+Android presenter events. Registration, queue, release, reuse and retire tuples
+matched exactly. The second capture moved the Activity through Android Settings
+and back. The Surface advanced from generation 1 to generation 3, while the
+same three external resources continued without re-registration and retired
+cleanly after frame 600.
+
+The minimal Debian image needed its declared XCB runtime dependencies before
+the current guest ICD could load. Shipping must either bundle those libraries
+with the guest runtime or split the direct presenter ICD from X11 WSI so the
+headless contract probe does not inherit unrelated X dependencies.
+
+This clears the normal, multi-resource and Surface-replacement portions of the
+external gate. Malformed/stale packet injection remains before promotion. The
+next client gate is an ordinary Vulkan WSI client, followed by Zink; Plasma is
+still intentionally out of scope.
