@@ -23,6 +23,7 @@
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -34,11 +35,26 @@ namespace {
 
 constexpr char kLogTag[] = "uDroid-AHB";
 constexpr char kWinsysTraceTag[] = "uDroid-Winsys";
-static_assert(sizeof(UdroidAhbTransportPacket) == 32);
+static_assert(sizeof(UdroidAhbTransportPacket) == 40);
 
 enum class ProducerMode {
     kInternalProbe,
     kExternalSupervisor,
+};
+
+enum class ExternalResourcePhase {
+    kAvailable,
+    kReleasePending,
+};
+
+struct ExternalResource {
+    uint64_t generation = 0;
+    AHardwareBuffer *buffer = nullptr;
+    AHardwareBuffer_Desc description = {};
+    EGLImageKHR image = EGL_NO_IMAGE_KHR;
+    GLuint texture = 0;
+    ExternalResourcePhase phase = ExternalResourcePhase::kAvailable;
+    uint64_t last_frame = 0;
 };
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
@@ -55,6 +71,7 @@ bool sendPacket(int socket_fd, const UdroidAhbTransportPacket &packet) {
 
 bool receivePacket(int socket_fd, uint32_t expected_kind,
                    uint64_t resource_id, uint64_t generation,
+                   uint64_t frame_id,
                    UdroidAhbTransportPacket *packet) {
     ssize_t received;
     do {
@@ -67,7 +84,7 @@ bool receivePacket(int socket_fd, uint32_t expected_kind,
            packet->version == UDROID_AHB_TRANSPORT_VERSION &&
            packet->kind == expected_kind &&
            packet->reserved == 0 && packet->resource_id == resource_id &&
-           packet->generation == generation;
+           packet->generation == generation && packet->frame_id == frame_id;
 }
 
 bool sendPacketWithFd(int socket_fd, const UdroidAhbTransportPacket &packet, int fd) {
@@ -92,7 +109,8 @@ bool sendPacketWithFd(int socket_fd, const UdroidAhbTransportPacket &packet, int
 }
 
 bool receivePacketWithFd(int socket_fd, uint32_t expected_kind,
-                         uint64_t resource_id, uint64_t generation, int *fd) {
+                         uint64_t resource_id, uint64_t generation,
+                         uint64_t frame_id, int *fd) {
     *fd = -1;
     UdroidAhbTransportPacket packet = {};
     iovec io = {&packet, sizeof(packet)};
@@ -138,7 +156,8 @@ bool receivePacketWithFd(int socket_fd, uint32_t expected_kind,
         packet.magic != UDROID_AHB_TRANSPORT_MAGIC ||
         packet.version != UDROID_AHB_TRANSPORT_VERSION ||
         packet.kind != expected_kind || packet.reserved != 0 ||
-        packet.resource_id != resource_id || packet.generation != generation) {
+        packet.resource_id != resource_id || packet.generation != generation ||
+        packet.frame_id != frame_id) {
         close(*fd);
         *fd = -1;
         return false;
@@ -691,6 +710,23 @@ private:
             return false;
         }
 
+        if (external_resources_.find(registration.resource_id) !=
+                    external_resources_.end()) {
+            AHardwareBuffer_release(received_buffer);
+            ++transport_failures_;
+            setStatus("external resource registration is duplicate");
+            return false;
+        }
+        const auto prior_generation =
+                external_latest_generations_.find(registration.resource_id);
+        if (prior_generation != external_latest_generations_.end() &&
+            registration.generation <= prior_generation->second) {
+            AHardwareBuffer_release(received_buffer);
+            ++transport_failures_;
+            setStatus("external resource registration reused a stale generation");
+            return false;
+        }
+
         AHardwareBuffer_Desc description = {};
         AHardwareBuffer_describe(received_buffer, &description);
         if (description.width == 0 || description.height == 0 ||
@@ -702,48 +738,60 @@ private:
             return false;
         }
 
-        destroyFrameBuffer();
-        present_frame_buffer_ = received_buffer;
-        if (!makePresenterCurrent(window_surface_)) {
+        if (!makePresenterCurrent(presenter_pbuffer_)) {
             setStatus("presenter EGL context activation failed for external buffer");
-            destroyFrameBuffer();
+            AHardwareBuffer_release(received_buffer);
             return false;
         }
         EGLClientBuffer client_buffer =
-                egl_get_native_client_buffer_(present_frame_buffer_);
+                egl_get_native_client_buffer_(received_buffer);
         const EGLint image_attributes[] = {
             EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
             EGL_NONE,
         };
-        present_image_ = egl_create_image_(display_, EGL_NO_CONTEXT,
-                                          EGL_NATIVE_BUFFER_ANDROID, client_buffer,
-                                          image_attributes);
-        if (present_image_ == EGL_NO_IMAGE_KHR) {
+        EGLImageKHR image = egl_create_image_(display_, EGL_NO_CONTEXT,
+                                             EGL_NATIVE_BUFFER_ANDROID, client_buffer,
+                                             image_attributes);
+        if (image == EGL_NO_IMAGE_KHR) {
             setStatus("external AHardwareBuffer EGLImage import failed");
-            destroyFrameBuffer();
+            AHardwareBuffer_release(received_buffer);
             return false;
         }
 
-        glGenTextures(1, &present_texture_);
-        glBindTexture(GL_TEXTURE_2D, present_texture_);
+        GLuint texture = 0;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        gl_egl_image_target_texture_(GL_TEXTURE_2D, present_image_);
+        gl_egl_image_target_texture_(GL_TEXTURE_2D, image);
         if (glGetError() != GL_NO_ERROR) {
             setStatus("external AHardwareBuffer texture binding failed");
-            destroyFrameBuffer();
+            glDeleteTextures(1, &texture);
+            egl_destroy_image_(display_, image);
+            AHardwareBuffer_release(received_buffer);
             return false;
         }
 
+        ExternalResource resource;
+        resource.generation = registration.generation;
+        resource.buffer = received_buffer;
+        resource.description = description;
+        resource.image = image;
+        resource.texture = texture;
+        external_resources_.emplace(registration.resource_id, resource);
+        external_latest_generations_[registration.resource_id] =
+                registration.generation;
         active_resource_id_.store(registration.resource_id);
         buffer_generation_.store(registration.generation);
         uint64_t buffer_id = 0;
         const bool has_buffer_id =
-                getHardwareBufferId(present_frame_buffer_, &buffer_id);
+                getHardwareBufferId(received_buffer, &buffer_id);
+        uint32_t surface_generation;
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            surface_generation = surface_generation_;
             frame_width_ = static_cast<int>(description.width);
             frame_height_ = static_cast<int>(description.height);
             if (has_buffer_id) {
@@ -754,8 +802,11 @@ private:
             } else {
                 buffer_identity_ = "external (Android < 12)";
             }
-            status_ = "external AHardwareBuffer registered; waiting for acquire fence";
+            status_ = "external resource registered; waiting for frame";
         }
+        traceResourceRegistration(registration.resource_id,
+                                  registration.generation,
+                                  surface_generation, description);
         return true;
     }
 
@@ -770,6 +821,7 @@ private:
             0,
             resource_id,
             generation,
+            0,
         };
         if (!sendPacket(transport_sockets_[0], registration) ||
             AHardwareBuffer_sendHandleToUnixSocket(frame_buffer_,
@@ -782,7 +834,7 @@ private:
         UdroidAhbTransportPacket received = {};
         if (!receivePacket(transport_sockets_[1],
                            UDROID_AHB_REGISTER_BUFFER,
-                           resource_id, generation, &received) ||
+                           resource_id, generation, 0, &received) ||
             AHardwareBuffer_recvHandleFromUnixSocket(transport_sockets_[1],
                                                      &present_frame_buffer_) != 0 ||
             present_frame_buffer_ == nullptr) {
@@ -837,28 +889,43 @@ private:
             std::lock_guard<std::mutex> lock(mutex_);
             surface_generation = surface_generation_;
         }
+        traceResourceRegistration(active_resource_id_.load(),
+                                  buffer_generation_.load(),
+                                  surface_generation, description);
+        contract_resource_registered_ = true;
+    }
+
+    void traceResourceRegistration(uint64_t resource_id, uint64_t generation,
+                                   uint32_t surface_generation,
+                                   const AHardwareBuffer_Desc &description) const {
+        if (!contract_trace_) return;
         TRACE_WINSYS(
                 "{\"schema\":1,\"event\":\"register\",\"resource\":%llu,"
                 "\"generation\":%llu,\"surface_generation\":%u,\"width\":%u,"
                 "\"height\":%u,\"layers\":%u,\"format\":%u,\"usage\":%llu,"
                 "\"stride\":%u}",
-                static_cast<unsigned long long>(active_resource_id_.load()),
-                static_cast<unsigned long long>(buffer_generation_.load()),
+                static_cast<unsigned long long>(resource_id),
+                static_cast<unsigned long long>(generation),
                 surface_generation, description.width, description.height,
                 description.layers, description.format,
                 static_cast<unsigned long long>(description.usage),
                 description.stride);
-        contract_resource_registered_ = true;
     }
 
     void traceFrameEvent(const char *event, uint64_t frame) const {
+        traceResourceFrameEvent(event, active_resource_id_.load(),
+                                buffer_generation_.load(), frame);
+    }
+
+    void traceResourceFrameEvent(const char *event, uint64_t resource_id,
+                                 uint64_t generation, uint64_t frame) const {
         if (!contract_trace_) return;
         TRACE_WINSYS(
                 "{\"schema\":1,\"event\":\"%s\",\"resource\":%llu,"
                 "\"generation\":%llu,\"frame\":%llu}",
                 event,
-                static_cast<unsigned long long>(active_resource_id_.load()),
-                static_cast<unsigned long long>(buffer_generation_.load()),
+                static_cast<unsigned long long>(resource_id),
+                static_cast<unsigned long long>(generation),
                 static_cast<unsigned long long>(frame));
     }
 
@@ -872,8 +939,18 @@ private:
         contract_resource_registered_ = false;
     }
 
+    void traceResourceRetirement(uint64_t resource_id, uint64_t generation) const {
+        if (!contract_trace_) return;
+        TRACE_WINSYS(
+                "{\"schema\":1,\"event\":\"retire\",\"resource\":%llu,"
+                "\"generation\":%llu}",
+                static_cast<unsigned long long>(resource_id),
+                static_cast<unsigned long long>(generation));
+    }
+
     bool transferFence(uint32_t kind, int sender_socket,
-                       int receiver_socket, int fence_fd, int *received_fd) {
+                       int receiver_socket, int fence_fd, uint64_t frame_id,
+                       int *received_fd) {
         const uint64_t resource_id = active_resource_id_.load();
         const uint64_t generation = buffer_generation_.load();
         const UdroidAhbTransportPacket packet = {
@@ -883,11 +960,12 @@ private:
             0,
             resource_id,
             generation,
+            frame_id,
         };
         const bool sent = sendPacketWithFd(sender_socket, packet, fence_fd);
         close(fence_fd);
         if (!sent || !receivePacketWithFd(receiver_socket, kind,
-                                          resource_id, generation,
+                                          resource_id, generation, frame_id,
                                           received_fd)) {
             ++transport_failures_;
             return false;
@@ -1015,100 +1093,182 @@ private:
         return false;
     }
 
+    void destroyExternalResource(
+            std::map<uint64_t, ExternalResource>::iterator resource) {
+        if (resource == external_resources_.end()) return;
+        makePresenterCurrent(presenter_pbuffer_);
+        if (resource->second.texture != 0) {
+            glDeleteTextures(1, &resource->second.texture);
+        }
+        if (resource->second.image != EGL_NO_IMAGE_KHR &&
+            egl_destroy_image_ != nullptr) {
+            egl_destroy_image_(display_, resource->second.image);
+        }
+        if (resource->second.buffer != nullptr) {
+            AHardwareBuffer_release(resource->second.buffer);
+        }
+        external_resources_.erase(resource);
+    }
+
+    void destroyAllExternalResources() {
+        while (!external_resources_.empty()) {
+            destroyExternalResource(external_resources_.begin());
+        }
+    }
+
     bool drawExternalFrame() {
-        pollfd descriptor = {transport_sockets_[1], POLLIN, 0};
-        int poll_result;
-        do {
-            poll_result = poll(&descriptor, 1, 0);
-        } while (poll_result < 0 && errno == EINTR);
-        if (poll_result == 0) return true;
-        if (poll_result < 0 ||
-            (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ||
-            (descriptor.revents & POLLIN) == 0) {
-            ++transport_failures_;
-            setStatus("external graphics producer disconnected");
-            return false;
-        }
-
-        UdroidAhbTransportPacket packet = {};
-        int received_fd = -1;
-        if (!receiveExternalPacket(transport_sockets_[1], &packet, &received_fd)) {
-            ++transport_failures_;
-            setStatus("external graphics producer sent a malformed packet");
-            return false;
-        }
-
-        if (packet.kind == UDROID_AHB_REGISTER_BUFFER) {
-            if (received_fd >= 0 || packet.resource_id == 0 ||
-                packet.generation == 0) {
-                close(received_fd);
+        for (size_t control_count = 0; control_count < 64; ++control_count) {
+            pollfd descriptor = {transport_sockets_[1], POLLIN, 0};
+            int poll_result;
+            do {
+                poll_result = poll(&descriptor, 1, 0);
+            } while (poll_result < 0 && errno == EINTR);
+            if (poll_result == 0) return true;
+            if (poll_result < 0 ||
+                (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ||
+                (descriptor.revents & POLLIN) == 0) {
                 ++transport_failures_;
-                setStatus("external AHardwareBuffer registration is invalid");
+                setStatus("external graphics producer disconnected");
                 return false;
             }
-            return importExternalFrameBuffer(packet);
-        }
 
-        if (packet.kind != UDROID_AHB_ACQUIRE_FENCE || received_fd < 0 ||
-            packet.resource_id != active_resource_id_.load() ||
-            packet.generation != buffer_generation_.load() ||
-            present_frame_buffer_ == nullptr || present_texture_ == 0) {
-            close(received_fd);
-            ++transport_failures_;
-            setStatus("external acquire fence does not match active resource");
-            return false;
-        }
+            UdroidAhbTransportPacket packet = {};
+            int received_fd = -1;
+            if (!receiveExternalPacket(transport_sockets_[1], &packet, &received_fd)) {
+                ++transport_failures_;
+                setStatus("external graphics producer sent a malformed packet");
+                return false;
+            }
 
-        if (!makePresenterCurrent(window_surface_)) {
-            close(received_fd);
-            setStatus("presenter EGL context switch failed");
-            return false;
-        }
-        // Kumquat's non-shareable fence is an eventfd, while Android native
-        // fences are sync_file descriptors. Both become readable when the
-        // producer is complete, so poll is the common explicit-sync boundary.
-        // Importing an eventfd as EGL_SYNC_NATIVE_FENCE_ANDROID is invalid.
-        if (!waitNativeFenceOnCpu(received_fd)) {
-            ++fence_failures_;
-            setStatus("presenter failed to wait for external acquire fence");
-            return false;
-        }
+            if (packet.kind == UDROID_AHB_REGISTER_BUFFER) {
+                if (received_fd >= 0 || packet.resource_id == 0 ||
+                    packet.generation == 0 || packet.frame_id != 0) {
+                    close(received_fd);
+                    ++transport_failures_;
+                    setStatus("external AHardwareBuffer registration is invalid");
+                    return false;
+                }
+                if (!importExternalFrameBuffer(packet)) return false;
+                continue;
+            }
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, surface_width_, surface_height_);
-        glUseProgram(present_program_);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, present_texture_);
-        glUniform1i(glGetUniformLocation(present_program_, "uFrame"), 0);
-        drawQuad();
+            auto resource = external_resources_.find(packet.resource_id);
+            if (resource == external_resources_.end() ||
+                packet.generation != resource->second.generation) {
+                close(received_fd);
+                ++transport_failures_;
+                setStatus("external packet references an unknown resource generation");
+                return false;
+            }
 
-        const int release_fence = exportNativeFence();
-        if (release_fence < 0) {
-            ++fence_failures_;
-            setStatus("presenter failed to export external release fence");
-            return false;
+            if (packet.kind == UDROID_AHB_REUSE_READY) {
+                if (received_fd >= 0 || packet.frame_id == 0 ||
+                    resource->second.phase != ExternalResourcePhase::kReleasePending ||
+                    packet.frame_id != resource->second.last_frame) {
+                    close(received_fd);
+                    ++transport_failures_;
+                    setStatus("external reuse acknowledgement is stale or premature");
+                    return false;
+                }
+                resource->second.phase = ExternalResourcePhase::kAvailable;
+                traceResourceFrameEvent("reuse_ready", packet.resource_id,
+                                        packet.generation, packet.frame_id);
+                continue;
+            }
+
+            if (packet.kind == UDROID_AHB_RETIRE_BUFFER) {
+                if (received_fd >= 0 || packet.frame_id != 0 ||
+                    resource->second.phase != ExternalResourcePhase::kAvailable) {
+                    close(received_fd);
+                    ++transport_failures_;
+                    setStatus("external resource retired while still in flight");
+                    return false;
+                }
+                traceResourceRetirement(packet.resource_id, packet.generation);
+                destroyExternalResource(resource);
+                continue;
+            }
+
+            if (packet.kind != UDROID_AHB_ACQUIRE_FENCE || received_fd < 0 ||
+                packet.frame_id == 0 ||
+                resource->second.phase != ExternalResourcePhase::kAvailable ||
+                packet.frame_id <= resource->second.last_frame ||
+                resource->second.buffer == nullptr || resource->second.texture == 0) {
+                close(received_fd);
+                ++transport_failures_;
+                setStatus("external acquire fence is stale or resource is unavailable");
+                return false;
+            }
+
+            active_resource_id_.store(packet.resource_id);
+            buffer_generation_.store(packet.generation);
+            // These producer-side transitions are inferred from receipt of a
+            // matching acquire packet. Final qualification merges Kumquat's
+            // independent producer trace with the presenter trace.
+            traceResourceFrameEvent("produce_begin", packet.resource_id,
+                                    packet.generation, packet.frame_id);
+            traceResourceFrameEvent("queue", packet.resource_id,
+                                    packet.generation, packet.frame_id);
+
+            if (!makePresenterCurrent(window_surface_)) {
+                close(received_fd);
+                setStatus("presenter EGL context switch failed");
+                return false;
+            }
+            // Kumquat's non-shareable fence is an eventfd, while Android native
+            // fences are sync_file descriptors. Both become readable when the
+            // producer is complete, so poll is the common explicit-sync boundary.
+            // Importing an eventfd as EGL_SYNC_NATIVE_FENCE_ANDROID is invalid.
+            if (!waitNativeFenceOnCpu(received_fd)) {
+                ++fence_failures_;
+                setStatus("presenter failed to wait for external acquire fence");
+                return false;
+            }
+            traceResourceFrameEvent("present_begin", packet.resource_id,
+                                    packet.generation, packet.frame_id);
+
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, surface_width_, surface_height_);
+            glUseProgram(present_program_);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, resource->second.texture);
+            glUniform1i(glGetUniformLocation(present_program_, "uFrame"), 0);
+            drawQuad();
+
+            const int release_fence = exportNativeFence();
+            if (release_fence < 0) {
+                ++fence_failures_;
+                setStatus("presenter failed to export external release fence");
+                return false;
+            }
+            const UdroidAhbTransportPacket release_packet = {
+                UDROID_AHB_TRANSPORT_MAGIC,
+                UDROID_AHB_TRANSPORT_VERSION,
+                UDROID_AHB_RELEASE_FENCE,
+                0,
+                packet.resource_id,
+                packet.generation,
+                packet.frame_id,
+            };
+            const bool release_sent = sendPacketWithFd(
+                    transport_sockets_[1], release_packet, release_fence);
+            close(release_fence);
+            if (!release_sent) {
+                ++transport_failures_;
+                setStatus("presenter failed to return external release fence");
+                return false;
+            }
+            resource->second.phase = ExternalResourcePhase::kReleasePending;
+            resource->second.last_frame = packet.frame_id;
+            traceResourceFrameEvent("release_sent", packet.resource_id,
+                                    packet.generation, packet.frame_id);
+            const bool presented = swapAndRecordFrame();
+            if (presented && frames_.load() == 1) {
+                setStatus("external AHardwareBuffer frame presented with explicit fences");
+            }
+            return presented;
         }
-        const UdroidAhbTransportPacket release_packet = {
-            UDROID_AHB_TRANSPORT_MAGIC,
-            UDROID_AHB_TRANSPORT_VERSION,
-            UDROID_AHB_RELEASE_FENCE,
-            0,
-            packet.resource_id,
-            packet.generation,
-        };
-        const bool release_sent =
-                sendPacketWithFd(transport_sockets_[1], release_packet, release_fence);
-        close(release_fence);
-        if (!release_sent) {
-            ++transport_failures_;
-            setStatus("presenter failed to return external release fence");
-            return false;
-        }
-        const bool presented = swapAndRecordFrame();
-        if (presented && frames_.load() == 1) {
-            setStatus("external AHardwareBuffer frame presented with explicit fences");
-        }
-        return presented;
+        return true;
     }
 
     bool drawProbeFrame(float time_seconds) {
@@ -1148,7 +1308,8 @@ private:
         int presenter_acquire_fence = -1;
         if (!transferFence(UDROID_AHB_ACQUIRE_FENCE,
                            transport_sockets_[0], transport_sockets_[1],
-                           acquire_fence, &presenter_acquire_fence)) {
+                           acquire_fence, contract_active_frame_,
+                           &presenter_acquire_fence)) {
             setStatus("AHB transport failed to carry acquire fence");
             return false;
         }
@@ -1180,7 +1341,8 @@ private:
         }
         if (!transferFence(UDROID_AHB_RELEASE_FENCE,
                            transport_sockets_[1], transport_sockets_[0],
-                           presenter_release_fence, &release_fence_fd_)) {
+                           presenter_release_fence, contract_active_frame_,
+                           &release_fence_fd_)) {
             setStatus("AHB transport failed to return release fence");
             return false;
         }
@@ -1246,7 +1408,9 @@ private:
 
     void destroyWindowSurface() {
         if (display_ == EGL_NO_DISPLAY) return;
-        destroyFrameBuffer();
+        if (producer_mode_ == ProducerMode::kInternalProbe) {
+            destroyFrameBuffer();
+        }
         makePresenterCurrent(presenter_pbuffer_);
         if (window_surface_ != EGL_NO_SURFACE) {
             eglDestroySurface(display_, window_surface_);
@@ -1256,6 +1420,7 @@ private:
 
     void destroyEgl() {
         destroyWindowSurface();
+        destroyAllExternalResources();
         if (makeProducerCurrent() && pattern_program_ != 0) {
             glDeleteProgram(pattern_program_);
         }
@@ -1411,6 +1576,8 @@ private:
     uint64_t contract_next_frame_ = 0;
     uint64_t contract_active_frame_ = 0;
     bool contract_resource_registered_ = false;
+    std::map<uint64_t, ExternalResource> external_resources_;
+    std::map<uint64_t, uint64_t> external_latest_generations_;
 
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLConfig config_ = nullptr;

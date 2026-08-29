@@ -115,6 +115,46 @@ class WinsysTraceValidatorTest(unittest.TestCase):
 
         self.assertEqual(1, summary["frames"])
 
+    def test_accepts_interleaved_swapchain_resources(self) -> None:
+        lines = [
+            registration(resource=1, generation=1),
+            registration(resource=2, generation=1),
+            registration(resource=3, generation=1),
+        ]
+        for resource, frame in ((1, 1), (2, 1), (3, 1), (1, 2)):
+            lines.extend(
+                event(kind, frame, resource=resource, generation=1)
+                for kind in (
+                    "produce_begin",
+                    "queue",
+                    "present_begin",
+                    "release_sent",
+                    "reuse_ready",
+                )
+            )
+        lines.extend(
+            event("retire", resource=resource, generation=1)
+            for resource in (1, 2, 3)
+        )
+
+        summary = validate(io.StringIO("\n".join(lines)))
+
+        self.assertEqual(4, summary["frames"])
+        self.assertEqual(3, summary["resources"])
+
+    def test_rejects_retire_before_producer_acknowledges_release(self) -> None:
+        lines = [
+            registration(),
+            event("produce_begin", 1),
+            event("queue", 1),
+            event("present_begin", 1),
+            event("release_sent", 1),
+            event("retire"),
+        ]
+
+        with self.assertRaisesRegex(ContractViolation, "retired while release_pending"):
+            validate(io.StringIO("\n".join(lines)))
+
 
 if __name__ == "__main__":
     unittest.main()
