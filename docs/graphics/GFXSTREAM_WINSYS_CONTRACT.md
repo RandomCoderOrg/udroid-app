@@ -357,6 +357,53 @@ signal. The rootfs was cleaned and the original bare-name desktop command was
 retested successfully. Qualification scripts must therefore resolve and hash
 their guest executable before comparing lifecycle or winsys results.
 
+### Nested Wayland and Plasma boundary
+
+The next diagnostic topology was exercised on the Pixel 6a on 2026-08-30:
+
+```text
+embedded Lorie :0
+  -> Weston 14.0.2 X11 backend
+    -> KWin Wayland nested backend
+      -> Plasma 6 Wayland clients and Xwayland :1
+```
+
+Weston initialized its GL renderer on
+`zink Vulkan 1.4 (Virtio-GPU GFXStream (Mali-G78))`. Its EGL display exposed
+the Wayland platform, buffer age, swap-with-damage and explicit sync. A direct
+Vulkan XCB client remained alive on the same Kumquat host, which also confirmed
+that the compositor did not require exclusive access to the gfxstream service.
+
+The complete Plasma process graph started: `startplasma-wayland`,
+`plasma_session`, `kwin_wayland`, rootless `Xwayland :1` and `plasmashell` all
+remained alive. This is not yet a rendering pass. KWin reported
+`zwp_linux_dmabuf_v1 v4 or newer is needed`, and the nested Plasma output was
+black.
+
+Weston's earlier allocator diagnostics explain that failure:
+
+```text
+warning: failed to query rendering device from EGL
+failed to initialize allocator
+```
+
+Weston 14's GL renderer creates its dmabuf allocator only when the EGL platform
+already supplies a GBM device or when the EGL device exposes a DRM device path
+that Weston can open and pass to `gbm_create_device()`. The same requirement is
+still present in current upstream Weston. Rendering through Zink is therefore
+not sufficient to publish the standard Wayland dmabuf protocol.
+
+This result narrows the next implementation gate. The socket-backed gfxstream
+GBM work must be completed and connected to a compositor allocator boundary;
+it must provide BO allocation and import, surfaces, authoritative plane
+metadata and explicit release synchronization. Once Weston publishes
+`zwp_linux_dmabuf_v1` v4 from that allocator, rerun the native Wayland client
+and Plasma unchanged. Do not add a Plasma renderer override or fabricate a DRM
+node to bypass this gate.
+
+The relevant upstream allocator code is
+[Weston 14.0.2 `gl_renderer_allocator_create()`](https://gitlab.freedesktop.org/wayland/weston/-/blob/14.0.2/libweston/renderer-gl/gl-renderer.c).
+
 Nested X server ownership is also part of the standard session contract. PRoot
 launches now bind both `/tmp/.X11-unix` and the matching `/tmp/.X0-lock` into
 the guest. With only the socket visible, Xwayland incorrectly claimed `:0` and
