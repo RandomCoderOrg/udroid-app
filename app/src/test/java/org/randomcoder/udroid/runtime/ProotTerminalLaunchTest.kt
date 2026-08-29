@@ -98,6 +98,17 @@ class ProotTerminalLaunchTest {
                     ),
                 ),
         )
+        assertTrue(
+            arguments
+                .toList()
+                .windowed(2)
+                .contains(
+                    listOf(
+                        "-b",
+                        "/data/user/0/udroid/files/runtime/x11/.X0-lock:/tmp/.X0-lock",
+                    ),
+                ),
+        )
         assertTrue("DISPLAY=:0" in arguments)
     }
 

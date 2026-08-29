@@ -69,7 +69,7 @@ class DesktopEnvironmentScannerTest {
             ProotDesktopLaunchBuilder.buildArguments(
                 prootPath = "/data/proot",
                 rootfsPath = "/data/rootfs",
-                x11SocketDirectory = "/data/x11",
+                x11SocketDirectory = "/data/x11/.X11-unix",
                 guestHome = "/root",
                 environment = desktop,
                 configuration =
@@ -119,7 +119,7 @@ class DesktopEnvironmentScannerTest {
             ProotDesktopLaunchBuilder.buildArguments(
                 prootPath = "/data/proot",
                 rootfsPath = "/data/rootfs",
-                x11SocketDirectory = "/data/x11",
+                x11SocketDirectory = "/data/x11/.X11-unix",
                 guestHome = "/root",
                 environment = desktop,
                 configuration =

@@ -95,8 +95,7 @@ object ProotTerminalLaunchBuilder {
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
             if (x11SocketDirectory != null) {
-                add("-b")
-                add("$x11SocketDirectory:/tmp/.X11-unix")
+                addX11ProotBindMounts(x11SocketDirectory)
             }
             if (audioAuthDirectory != null) {
                 add("-b")

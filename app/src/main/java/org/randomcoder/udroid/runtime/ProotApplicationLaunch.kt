@@ -86,8 +86,7 @@ object ProotApplicationLaunchBuilder {
             add("--rootfs=$rootfsPath")
             addAndroidProotBindMounts()
             launchProfile?.addBindings(this)
-            add("-b")
-            add("$x11SocketDirectory:/tmp/.X11-unix")
+            addX11ProotBindMounts(x11SocketDirectory)
             if (audioAuthDirectory != null) {
                 add("-b")
                 add("$audioAuthDirectory:${AudioEndpoint.GUEST_AUTH_DIRECTORY}")

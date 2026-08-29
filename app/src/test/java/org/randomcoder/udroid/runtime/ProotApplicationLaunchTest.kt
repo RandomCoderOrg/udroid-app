@@ -26,6 +26,7 @@ class ProotApplicationLaunchTest {
 
         assertEquals("/data/proot", arguments.first())
         assertTrue(arguments.contains("DISPLAY=:0"))
+        assertTrue(arguments.contains("/data/x11/.X0-lock:/tmp/.X0-lock"))
         assertTrue(arguments.contains("GDK_BACKEND=x11"))
         assertTrue(arguments.contains("--cwd=/root/Documents"))
         assertTrue(arguments.contains("/data/audio/transport:/tmp/.udroid-pulse"))
