@@ -16,7 +16,7 @@ data class GfxstreamGuestRuntime(
 
 /** Installs the matched glibc gfxstream Vulkan ICD used by opt-in PRoot launches. */
 object GfxstreamGuestRuntimeInstaller {
-    internal const val RUNTIME_VERSION = "8-234edeb74d"
+    internal const val RUNTIME_VERSION = "9-109e79ea1bc"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "gfxstream guest",
