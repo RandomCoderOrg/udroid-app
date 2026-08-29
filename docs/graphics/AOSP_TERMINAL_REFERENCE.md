@@ -10,10 +10,12 @@ display, lifecycle, buffer-ownership and input contracts still apply.
 
 Primary references:
 
+- [TerminalApp VM graphics configuration](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/android/TerminalApp/java/com/android/virtualization/terminal/VmLauncherService.kt)
 - [TerminalApp DisplayProvider](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/android/TerminalApp/java/com/android/virtualization/terminal/DisplayProvider.kt)
 - [TerminalApp DisplayActivity](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/android/TerminalApp/java/com/android/virtualization/terminal/DisplayActivity.kt)
 - [TerminalApp InputForwarder](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/android/TerminalApp/java/com/android/virtualization/terminal/InputForwarder.kt)
 - [crosvm Android display backend](https://android.googlesource.com/platform/external/crosvm/+/refs/heads/main/gpu_display/src/gpu_display_android.rs)
+- [crosvm virtio-gpu resource manager](https://android.googlesource.com/platform/external/crosvm/+/refs/heads/main/devices/src/virtio/gpu/virtio_gpu.rs)
 - [crosvm direct-surface refactor](https://android.googlesource.com/platform/external/crosvm/+/2eb9276383416d3b6e57fc8030d43d1e18ab4145%5E%21/)
 - [AOSP custom VM graphics notes](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/docs/custom_vm.md)
 
@@ -50,6 +52,21 @@ The socket transport, PRoot mounts and X11 DRI3 integration are uDroid-specific.
 They must nevertheless preserve Android's buffer ownership, stride, lifecycle
 and synchronization rules.
 
+As of 2026-08-29, AOSP Terminal's source contains an experimental gfxstream
+configuration using a surfaceless Vulkan renderer with both
+`gfxstream-vulkan` and `gfxstream-composer` contexts. The important separation
+is that the Linux guest still receives a real kernel virtio-gpu DRM device.
+crosvm can therefore export a Rutabaga blob, query its allocator metadata, and
+import the resulting DMA-BUF into the Android display backend through the
+standard guest DRM/GBM stack. `gfxstream-composer` is not a userspace substitute
+for that missing render node in PRoot.
+
+uDroid should continue checking these AOSP files before changing its transport
+or presentation contracts. New reusable work is most likely to appear in
+Rutabaga resource export, Android buffer ownership, synchronization, and
+surface lifecycle. VM-only device creation and privileged display APIs remain
+reference behavior rather than app dependencies.
+
 ## Current correctness boundary
 
 The standard Vulkan loader, gfxstream host and AHardwareBuffer-backed X11 WSI
@@ -75,6 +92,16 @@ redirected clients correct at the display's 60 FPS while offloading every
 measured Present copy. An opt-in desktop session is now the next system-level
 test; the existing gfxstream protocol and virtual-feature warnings remain
 visible promotion blockers rather than launcher workarounds.
+
+The first PRoot replacement for AOSP's guest render node is now proven at the
+loader and image-import boundaries. Mesa GBM accepts a Unix socket only when an
+external backend is explicitly selected; the default path still rejects the
+same descriptor. In the Pixel 6a uDroid app domain, an independent gfxstream
+Vulkan producer then exported an AHardwareBuffer-backed DMA-BUF which a
+surfaceless Zink/EGL consumer imported with explicit stride and modifier
+metadata. Ten consecutive runs verified all 49,408 pixels with content hash
+`3bf16538da7f5d83`. This qualifies the transport and EGL import path, not yet a
+complete GBM allocator or Xwayland device-discovery path.
 
 ## Checkpoints
 

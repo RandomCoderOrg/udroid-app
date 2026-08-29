@@ -302,6 +302,23 @@ target is therefore a truthful rootless render-device plus GBM/allocator
 boundary usable by Weston and Xwayland. Plasma and per-desktop tuning remain
 out of scope until that gate passes.
 
+The first two sub-gates of that boundary now pass on the Pixel 6a. Mesa
+checkpoint `f064d8fb23b` keeps normal GBM device validation unchanged while
+allowing an explicitly selected external backend to own a Unix socket
+transport. Its negative and positive loader cases pass both in a clean ARM64
+build and inside the uDroid Debian PRoot. Mesa checkpoint `ac8417243f0` adds an
+independent surfaceless Zink/EGL consumer to the existing cross-process probe.
+Ten consecutive Vulkan-producer to EGL-consumer runs imported the explicit
+linear DMA-BUF layout and matched 49,408 of 49,408 pixels with hash
+`3bf16538da7f5d83`; the original Vulkan consumer still passes unchanged.
+
+This evidence removes the need for a fabricated DRM identity or a new EGL
+platform. The remaining implementation is a real socket-selected GBM buffer
+allocator, followed by an Xwayland discovery path which chooses that backend
+and its already working surfaceless EGL context. Neither component may claim
+promotion until allocation, import, synchronization, reuse, and disconnect
+tests pass without a compositor.
+
 Nested X server ownership is also part of the standard session contract. PRoot
 launches now bind both `/tmp/.X11-unix` and the matching `/tmp/.X0-lock` into
 the guest. With only the socket visible, Xwayland incorrectly claimed `:0` and
