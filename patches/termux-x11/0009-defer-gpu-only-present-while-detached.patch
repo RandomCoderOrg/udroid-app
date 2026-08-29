@@ -22,7 +22,7 @@
      if (priv && priv->buffer)
 --- a/xserver/present/present_execute.c
 +++ b/xserver/present/present_execute.c
-@@ -125,6 +125,17 @@ present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc)
+@@ -125,6 +125,16 @@ present_execute_copy(present_vblank_ptr vblank, uint64_t crtc_msc)
          /* Failed to requeue for polling (e.g. OOM) - release our extra ref and treat the
           * presumably still in-flight GPU copy as done; same best-effort fallback as above. */
          lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);

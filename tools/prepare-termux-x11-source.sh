@@ -33,6 +33,10 @@ apply_once() {
     patch -p1 -f -N -V none -d "$source_dir" -i "$patch_file"
 }
 
+apply_once \
+    "$cpp_root" \
+    "$repo_root/patches/termux-x11/0000-xserver-patch-semantic-idempotence.patch" \
+    'uDroid: later native patches extend xserver.patch'
 apply_once "$cpp_root/libxtrans" "$cpp_root/patches/Xtrans.patch"
 apply_once "$cpp_root/pixman" "$cpp_root/patches/pixman.patch"
 apply_once "$cpp_root/xkbcomp" "$cpp_root/patches/xkbcomp.patch"
@@ -78,6 +82,6 @@ apply_once \
 apply_once \
     "$cpp_root" \
     "$repo_root/patches/termux-x11/0009-defer-gpu-only-present-while-detached.patch" \
-    'loriePixmapRequiresGpuCopy'
+    'Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {'
 
 echo "Termux:X11 native source patches are ready."
