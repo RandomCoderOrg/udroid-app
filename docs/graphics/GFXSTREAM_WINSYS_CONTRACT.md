@@ -132,3 +132,17 @@ reported swap or fence failures. The validator observed the complete lifecycle
 for every accepted frame. This clears promotion gates 1 and 2 for the internal
 deterministic producer only; it does not yet qualify gfxstream, X11, Weston or a
 desktop compositor.
+
+The same build also passed three Android Home/foreground detach cycles (643
+frames across four retired resources) and a live `1080x2400 -> 720x1600 ->
+1080x2400` replacement (550 frames across three retired resources). Each resize
+used the allocator-reported stride: 1088, 720, then 1088. The validator rejects
+synthetic stale generations, premature reuse and retirement while in flight;
+an end-to-end stale-packet injection remains part of the external-producer
+gate.
+
+A short pacing audit recorded frame 1 at `11:36:14.502` and frame 409 at
+`11:36:21.308`, or 60.09 accepted frames per second on the physical 60 Hz
+display. Use `tools/graphics/run_winsys_contract_probe.sh` for subsequent
+`steady`, `cycle`, `reattach`, and `resize` captures so timing and lifecycle
+results come from the same log.
