@@ -31,6 +31,7 @@ dirty worktree:
 - uDroid presenter `e4271e2`;
 - Kumquat resource lifecycle and producer trace `5605f4c`;
 - gfxstream imported-resource source `36967251d`;
+- Mesa guest resource-import transport `234edeb74d`;
 - packaged host runtime `7-5605f4c-36967251d`.
 
 This pair is a test candidate, not a promoted desktop runtime. The internal
@@ -231,7 +232,16 @@ the current guest ICD could load. Shipping must either bundle those libraries
 with the guest runtime or split the direct presenter ICD from X11 WSI so the
 headless contract probe does not inherit unrelated X dependencies.
 
+The guest import transport is now rebuilt from the clean Mesa checkpoint
+`234edeb74d` and packaged as guest runtime `8-234edeb74d`. Imported images no
+longer infer a tightly packed stride after their Vulkan `pNext` chain is gone:
+explicit modifier plane layouts are retained at image creation, linear images
+query their actual subresource layout, and opaque layouts fail closed. This
+runtime still requires a cross-process export/import test before it replaces
+the guest used in the measured presenter results above.
+
 This clears the normal, multi-resource and Surface-replacement portions of the
 external gate. Malformed/stale packet injection remains before promotion. The
-next client gate is an ordinary Vulkan WSI client, followed by Zink; Plasma is
-still intentionally out of scope.
+next gate is a two-process Vulkan DMA-BUF transfer with a deterministic content
+hash, followed by an ordinary Vulkan WSI client and Zink. Plasma is still
+intentionally out of scope.
