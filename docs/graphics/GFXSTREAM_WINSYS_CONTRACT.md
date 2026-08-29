@@ -313,11 +313,31 @@ linear DMA-BUF layout and matched 49,408 of 49,408 pixels with hash
 `3bf16538da7f5d83`; the original Vulkan consumer still passes unchanged.
 
 This evidence removes the need for a fabricated DRM identity or a new EGL
-platform. The remaining implementation is a real socket-selected GBM buffer
-allocator, followed by an Xwayland discovery path which chooses that backend
-and its already working surfaceless EGL context. Neither component may claim
-promotion until allocation, import, synchronization, reuse, and disconnect
-tests pass without a compositor.
+platform. Mesa checkpoint `c10c2a5d19e` now adds the first real
+socket-selected GBM allocator. It is loaded only by an explicit
+`GBM_BACKEND=gfxstream`, requires an app-local Unix `SOCK_SEQPACKET` peer, and
+compares the server credential with the Android kernel UID retained in
+`/proc/self/status`. The procfs comparison is required because PRoot
+`--root-id` virtualizes `getuid()` but does not change Android's kernel app
+sandbox.
+
+On the Pixel 6a, ten consecutive standard `gbm_bo_create()` calls allocated
+AHardwareBuffer-backed linear `ABGR8888` images through gfxstream and exported
+the same authoritative layout each time:
+
+```text
+GBM_BACKEND=gfxstream
+GBM_BO=256x193 fourcc=0x34324241 planes=1 stride=1024 offset=0 modifier=0 size=221184
+```
+
+This clears GBM device creation, allocation, DMA-BUF export, plane metadata,
+same-app transport validation, and repeated teardown. It is not yet a complete
+desktop allocator: BO import, CPU mapping, GBM surfaces, explicit release
+fences, resize, and disconnect recovery still fail closed or remain untested.
+The next implementation is an Xwayland discovery path which explicitly chooses
+this backend and the already working surfaceless EGL context. It may not claim
+promotion until those missing allocator and lifecycle gates pass without a
+desktop compositor.
 
 Nested X server ownership is also part of the standard session contract. PRoot
 launches now bind both `/tmp/.X11-unix` and the matching `/tmp/.X0-lock` into

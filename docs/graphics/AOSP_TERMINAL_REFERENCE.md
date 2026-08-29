@@ -94,14 +94,16 @@ test; the existing gfxstream protocol and virtual-feature warnings remain
 visible promotion blockers rather than launcher workarounds.
 
 The first PRoot replacement for AOSP's guest render node is now proven at the
-loader and image-import boundaries. Mesa GBM accepts a Unix socket only when an
-external backend is explicitly selected; the default path still rejects the
-same descriptor. In the Pixel 6a uDroid app domain, an independent gfxstream
-Vulkan producer then exported an AHardwareBuffer-backed DMA-BUF which a
+loader, allocator and image-import boundaries. Mesa GBM accepts a Unix socket
+only when an external backend is explicitly selected; the default path still
+rejects the same descriptor. In the Pixel 6a uDroid app domain, an independent
+gfxstream Vulkan producer exported an AHardwareBuffer-backed DMA-BUF which a
 surfaceless Zink/EGL consumer imported with explicit stride and modifier
 metadata. Ten consecutive runs verified all 49,408 pixels with content hash
-`3bf16538da7f5d83`. This qualifies the transport and EGL import path, not yet a
-complete GBM allocator or Xwayland device-discovery path.
+`3bf16538da7f5d83`. A separate standard GBM probe then created and exported ten
+linear `256x193` BOs with stable 1024-byte stride and 221,184-byte allocation
+size. This qualifies the first create/export allocator path, not BO import,
+mapping, surfaces, release synchronization, or Xwayland device discovery.
 
 ## Checkpoints
 
