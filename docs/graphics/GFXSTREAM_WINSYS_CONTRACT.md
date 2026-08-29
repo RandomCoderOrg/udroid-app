@@ -29,10 +29,11 @@ Protocol-v2 development uses reproducible source checkpoints instead of that
 dirty worktree:
 
 - uDroid presenter `e4271e2`;
-- Kumquat lifecycle, trace and DMA-BUF import endpoint `9194909`;
-- gfxstream imported-resource source `36967251d`;
-- Mesa guest resource-import transport `234edeb74d`;
-- packaged host runtime `8-9194909-36967251d`.
+- Kumquat shared-resource identity and disconnect cleanup `85eb290`;
+- gfxstream Android external-blob support `540f04125`;
+- Mesa dedicated DMA-BUF import transport `271e35c5d2f`;
+- packaged host runtime `9-85eb290-540f04125`;
+- packaged guest runtime `9-109e79ea1bc`.
 
 This pair is a test candidate, not a promoted desktop runtime. The internal
 producer and the first external gfxstream swapchain passed the v2 lifecycle;
@@ -233,18 +234,41 @@ with the guest runtime or split the direct presenter ICD from X11 WSI so the
 headless contract probe does not inherit unrelated X dependencies.
 
 The guest import transport is now rebuilt from the clean Mesa checkpoint
-`234edeb74d` and packaged as guest runtime `8-234edeb74d`. Imported images no
+`109e79ea1bc` and packaged as guest runtime `9-109e79ea1bc`. Imported images no
 longer infer a tightly packed stride after their Vulkan `pNext` chain is gone:
 explicit modifier plane layouts are retained at image creation, linear images
-query their actual subresource layout, and opaque layouts fail closed. This
-runtime is paired with host runtime `8-9194909-36967251d`, whose typed protocol
-endpoint validates the DMA-BUF layout, imports it through Rutabaga, attaches it
-to the requesting gfxstream context and returns a cloned handle to the guest.
-The pair still requires a cross-process export/import test before it replaces
-the guest used in the measured presenter results above.
+query their actual subresource layout, opaque layouts fail closed, and a
+dedicated image relationship is preserved for both DMA-BUF export and import.
+This runtime is paired with host runtime `9-85eb290-540f04125`. Android host
+builds now enable gfxstream's external synchronization and Vulkan blob color
+buffer paths, so guest exports are real AHardwareBuffer-backed DMA-BUFs instead
+of shared-memory descriptors mislabeled as DMA-BUFs.
 
-This clears the normal, multi-resource and Surface-replacement portions of the
-external gate. Malformed/stale packet injection remains before promotion. The
-next gate is a two-process Vulkan DMA-BUF transfer with a deterministic content
-hash, followed by an ordinary Vulkan WSI client and Zink. Plasma is still
+Kumquat keys exported DMA-BUFs by their kernel `(device, inode)` identity.
+Importing that descriptor from another gfxstream connection attaches the
+existing Rutabaga resource to the new context instead of asking the proprietary
+driver to construct a second image from the same allocation. The final context
+detach retires the identity. Socket loss also destroys every context owned by
+that connection and releases its attachments.
+
+### Cross-process measured checkpoint
+
+On the same Pixel 6a, an independent Vulkan producer and consumer passed the
+following resource test with the packaged runtime sources above:
+
+| Probe | Runs | Verified pixels per run | Content hash | Result |
+| --- | ---: | ---: | --- | --- |
+| AHB-backed DMA-BUF export, fence transfer, import and readback | 20 | 49,408 / 49,408 | `3bf16538da7f5d83` | pass |
+| consumer `SIGKILL` after import, followed by a clean run | 1 | 49,408 / 49,408 after recovery | `3bf16538da7f5d83` | pass |
+
+The crash probe released the orphaned context and shared resource without
+restarting Kumquat. A subsequent producer/consumer pair completed normally,
+which clears the cross-process identity, synchronization, deterministic content
+and disconnect-cleanup gate. The qualification source is
+`udroid_kumquat_dmabuf_probe.cpp` at Mesa checkpoint `109e79ea1bc`.
+
+This clears the normal, multi-resource, Surface-replacement and two-process
+DMA-BUF portions of the external gate. Malformed/stale packet injection remains
+before promotion. The next gate is an ordinary Vulkan WSI client and Zink,
+followed by Weston/Xwayland as the first compositor boundary. Plasma is still
 intentionally out of scope.
