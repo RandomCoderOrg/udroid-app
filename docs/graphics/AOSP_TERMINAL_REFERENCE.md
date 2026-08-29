@@ -18,6 +18,8 @@ Primary references:
 - [crosvm virtio-gpu resource manager](https://android.googlesource.com/platform/external/crosvm/+/refs/heads/main/devices/src/virtio/gpu/virtio_gpu.rs)
 - [crosvm direct-surface refactor](https://android.googlesource.com/platform/external/crosvm/+/2eb9276383416d3b6e57fc8030d43d1e18ab4145%5E%21/)
 - [AOSP custom VM graphics notes](https://android.googlesource.com/platform/packages/modules/Virtualization/+/refs/heads/main/docs/custom_vm.md)
+- [gfxstream Linux guest WSI implementation](https://android.googlesource.com/platform/hardware/google/gfxstream/+/c4444b82e39741b291498f498d33a58598345bfa)
+- [gfxstream X11 resource regression fix](https://android.googlesource.com/platform/hardware/google/gfxstream/+/4404b3242e059ff72c70228b1aded874ca3c3275)
 
 ## Contracts to adopt
 
@@ -61,6 +63,23 @@ import the resulting DMA-BUF into the Android display backend through the
 standard guest DRM/GBM stack. `gfxstream-composer` is not a userspace substitute
 for that missing render node in PRoot.
 
+Google's Linux WSI implementation is also the relevant guest-side precedent.
+Commit `c4444b82e` uses Mesa's common Vulkan X11 and Wayland WSI entry points;
+Zink supplies OpenGL rather than a separate gfxstream GL winsys. Commit
+`4404b3242` later repaired X11 resource classification and pending blob resource
+identity. The uDroid fork already contains the equivalent fixes, so future
+failures must be compared against those contracts before adding another private
+allocation path.
+
+The topology boundary is important. AOSP gives its VM a kernel virtio-gpu DRM
+device and hands the compositor's output directly to an Android `Surface`.
+uDroid replaces the guest kernel boundary with a same-UID Kumquat socket, and
+its final AHardwareBuffer WSI must terminate at embedded Lorie. Sending Lorie's
+private AHardwareBuffer socket modifier to an ordinary nested Xwayland server
+is invalid: that server does not implement Lorie's handle-receive handshake.
+Nested Xwayland may remain a client of a future Android-native Wayland display
+backend, but it is not the final Android presenter.
+
 uDroid should continue checking these AOSP files before changing its transport
 or presentation contracts. New reusable work is most likely to appear in
 Rutabaga resource export, Android buffer ownership, synchronization, and
@@ -93,6 +112,23 @@ measured Present copy. An opt-in desktop session is now the next system-level
 test; the existing gfxstream protocol and virtual-feature warnings remain
 visible promotion blockers rather than launcher workarounds.
 
+The direct boundary was revalidated on 2026-08-30 after the nested-Xwayland
+experiment. Stock Debian `glxinfo -B` reported direct, accelerated Zink on
+`Virtio-GPU GFXStream (Mali-G78)`. A bounded Vulkan XCB WSI run rendered the
+LunarG cube correctly; Lorie measured 54.0 then 59.6 FPS and offloaded all
+567 sampled Present copies to the GPU. Equivalent launches passed both attached
+and detached from the Display page, including the real app supervisor and its
+`untrusted_app` SELinux domain.
+
+The earlier app-managed failure was test contamination, not a lifecycle or
+winsys regression. A stale experiment had installed `/usr/local/bin/vkcube` as
+a Python GLX texture-from-pixmap probe. The synthetic desktop entry used the
+bare name `vkcube`, and the normal `/usr/local/bin`-first `PATH` selected that
+probe instead of `/usr/bin/vkcube`. Removing the stale wrapper restored the
+unmodified supervised launch and its Vulkan cube. Future executable probes must
+record `command -v`, the resolved path and a content hash before attributing a
+failure to graphics.
+
 The first PRoot replacement for AOSP's guest render node is now proven at the
 loader, allocator and image-import boundaries. Mesa GBM accepts a Unix socket
 only when an external backend is explicitly selected; the default path still
@@ -106,6 +142,17 @@ size. This qualifies the first create/export allocator path, not BO import,
 mapping, surfaces, release synchronization, or Xwayland device discovery.
 
 ## Checkpoints
+
+### 0. Upstream reference check
+
+- Check AOSP Terminal's VM GPU configuration and `DisplayProvider` before
+  changing host, lifecycle, input, or presentation contracts.
+- Check current gfxstream Linux WSI, resource export and Rutabaga changes before
+  creating a uDroid-only protocol.
+- Record the compared AOSP revision and the uDroid equivalent in each graphics
+  checkpoint.
+- Separate reusable userspace behavior from VM-only virtio-gpu and privileged
+  display-service APIs.
 
 ### 1. Raw DMA-BUF correctness
 

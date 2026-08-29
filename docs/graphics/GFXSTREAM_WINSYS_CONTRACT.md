@@ -294,13 +294,14 @@ metadata. The independently built DMA-BUF producer/consumer probe also passed
 20 consecutive runs after the WSI change, each matching 49,408 of 49,408
 pixels with content hash `3bf16538da7f5d83`.
 
-The Xwayland failure identifies the next broad contract rather than an
-application workaround. Weston reports that it cannot query an EGL rendering
-device or initialize an allocator. Xwayland consequently disables GLAMOR, and
-Zink rejects presentation because DRI3 is unavailable. The next engineering
-target is therefore a truthful rootless render-device plus GBM/allocator
-boundary usable by Weston and Xwayland. Plasma and per-desktop tuning remain
-out of scope until that gate passes.
+The Xwayland failure originally appeared to identify a missing render-device
+and allocator contract. Later source comparison corrected that interpretation.
+Google's Linux guest path uses Mesa's common Vulkan X11/Wayland WSI, and its
+compositor terminates at the Android display backend. uDroid's AHardwareBuffer
+X11 WSI similarly terminates at embedded Lorie. An ordinary nested Xwayland
+server cannot receive Lorie's private AHardwareBuffer socket modifier, so a
+`VK_ERROR_SURFACE_LOST_KHR` from that topology is expected and is not evidence
+that the direct gfxstream WSI is broken.
 
 The first two sub-gates of that boundary now pass on the Pixel 6a. Mesa
 checkpoint `f064d8fb23b` keeps normal GBM device validation unchanged while
@@ -334,10 +335,27 @@ This clears GBM device creation, allocation, DMA-BUF export, plane metadata,
 same-app transport validation, and repeated teardown. It is not yet a complete
 desktop allocator: BO import, CPU mapping, GBM surfaces, explicit release
 fences, resize, and disconnect recovery still fail closed or remain untested.
-The next implementation is an Xwayland discovery path which explicitly chooses
-this backend and the already working surfaceless EGL context. It may not claim
-promotion until those missing allocator and lifecycle gates pass without a
-desktop compositor.
+Those contracts remain useful for compositor internals, but the next display
+gate is not another raw DRI3 path. First qualify direct Mesa WSI to Lorie across
+surface detach, reattach, resize and host disconnect. A future Wayland route
+must provide an Android-native final display backend; nested Xwayland can then
+serve applications behind that compositor rather than pretending to be the
+Android buffer receiver.
+
+The direct route was revalidated on 2026-08-30 with the packaged host runtime
+`9-85eb290-540f04125` and guest runtime `10-47eeedc6cc9`. Debian `glxinfo -B`
+reported accelerated Zink on the virtual Mali-G78, and a bounded `vkcube --wsi
+xcb` run rendered correctly. Lorie sampled 270/270 then 297/297 GPU-offloaded
+Present copies at 54.0 and 59.6 FPS. The real app-supervised launch also passes
+in the `untrusted_app` domain, starts while the Display page is detached and
+survives later surface attachment.
+
+The prior status-1 result was caused by a stale `/usr/local/bin/vkcube` test
+wrapper which shadowed Debian's `/usr/bin/vkcube` and launched an unrelated
+Python GLX probe. The host-side `application:'python3'` trace was the decisive
+signal. The rootfs was cleaned and the original bare-name desktop command was
+retested successfully. Qualification scripts must therefore resolve and hash
+their guest executable before comparing lifecycle or winsys results.
 
 Nested X server ownership is also part of the standard session contract. PRoot
 launches now bind both `/tmp/.X11-unix` and the matching `/tmp/.X0-lock` into
