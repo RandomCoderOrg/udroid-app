@@ -146,3 +146,36 @@ A short pacing audit recorded frame 1 at `11:36:14.502` and frame 409 at
 display. Use `tools/graphics/run_winsys_contract_probe.sh` for subsequent
 `steady`, `cycle`, `reattach`, and `resize` captures so timing and lifecycle
 results come from the same log.
+
+## External producer gate
+
+The existing private AHardwareBuffer protocol version 1 is not promotable to a
+desktop winsys. Its audit found four structural gaps:
+
+1. packets identify a resource and generation but not a frame, so an acquire or
+   release fence cannot be attributed to one exact submission;
+2. the Android presenter retains only one external EGLImage, while a Vulkan
+   swapchain and a desktop compositor keep multiple resources live;
+3. Kumquat retains registrations until process exit and has no explicit retire
+   message;
+4. Android Surface detach destroys the current import without telling Kumquat,
+   which continues to treat that resource as registered.
+
+Protocol version 2 must therefore be a coordinated host/app change, not a
+compatibility shim. It must add a positive monotonic frame id to every
+frame-bearing packet and explicit `reuse_ready` and `retire` messages. The
+Android side must own a registry keyed by `(resource, generation)` and retain
+each imported AHardwareBuffer independently of the current Surface. Surface
+loss pauses presentation; it does not silently retire producer resources.
+
+The external gate passes only when a merged monotonic-clock trace proves all of
+the following:
+
+- at least three resources remain registered and rotate for 1,000 frames;
+- every acquire and release carries the same frame id end to end;
+- no resource is reused until its release is acknowledged;
+- explicit retire removes exactly one generation;
+- Surface detach/reattach preserves the registry and resumes without a fresh
+  registration;
+- stale frame, generation, reuse, and retire packets are rejected by both
+  endpoints.
