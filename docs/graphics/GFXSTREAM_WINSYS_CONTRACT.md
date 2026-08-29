@@ -33,12 +33,13 @@ dirty worktree:
 - gfxstream Android external-blob support `540f04125`;
 - Mesa dedicated DMA-BUF import transport `271e35c5d2f`;
 - packaged host runtime `9-85eb290-540f04125`;
-- packaged guest runtime `9-109e79ea1bc`.
+- Mesa AHardwareBuffer swapchain contract `47eeedc6cc9`;
+- packaged guest runtime `10-47eeedc6cc9`.
 
 This pair is a test candidate, not a promoted desktop runtime. The internal
-producer and the first external gfxstream swapchain passed the v2 lifecycle;
-the independently timestamped producer/presenter merge still has to clear the
-gate below.
+producer, cross-process resource sharing, standalone Vulkan, standalone Zink,
+and nested Weston gates pass on the Pixel 6a. Xwayland remains blocked at the
+standard render-device and allocator boundary described below.
 
 ## Production reference
 
@@ -233,14 +234,18 @@ the current guest ICD could load. Shipping must either bundle those libraries
 with the guest runtime or split the direct presenter ICD from X11 WSI so the
 headless contract probe does not inherit unrelated X dependencies.
 
-The guest import transport is now rebuilt from the clean Mesa checkpoint
-`109e79ea1bc` and packaged as guest runtime `9-109e79ea1bc`. Imported images no
+The guest import transport was rebuilt from the clean Mesa checkpoint
+`109e79ea1bc`. Imported images no
 longer infer a tightly packed stride after their Vulkan `pNext` chain is gone:
 explicit modifier plane layouts are retained at image creation, linear images
 query their actual subresource layout, opaque layouts fail closed, and a
 dedicated image relationship is preserved for both DMA-BUF export and import.
-This runtime is paired with host runtime `9-85eb290-540f04125`. Android host
-builds now enable gfxstream's external synchronization and Vulkan blob color
+The subsequent `47eeedc6cc9` checkpoint restores the Android WSI allocation
+contract on top of that import transport: socket-presentable swapchain images
+use linear DRM modifier metadata, native image memory and
+AHardwareBuffer-backed allocation. It is packaged as guest runtime
+`10-47eeedc6cc9` and paired with host runtime `9-85eb290-540f04125`. Android
+host builds enable gfxstream's external synchronization and Vulkan blob color
 buffer paths, so guest exports are real AHardwareBuffer-backed DMA-BUFs instead
 of shared-memory descriptors mislabeled as DMA-BUFs.
 
@@ -269,6 +274,36 @@ and disconnect-cleanup gate. The qualification source is
 
 This clears the normal, multi-resource, Surface-replacement and two-process
 DMA-BUF portions of the external gate. Malformed/stale packet injection remains
-before promotion. The next gate is an ordinary Vulkan WSI client and Zink,
-followed by Weston/Xwayland as the first compositor boundary. Plasma is still
-intentionally out of scope.
+before promotion.
+
+### WSI and compositor measured checkpoint
+
+On the same Pixel 6a, guest runtime `10-47eeedc6cc9` passed the next gates in
+their required order:
+
+| Gate | Renderer or device | Outer Present result | Result |
+| --- | --- | --- | --- |
+| Vulkan XCB WSI (`vkcube`) | `Virtio-GPU GFXStream (Mali-G78)` | 60.0 FPS; 299-300 of 300 copies GPU-offloaded | pass |
+| Zink GLX (`glxgears`) | `zink Vulkan 1.4 (Virtio-GPU GFXStream (Mali-G78))` | 60 FPS; all sampled copies GPU-offloaded | pass |
+| Weston nested X11 | GL renderer on the same Zink device | 45-52 FPS during shell activity; sampled copies GPU-offloaded | pass |
+| Xwayland GLX client | no GLAMOR/DRI3 device | no accelerated presentation contract | blocked |
+
+The first three gates rendered without corruption. The Vulkan WSI allocated
+three AHardwareBuffer-native swapchain images with explicit linear modifier
+metadata. The independently built DMA-BUF producer/consumer probe also passed
+20 consecutive runs after the WSI change, each matching 49,408 of 49,408
+pixels with content hash `3bf16538da7f5d83`.
+
+The Xwayland failure identifies the next broad contract rather than an
+application workaround. Weston reports that it cannot query an EGL rendering
+device or initialize an allocator. Xwayland consequently disables GLAMOR, and
+Zink rejects presentation because DRI3 is unavailable. The next engineering
+target is therefore a truthful rootless render-device plus GBM/allocator
+boundary usable by Weston and Xwayland. Plasma and per-desktop tuning remain
+out of scope until that gate passes.
+
+Nested X server ownership is also part of the standard session contract. PRoot
+launches now bind both `/tmp/.X11-unix` and the matching `/tmp/.X0-lock` into
+the guest. With only the socket visible, Xwayland incorrectly claimed `:0` and
+unlinked Lorie's live X0 socket. With both visible, Lorie retains `:0`, Xwayland
+selects `:1`, and the outer display remains reachable after Weston exits.
