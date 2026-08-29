@@ -23,6 +23,8 @@ class AhbSurfacePresenterView
         context: Context,
         attrs: AttributeSet? = null,
         externalProducer: Boolean = false,
+        contractTrace: Boolean = false,
+        resourceCycleFrames: Int = 0,
     ) : SurfaceView(context, attrs), SurfaceHolder.Callback, AutoCloseable {
         private val transportSocket =
             File(context.noBackupFilesDir, "graphics/ahb-presenter.sock").also {
@@ -33,7 +35,12 @@ class AhbSurfacePresenterView
                 }
             }
         private var nativeHandle: Long =
-            nativeCreate(transportSocket.absolutePath, externalProducer)
+            nativeCreate(
+                transportSocket.absolutePath,
+                externalProducer,
+                contractTrace,
+                resourceCycleFrames.coerceAtLeast(0),
+            )
         private var frameCallbackPosted = false
         private val frameCallback =
             object : Choreographer.FrameCallback {
@@ -112,6 +119,8 @@ class AhbSurfacePresenterView
         private external fun nativeCreate(
             socketPath: String,
             externalProducer: Boolean,
+            contractTrace: Boolean,
+            resourceCycleFrames: Int,
         ): Long
 
         private external fun nativeSetSurface(

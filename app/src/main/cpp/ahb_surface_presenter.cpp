@@ -33,6 +33,7 @@
 namespace {
 
 constexpr char kLogTag[] = "uDroid-AHB";
+constexpr char kWinsysTraceTag[] = "uDroid-Winsys";
 static_assert(sizeof(UdroidAhbTransportPacket) == 32);
 
 enum class ProducerMode {
@@ -41,6 +42,8 @@ enum class ProducerMode {
 };
 
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
+#define TRACE_WINSYS(...) \
+    __android_log_print(ANDROID_LOG_INFO, kWinsysTraceTag, "UDROID_WINSYS " __VA_ARGS__)
 
 bool sendPacket(int socket_fd, const UdroidAhbTransportPacket &packet) {
     ssize_t sent;
@@ -250,9 +253,12 @@ const GLfloat kFullscreenQuad[] = {
 
 class Presenter {
 public:
-    Presenter(std::string transport_path, ProducerMode producer_mode)
+    Presenter(std::string transport_path, ProducerMode producer_mode,
+              bool contract_trace, uint32_t resource_cycle_frames)
         : transport_path_(std::move(transport_path)),
           producer_mode_(producer_mode),
+          contract_trace_(contract_trace),
+          resource_cycle_frames_(resource_cycle_frames),
           worker_(&Presenter::run, this) {}
 
     ~Presenter() {
@@ -820,7 +826,50 @@ private:
             setStatus("AHardwareBuffer identity changed in transport");
             return false;
         }
+        traceRegistration(producer_description);
         return true;
+    }
+
+    void traceRegistration(const AHardwareBuffer_Desc &description) {
+        if (!contract_trace_) return;
+        uint32_t surface_generation;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            surface_generation = surface_generation_;
+        }
+        TRACE_WINSYS(
+                "{\"schema\":1,\"event\":\"register\",\"resource\":%llu,"
+                "\"generation\":%llu,\"surface_generation\":%u,\"width\":%u,"
+                "\"height\":%u,\"layers\":%u,\"format\":%u,\"usage\":%llu,"
+                "\"stride\":%u}",
+                static_cast<unsigned long long>(active_resource_id_.load()),
+                static_cast<unsigned long long>(buffer_generation_.load()),
+                surface_generation, description.width, description.height,
+                description.layers, description.format,
+                static_cast<unsigned long long>(description.usage),
+                description.stride);
+        contract_resource_registered_ = true;
+    }
+
+    void traceFrameEvent(const char *event, uint64_t frame) const {
+        if (!contract_trace_) return;
+        TRACE_WINSYS(
+                "{\"schema\":1,\"event\":\"%s\",\"resource\":%llu,"
+                "\"generation\":%llu,\"frame\":%llu}",
+                event,
+                static_cast<unsigned long long>(active_resource_id_.load()),
+                static_cast<unsigned long long>(buffer_generation_.load()),
+                static_cast<unsigned long long>(frame));
+    }
+
+    void traceRetirement() {
+        if (!contract_trace_ || !contract_resource_registered_) return;
+        TRACE_WINSYS(
+                "{\"schema\":1,\"event\":\"retire\",\"resource\":%llu,"
+                "\"generation\":%llu}",
+                static_cast<unsigned long long>(active_resource_id_.load()),
+                static_cast<unsigned long long>(buffer_generation_.load()));
+        contract_resource_registered_ = false;
     }
 
     bool transferFence(uint32_t kind, int sender_socket,
@@ -1075,7 +1124,12 @@ private:
                 setStatus("producer failed to wait for release fence");
                 return false;
             }
+            traceFrameEvent("reuse_ready", contract_active_frame_);
+            contract_active_frame_ = 0;
         }
+
+        contract_active_frame_ = ++contract_next_frame_;
+        traceFrameEvent("produce_begin", contract_active_frame_);
 
         glBindFramebuffer(GL_FRAMEBUFFER, producer_fbo_);
         glViewport(0, 0, frame_width_, frame_height_);
@@ -1089,6 +1143,7 @@ private:
             setStatus("producer failed to export acquire fence");
             return false;
         }
+        traceFrameEvent("queue", contract_active_frame_);
 
         int presenter_acquire_fence = -1;
         if (!transferFence(UDROID_AHB_ACQUIRE_FENCE,
@@ -1108,6 +1163,7 @@ private:
             setStatus("presenter failed to wait for acquire fence");
             return false;
         }
+        traceFrameEvent("present_begin", contract_active_frame_);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, surface_width_, surface_height_);
         glUseProgram(present_program_);
@@ -1128,6 +1184,7 @@ private:
             setStatus("AHB transport failed to return release fence");
             return false;
         }
+        traceFrameEvent("release_sent", contract_active_frame_);
 
         return swapAndRecordFrame();
     }
@@ -1146,8 +1203,12 @@ private:
             if (!waitNativeFenceOnCpu(release_fence)) {
                 ++fence_failures_;
                 LOGE("release fence did not signal before AHardwareBuffer teardown");
+            } else {
+                traceFrameEvent("reuse_ready", contract_active_frame_);
+                contract_active_frame_ = 0;
             }
         }
+        traceRetirement();
         if (producer_context_ != EGL_NO_CONTEXT && makeProducerCurrent()) {
             if (producer_fbo_ != 0) {
                 glDeleteFramebuffers(1, &producer_fbo_);
@@ -1298,6 +1359,10 @@ private:
             if (!drawProbeFrame(seconds)) {
                 continue;
             }
+            if (resource_cycle_frames_ > 0 &&
+                contract_next_frame_ % resource_cycle_frames_ == 0) {
+                recreateFrameBuffer(active_window);
+            }
         }
 
         destroyEgl();
@@ -1311,6 +1376,8 @@ private:
 
     const std::string transport_path_;
     const ProducerMode producer_mode_;
+    const bool contract_trace_;
+    const uint32_t resource_cycle_frames_;
     mutable std::mutex mutex_;
     std::condition_variable condition_;
     std::thread worker_;
@@ -1341,6 +1408,9 @@ private:
     uint64_t next_resource_id_ = 0;
     std::atomic<uint64_t> active_resource_id_{0};
     std::atomic<uint64_t> buffer_generation_{0};
+    uint64_t contract_next_frame_ = 0;
+    uint64_t contract_active_frame_ = 0;
+    bool contract_resource_registered_ = false;
 
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLConfig config_ = nullptr;
@@ -1378,7 +1448,8 @@ Presenter *fromHandle(jlong handle) {
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeCreate(
-        JNIEnv *env, jobject, jstring socket_path, jboolean external_producer) {
+        JNIEnv *env, jobject, jstring socket_path, jboolean external_producer,
+        jboolean contract_trace, jint resource_cycle_frames) {
     if (socket_path == nullptr) return 0;
     const char *path = env->GetStringUTFChars(socket_path, nullptr);
     if (path == nullptr) return 0;
@@ -1389,7 +1460,11 @@ Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeCreate(
                     std::move(transport_path),
                     external_producer == JNI_TRUE
                             ? ProducerMode::kExternalSupervisor
-                            : ProducerMode::kInternalProbe)));
+                            : ProducerMode::kInternalProbe,
+                    contract_trace == JNI_TRUE,
+                    resource_cycle_frames > 0
+                            ? static_cast<uint32_t>(resource_cycle_frames)
+                            : 0)));
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -44,10 +44,14 @@ class GfxstreamPresenterProbeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val externalProducer = intent.getBooleanExtra(EXTRA_EXTERNAL_PRODUCER, false)
+        val contractTrace = intent.getBooleanExtra(EXTRA_CONTRACT_TRACE, false)
+        val resourceCycleFrames = intent.getIntExtra(EXTRA_RESOURCE_CYCLE_FRAMES, 0)
         presenter =
             AhbSurfacePresenterView(
                 this,
                 externalProducer = externalProducer,
+                contractTrace = contractTrace,
+                resourceCycleFrames = resourceCycleFrames,
             )
         if (externalProducer) {
             hostController =
@@ -117,6 +121,8 @@ class GfxstreamPresenterProbeActivity : Activity() {
 
     companion object {
         const val EXTRA_EXTERNAL_PRODUCER = "externalProducer"
+        const val EXTRA_CONTRACT_TRACE = "contractTrace"
+        const val EXTRA_RESOURCE_CYCLE_FRAMES = "resourceCycleFrames"
         const val EXTRA_X11_SERVER = "x11Server"
         const val EXTRA_ROOTFS_NAME = "rootfsName"
         private const val PROBE_BOOT_ID = "gfxstream-x11-probe"
