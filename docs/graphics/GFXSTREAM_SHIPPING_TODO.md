@@ -15,9 +15,10 @@ fallback until every required gate passes on the supported device matrix.
 
 The compositor allocator boundary is now proven. Weston can keep its X11 EGL
 renderer on Zink while using the socket-selected gfxstream GBM device as a
-separate allocator. The current blocker is truthful linux-dmabuf feedback:
-without a DRM render-device identity Weston advertises v3, while unchanged KWin
-requires v4 feedback to choose a compatible render device.
+separate allocator. The next gate is a non-DRM render-device contract: KWin
+must select that same gfxstream GBM transport and the Zink EGLDevice, while
+linux-dmabuf feedback advertises only resources created by this AHardwareBuffer
+allocator. A fake DRM node remains explicitly out of scope.
 
 ## 1. Complete the gfxstream GBM contract
 
@@ -52,6 +53,14 @@ reconnect coverage remain open.
 - [ ] Verify Weston publishes linux-dmabuf v4 and explicit synchronization.
 - [ ] Verify the feedback `main_device` resolves to the same accelerated
   renderer in an unchanged client compositor; protocol v4 alone is not enough.
+- [x] Test whether the Android app domain can use `/dev/udmabuf` as KWin's
+  existing non-DRM allocation identity.
+- [x] Test allocation and gfxstream import from the accessible system DMA heap.
+- [ ] Define a truthful non-DRM `main_device` mapping for the external GBM
+  allocation domain.
+- [ ] Add a generic external-GBM `RenderDevice` path to the KWin fork.
+- [ ] Expose the underlying Vulkan physical-device type through EGLDevice so
+  Zink over gfxstream is classified as a GPU rather than as software.
 
 Pixel checkpoint (2026-08-30): the forked Weston 14.0.1 X11 backend rendered
 with `zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78))` and independently
@@ -64,11 +73,27 @@ than being simulated with a fake DRM device.
 KWin reference checkpoint (master `6cf2d3f890bb`, 2026-08-30): its Wayland
 backend rejects linux-dmabuf older than v4, then resolves feedback
 `main_device` through `GpuManager::compatibleRenderDevice()`. Real DRM node
-identities map to compatible hardware render devices. `/dev/udmabuf` is also a
-real, accessible identity on the Pixel, but KWin intentionally maps it to a
-software EGL render device. Advertising that identity would make v4 available
-while returning Plasma composition to software, so it is not an acceleration
-solution. A socket or arbitrary `dev_t` has no unchanged-KWin device mapping.
+identities map to hardware render devices. Its only upstream non-DRM path opens
+`/dev/udmabuf` with `O_RDWR` and deliberately pairs that identity with a
+software EGLDevice and `UDmabufAllocator`.
+
+Pixel import checkpoint (2026-08-30): the uDroid app domain cannot open either
+`/dev/udmabuf` or `/dev/dri`, despite permissive Unix mode bits, because Android
+SELinux denies both. It can allocate `/dev/dma_heap/system`, but importing a
+known linear RGBA allocation into the gfxstream EGLDevice reaches Kumquat and
+fails with `MagmaGpuError(Unsupported)`. This eliminates both uDMABUF and an
+arbitrary raw DMA-heap allocator. The only proven cross-client buffers are
+gfxstream-created, AHardwareBuffer-backed GBM BOs whose DMA-BUF identity is
+reattached by the host resource table.
+
+EGLDevice checkpoint (Mesa main `80f5c9174b09`, 2026-08-29):
+`EGL_EXT_device_type` is implemented, but Mesa's singleton
+`EGL_MESA_device_software` device reports `EGL_DEVICE_TYPE_CPU_EXT`. The current
+Zink platform-device route reuses that EGLDevice even though its renderer is
+`Virtio-GPU GFXStream (Mali-G78)`. KWin therefore still classifies the display
+as software. The production fix must expose a distinct, truthful Vulkan-backed
+EGLDevice (or equivalent generic compositor contract), not override a renderer
+string.
 
 ## 3. Qualify native Wayland clients
 
@@ -127,3 +152,10 @@ KWin. Record the compared upstream commits in the winsys contract.
   at protocol v3.
 - KWin master (`6cf2d3f890bb`) requires feedback v4 and a `main_device` that its
   GPU manager can resolve. Its explicit `/dev/udmabuf` fallback is software.
+- wlroots master (`bd75ebfe96a4`) can select a non-DRM EGLDevice and consumes
+  `EGL_EXT_device_type`, but its non-DRM allocator still falls back to uDMABUF.
+- Mutter master (`e730d1e6fc00`) still constructs its GBM render device from a
+  DRM device-file fd and has no comparable non-DRM EGLDevice path.
+- AOSP TerminalApp avoids this identity gap by exposing a normal virtio-gpu
+  DRM device inside its VM; Kumquat proves gfxstream can run Linux Vulkan/Zink
+  without a VM but does not define a compositor `main_device` contract.
