@@ -19,17 +19,26 @@ a complete GBM device.
 
 ## 1. Complete the gfxstream GBM contract
 
-- [ ] Add a two-device probe that exports and imports one BO.
-- [ ] Implement `GBM_BO_IMPORT_FD`.
-- [ ] Implement `GBM_BO_IMPORT_FD_MODIFIER` with complete plane metadata.
-- [ ] Verify imported-BO lifetime after the exporting BO is destroyed.
-- [ ] Verify pixel content across allocation, export and import.
-- [ ] Implement CPU map, unmap and write where the allocation is mappable.
+- [x] Add a two-device probe that exports and imports one BO.
+- [x] Implement `GBM_BO_IMPORT_FD`.
+- [x] Implement `GBM_BO_IMPORT_FD_MODIFIER` with complete plane metadata.
+- [x] Verify imported-BO lifetime after the exporting BO is destroyed.
+- [x] Verify pixel content across allocation, export and import.
+- [x] Implement CPU map, unmap and write where the allocation is mappable.
 - [ ] Implement GBM surfaces, front-buffer lock and release.
 - [ ] Preserve acquire and release synchronization across ownership changes.
 - [ ] Reject unsupported formats, modifiers, malformed descriptors and stale
   resources without falling back silently.
 - [ ] Pass repeated teardown, client crash and host reconnect probes.
+
+Pixel checkpoint (2026-08-30): the Pixel two-device probe passed both FD import
+types, destroyed the exporting BO and GBM device, then verified the full
+256x193 ABGR8888 pattern through both surviving imports. CPU access uses
+`DMA_BUF_IOCTL_SYNC` around each mapping. The probe also exposed and verified a
+Kumquat bug where duplicate logical attachments to one resource/context were
+collapsed into a set; the host now reference-counts those attachments. Twenty
+fresh host/probe teardown cycles passed consecutively. Client-crash and host
+reconnect coverage remain open.
 
 ## 2. Expose the allocator to Weston
 
