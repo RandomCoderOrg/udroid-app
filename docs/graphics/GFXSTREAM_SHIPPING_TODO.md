@@ -13,9 +13,11 @@ fallback until every required gate passes on the supported device matrix.
 - [x] Nested Plasma reaches `kwin_wayland`, Xwayland and `plasmashell`.
 - [ ] Weston publishes `zwp_linux_dmabuf_v1` v4 or newer.
 
-The current blocker is the compositor allocator boundary. Weston can render
-through Zink, but it cannot allocate or import standard Wayland DMA-BUFs without
-a complete GBM device.
+The compositor allocator boundary is now proven. Weston can keep its X11 EGL
+renderer on Zink while using the socket-selected gfxstream GBM device as a
+separate allocator. The current blocker is truthful linux-dmabuf feedback:
+without a DRM render-device identity Weston advertises v3, while unchanged KWin
+requires v4 feedback to choose a compatible render device.
 
 ## 1. Complete the gfxstream GBM contract
 
@@ -42,12 +44,20 @@ reconnect coverage remain open.
 
 ## 2. Expose the allocator to Weston
 
-- [ ] Maintain the Weston change in a RandomCoderOrg fork.
-- [ ] Add a generic external-GBM allocator input independent of the EGL
+- [x] Maintain the Weston change in a RandomCoderOrg fork.
+- [x] Add a generic external-GBM allocator input independent of the EGL
   rendering platform.
-- [ ] Keep X11/Wayland EGL rendering separate from GBM allocation.
-- [ ] Do not fabricate a DRM node or label the Kumquat socket as DRM.
+- [x] Keep X11 EGL rendering separate from GBM allocation.
+- [x] Do not fabricate a DRM node or label the Kumquat socket as DRM.
 - [ ] Verify Weston publishes linux-dmabuf v4 and explicit synchronization.
+
+Pixel checkpoint (2026-08-30): the forked Weston 14.0.1 X11 backend rendered
+with `zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78))` and independently
+reported `Using external GBM allocator backend: gfxstream`. A registry
+micro-probe observed `zwp_linux_dmabuf_v1` v3 and
+`zwp_linux_explicit_synchronization_v1` v2. The allocator FD, GBM backend and
+explicit-sync contract pass; linux-dmabuf feedback v4 remains blocked rather
+than being simulated with a fake DRM device.
 
 ## 3. Qualify native Wayland clients
 
