@@ -50,6 +50,8 @@ reconnect coverage remain open.
 - [x] Keep X11 EGL rendering separate from GBM allocation.
 - [x] Do not fabricate a DRM node or label the Kumquat socket as DRM.
 - [ ] Verify Weston publishes linux-dmabuf v4 and explicit synchronization.
+- [ ] Verify the feedback `main_device` resolves to the same accelerated
+  renderer in an unchanged client compositor; protocol v4 alone is not enough.
 
 Pixel checkpoint (2026-08-30): the forked Weston 14.0.1 X11 backend rendered
 with `zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78))` and independently
@@ -58,6 +60,15 @@ micro-probe observed `zwp_linux_dmabuf_v1` v3 and
 `zwp_linux_explicit_synchronization_v1` v2. The allocator FD, GBM backend and
 explicit-sync contract pass; linux-dmabuf feedback v4 remains blocked rather
 than being simulated with a fake DRM device.
+
+KWin reference checkpoint (master `6cf2d3f890bb`, 2026-08-30): its Wayland
+backend rejects linux-dmabuf older than v4, then resolves feedback
+`main_device` through `GpuManager::compatibleRenderDevice()`. Real DRM node
+identities map to compatible hardware render devices. `/dev/udmabuf` is also a
+real, accessible identity on the Pixel, but KWin intentionally maps it to a
+software EGL render device. Advertising that identity would make v4 available
+while returning Plasma composition to software, so it is not an acceleration
+solution. A socket or arbitrary `dev_t` has no unchanged-KWin device mapping.
 
 ## 3. Qualify native Wayland clients
 
@@ -110,3 +121,9 @@ than being simulated with a fake DRM device.
 Before changing transport, allocation, synchronization or presentation, check
 current AOSP TerminalApp, Google gfxstream, crosvm/Rutabaga, Mesa, Weston and
 KWin. Record the compared upstream commits in the winsys contract.
+
+- Weston 14.0.1 (`61f2248d`) requires a renderer DRM path before constructing
+  default linux-dmabuf feedback; the external allocator alone correctly stays
+  at protocol v3.
+- KWin master (`6cf2d3f890bb`) requires feedback v4 and a `main_device` that its
+  GPU manager can resolve. Its explicit `/dev/udmabuf` fallback is software.
