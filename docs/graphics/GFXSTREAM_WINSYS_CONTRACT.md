@@ -342,6 +342,18 @@ must provide an Android-native final display backend; nested Xwayland can then
 serve applications behind that compositor rather than pretending to be the
 Android buffer receiver.
 
+The allocator-to-renderer boundary passed on 2026-08-30. A standard
+`gbm_bo_create()` allocation was exported and imported by an independent
+surfaceless EGLDevice/Zink context. Mesa checkpoint `ea05ebe7134` restores the
+non-zero memory requirement for supported external 32-bit images. Rutabaga
+checkpoint `c1fb067365e` reference-counts multiple guest objects that alias one
+resource/context. Five clean runs selected
+`Virtio-GPU GFXStream (Mali-G78)`, GPU-cleared the imported BO, verified all
+49,408 pixels, and released both aliases without a host protocol error. The
+host's `(device, inode)` lookup hit in every run, so Android's vendor Vulkan
+driver was not asked to re-import its AHardwareBuffer allocation as a raw
+DMA-BUF.
+
 The direct route was revalidated on 2026-08-30 with the packaged host runtime
 `9-85eb290-540f04125` and guest runtime `10-47eeedc6cc9`. Debian `glxinfo -B`
 reported accelerated Zink on the virtual Mali-G78, and a bounded `vkcube --wsi
@@ -393,13 +405,13 @@ that Weston can open and pass to `gbm_create_device()`. The same requirement is
 still present in current upstream Weston. Rendering through Zink is therefore
 not sufficient to publish the standard Wayland dmabuf protocol.
 
-This result narrows the next implementation gate. The socket-backed gfxstream
-GBM work must be completed and connected to a compositor allocator boundary;
-it must provide BO allocation and import, surfaces, authoritative plane
-metadata and explicit release synchronization. Once Weston publishes
-`zwp_linux_dmabuf_v1` v4 from that allocator, rerun the native Wayland client
-and Plasma unchanged. Do not add a Plasma renderer override or fabricate a DRM
-node to bypass this gate.
+This result narrows the next implementation gate. Socket-backed gfxstream GBM
+allocation, import and authoritative plane metadata now pass independently.
+The allocator must be connected to a truthful compositor render-device and
+linux-dmabuf feedback mapping, then gain surfaces and explicit release
+synchronization. Once Weston publishes `zwp_linux_dmabuf_v1` v4 from that
+allocator, rerun the native Wayland client and Plasma unchanged. Do not add a
+Plasma renderer override or fabricate a DRM node to bypass this gate.
 
 The relevant upstream allocator code is
 [Weston 14.0.2 `gl_renderer_allocator_create()`](https://gitlab.freedesktop.org/wayland/weston/-/blob/14.0.2/libweston/renderer-gl/gl-renderer.c).

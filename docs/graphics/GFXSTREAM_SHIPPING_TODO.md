@@ -10,6 +10,8 @@ fallback until every required gate passes on the supported device matrix.
 - [x] Zink GLX and Weston GL rendering identify the gfxstream Mali device.
 - [x] Basic socket-selected GBM allocation exports authoritative linear
   DMA-BUF metadata.
+- [x] A standard GBM BO imports into the independent gfxstream EGLDevice and
+  passes hardware-rendered pixel readback.
 - [x] Nested Plasma reaches `kwin_wayland`, Xwayland and `plasmashell`.
 - [ ] Weston publishes `zwp_linux_dmabuf_v1` v4 or newer.
 
@@ -27,6 +29,8 @@ allocator. A fake DRM node remains explicitly out of scope.
 - [x] Implement `GBM_BO_IMPORT_FD_MODIFIER` with complete plane metadata.
 - [x] Verify imported-BO lifetime after the exporting BO is destroyed.
 - [x] Verify pixel content across allocation, export and import.
+- [x] Pass GBM allocation -> EGLDevice/Zink render and readback without a raw
+  vendor Vulkan DMA-BUF re-import.
 - [x] Implement CPU map, unmap and write where the allocation is mappable.
 - [ ] Implement GBM surfaces, front-buffer lock and release.
 - [ ] Preserve acquire and release synchronization across ownership changes.
@@ -42,6 +46,16 @@ Kumquat bug where duplicate logical attachments to one resource/context were
 collapsed into a set; the host now reference-counts those attachments. Twenty
 fresh host/probe teardown cycles passed consecutively. Client-crash and host
 reconnect coverage remain open.
+
+The stricter GBM-to-EGLDevice probe initially exposed two missing contracts.
+Mesa returned a zero memory requirement for the imported external image, and
+Kumquat collapsed duplicate logical attachments to one resource/context into
+a set. Mesa checkpoint `ea05ebe7134` supplies a bounded packed size for the
+supported external 32-bit color images. Rutabaga checkpoint `c1fb067365e`
+reference-counts duplicate attachments. Five clean Pixel runs then selected
+`Virtio-GPU GFXStream (Mali-G78)`, imported the GBM BO by its existing host
+resource identity, GPU-cleared it through EGLDevice/Zink, verified every pixel,
+and released both aliases without a protocol error.
 
 ## 2. Expose the allocator to Weston
 
@@ -85,6 +99,14 @@ fails with `MagmaGpuError(Unsupported)`. This eliminates both uDMABUF and an
 arbitrary raw DMA-heap allocator. The only proven cross-client buffers are
 gfxstream-created, AHardwareBuffer-backed GBM BOs whose DMA-BUF identity is
 reattached by the host resource table.
+
+Pixel GBM-to-EGLDevice checkpoint (2026-08-30): the standard GBM allocation is
+now one of those proven buffers. The host observes the same DMA-BUF
+`(device, inode)` on import and attaches the existing gfxstream resource; it
+does not invoke the proprietary Mali driver's unsupported raw DMA-BUF import.
+This clears allocator-to-renderer buffer compatibility. The remaining KWin
+gate is truthful non-DRM device/feedback wiring and compositor lifecycle, not
+another allocation or format workaround.
 
 EGLDevice checkpoint (Mesa main `80f5c9174b09`, 2026-08-29):
 `EGL_EXT_device_type` is implemented, but Mesa's singleton
@@ -159,3 +181,7 @@ KWin. Record the compared upstream commits in the winsys contract.
 - AOSP TerminalApp avoids this identity gap by exposing a normal virtio-gpu
   DRM device inside its VM; Kumquat proves gfxstream can run Linux Vulkan/Zink
   without a VM but does not define a compositor `main_device` contract.
+- Linux DRM PRIME returns an existing GEM handle for duplicate DMA-BUF imports
+  and explicitly requires userspace to reference-count duplicated handles.
+  Kumquat's `(device, inode)` cache and per-context attachment counts mirror
+  that ownership rule without pretending its socket is a DRM node.
