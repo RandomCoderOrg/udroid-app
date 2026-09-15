@@ -58,7 +58,10 @@ internal object GfxstreamHostLaunch {
 }
 
 /** Owns one optional gfxstream host process for a selected runtime consumer. */
-class GfxstreamHostController(context: Context) : AutoCloseable {
+class GfxstreamHostController(
+    context: Context,
+    private val onUnexpectedExit: (GfxstreamHostSnapshot) -> Unit = {},
+) : AutoCloseable {
     private val appContext = context.applicationContext
     private val executor = Executors.newSingleThreadExecutor()
     private val process = AtomicReference<Process?>(null)
@@ -182,12 +185,13 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
         if (process.compareAndSet(launched, null)) {
             guestRuntime.set(null)
             gpuSocket.delete()
-            snapshot.set(
+            val failure =
                 GfxstreamHostSnapshot(
                     if (exitCode == 0) "stopped" else "failed",
                     "Kumquat exited with $exitCode · ${logFile.absolutePath}",
-                ),
-            )
+                )
+            snapshot.set(failure)
+            if (!closed.get()) onUnexpectedExit(failure)
         }
     }
 

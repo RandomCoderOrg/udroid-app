@@ -36,6 +36,7 @@ import org.randomcoder.udroid.audio.AudioConfigurationStore
 import org.randomcoder.udroid.audio.AudioServerController
 import org.randomcoder.udroid.audio.AudioSessionSnapshot
 import org.randomcoder.udroid.gfxstream.GfxstreamHostController
+import org.randomcoder.udroid.gfxstream.GfxstreamHostSnapshot
 import org.randomcoder.udroid.gfxstream.GfxstreamProotLaunchProfile
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
@@ -596,7 +597,11 @@ class RuntimeSupervisorService : Service() {
                         when (request.configuration.graphicsProfile) {
                             DesktopGraphicsProfile.STANDARD -> null
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
-                                val host = GfxstreamHostController(this)
+                                lateinit var host: GfxstreamHostController
+                                host =
+                                    GfxstreamHostController(this) { failure ->
+                                        handleGfxstreamHostExit(host, failure)
+                                    }
                                 check(ownedGfxstreamHost.compareAndSet(null, host)) {
                                     host.close()
                                     "Another gfxstream host is already active"
@@ -642,7 +647,7 @@ class RuntimeSupervisorService : Service() {
                                 error("Desktop launcher did not publish its host PID")
                             }
                     if (desktopLaunchToken.get() != launchToken) {
-                        runCatching { Os.kill(hostPid, OsConstants.SIGKILL) }
+                        runCatching { Os.kill(-hostPid, OsConstants.SIGKILL) }
                         pidFile.delete()
                         releaseGfxstreamHost(startingGfxstreamHost)
                         return@runCatching null
@@ -865,6 +870,45 @@ class RuntimeSupervisorService : Service() {
         ownedGfxstreamHost.getAndSet(null)?.close()
     }
 
+    private fun handleGfxstreamHostExit(
+        host: GfxstreamHostController,
+        failure: GfxstreamHostSnapshot,
+    ) {
+        app.journal.append(
+            component = "gfxstream",
+            severity = "error",
+            event = "host_process_lost",
+            message = failure.detail,
+            bootId = app.runtimeState.current().bootId,
+        )
+        mainHandler.post {
+            if (ownedGfxstreamHost.get() !== host) return@post
+            val desktop = ownedDesktop.get()
+            if (desktop?.gfxstreamHost === host && desktop.process.isAlive) {
+                terminateDesktopProcess(desktop, OsConstants.SIGTERM)
+                mainHandler.postDelayed(
+                    {
+                        if (ownedDesktop.get() === desktop && desktop.process.isAlive) {
+                            app.journal.append(
+                                component = "desktop",
+                                severity = "warning",
+                                event = "desktop_force_stop",
+                                message =
+                                    "${desktop.environment.name} did not exit after gfxstream host loss",
+                                bootId = app.runtimeState.current().bootId,
+                                fields = mapOf("rootfs" to desktop.rootfsName),
+                            )
+                            terminateDesktopProcess(desktop, OsConstants.SIGKILL)
+                        }
+                    },
+                    GRACEFUL_STOP_TIMEOUT_MS,
+                )
+            } else {
+                releaseGfxstreamHost(host)
+            }
+        }
+    }
+
     private fun publishDesktopFailure(
         request: DesktopLaunchRequest,
         message: String,
@@ -903,6 +947,7 @@ class RuntimeSupervisorService : Service() {
         pidFile: File,
     ): List<String> =
         buildList {
+            add("/system/bin/setsid")
             add("/system/bin/sh")
             add("-c")
             add("printf '%s' \"\$\$\" > \"\$1\"; shift; exec \"\$@\"")
@@ -928,7 +973,7 @@ class RuntimeSupervisorService : Service() {
         signal: Int,
     ) {
         try {
-            Os.kill(owned.hostPid, signal)
+            Os.kill(-owned.hostPid, signal)
         } catch (error: ErrnoException) {
             if (error.errno != OsConstants.ESRCH) {
                 app.journal.append(
