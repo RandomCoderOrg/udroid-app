@@ -2,6 +2,7 @@ package org.randomcoder.udroid.ui
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -222,11 +224,9 @@ private fun LinuxApplicationCard(
     onLaunch: () -> Unit,
     onPin: () -> Unit,
 ) {
-    Surface(
+    OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = UdroidSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, UdroidLine),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -268,7 +268,7 @@ private fun LinuxApplicationCard(
                         tint = UdroidForest,
                     )
                     Text(
-                        text = if (application.terminal) " TERMINAL" else " DISPLAY :0",
+                        text = if (application.terminal) " Terminal" else " Display :0",
                         color = UdroidForest,
                         fontFamily = FontFamily.Monospace,
                         style = MaterialTheme.typography.labelSmall,

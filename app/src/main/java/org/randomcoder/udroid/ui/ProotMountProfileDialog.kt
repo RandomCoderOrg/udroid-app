@@ -13,12 +13,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
 import org.randomcoder.udroid.runtime.ProotCustomMount
 import org.randomcoder.udroid.runtime.ProotMountProfile
@@ -57,7 +58,7 @@ fun ProotMountProfileDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text("Mount mappings")
+                Text("File access")
                 Text(
                     systemName,
                     color = UdroidMuted,
@@ -79,9 +80,8 @@ fun ProotMountProfileDialog(
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Text(
-                        "This profile is applied exactly as saved. Disabling system paths " +
-                            "may prevent Linux from starting; uDroid will keep the profile " +
-                            "and report the crash.",
+                        "System paths are needed for Linux to start. Change them only when " +
+                            "you know the app you are running needs different access.",
                         modifier = Modifier.padding(12.dp),
                         color = UdroidWarning,
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
@@ -90,7 +90,7 @@ fun ProotMountProfileDialog(
 
                 Column {
                     Text(
-                        "uDroid defaults",
+                        "System access",
                         style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                     )
                     Text(
@@ -140,11 +140,29 @@ fun ProotMountProfileDialog(
                                 )
                             }
                             if (index != PROOT_DEFAULT_MOUNTS.lastIndex) {
-                                Divider(color = UdroidLine)
+                                HorizontalDivider(color = UdroidLine)
                             }
                         }
                     }
                 }
+
+                Column {
+                    Text(
+                        "Session mounts",
+                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        if (GFXSTREAM_PROFILE_ENABLED) {
+                            "Display, audio, and acceleration add these only while active"
+                        } else {
+                            "Display and audio add these only while active"
+                        },
+                        color = UdroidMuted,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                AutomaticSessionMounts()
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -152,11 +170,11 @@ fun ProotMountProfileDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Custom mappings",
+                            "Custom mounts",
                             style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            "Absolute host path to absolute guest path",
+                            "Map any Android path into Linux",
                             color = UdroidMuted,
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                         )
@@ -175,7 +193,7 @@ fun ProotMountProfileDialog(
                             validationMessage = null
                         },
                     ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null)
+                        Icon(Icons.Rounded.Add, contentDescription = null)
                         Text("Add")
                     }
                 }
@@ -188,7 +206,7 @@ fun ProotMountProfileDialog(
                         Column(modifier = Modifier.padding(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "Mapping",
+                                    "Shared folder",
                                     modifier = Modifier.weight(1f),
                                     style =
                                         androidx.compose.material3.MaterialTheme.typography
@@ -224,8 +242,8 @@ fun ProotMountProfileDialog(
                                     },
                                 ) {
                                     Icon(
-                                        Icons.Outlined.DeleteOutline,
-                                        contentDescription = "Delete mapping",
+                                        Icons.Rounded.DeleteOutline,
+                                        contentDescription = "Remove shared folder",
                                         tint = androidx.compose.material3.MaterialTheme.colorScheme.error,
                                     )
                                 }
@@ -237,7 +255,7 @@ fun ProotMountProfileDialog(
                                     validationMessage = null
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Host source") },
+                                label = { Text("Android path") },
                                 placeholder = { Text("/storage/emulated/0/Projects") },
                                 singleLine = true,
                                 textStyle =
@@ -253,7 +271,7 @@ fun ProotMountProfileDialog(
                                     validationMessage = null
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Guest destination") },
+                                label = { Text("Path inside Linux") },
                                 placeholder = { Text("/workspace") },
                                 singleLine = true,
                                 textStyle =
@@ -271,8 +289,8 @@ fun ProotMountProfileDialog(
                         validationMessage = null
                     },
                 ) {
-                    Icon(Icons.Outlined.RestartAlt, contentDescription = null)
-                    Text("Restore uDroid defaults")
+                    Icon(Icons.Rounded.RestartAlt, contentDescription = null)
+                    Text("Restore recommended access")
                 }
 
                 validationMessage?.let {
@@ -299,7 +317,7 @@ fun ProotMountProfileDialog(
                         }
                 },
             ) {
-                Text("Save profile")
+                Text("Save")
             }
         },
     )

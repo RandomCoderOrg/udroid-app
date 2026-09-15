@@ -17,18 +17,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,8 +55,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.catalog.LinuxDistribution
+import org.randomcoder.udroid.gfxstream.GfxstreamGuestRuntime
 import org.randomcoder.udroid.install.InstallProgress
+import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
 import org.randomcoder.udroid.runtime.ProotCustomMount
@@ -68,6 +74,23 @@ private data class MountConfigurationItem(
     val active: Boolean,
     val setupInProgress: Boolean,
 )
+
+private data class AutomaticMountInfo(
+    val guestTarget: String,
+    val purpose: String,
+    val owner: String,
+)
+
+private val AUTOMATIC_SESSION_MOUNTS =
+    buildList {
+        add(AutomaticMountInfo("/tmp/.X11-unix", "X11 socket", "Display"))
+        add(AutomaticMountInfo("/tmp/.X0-lock", "X11 display lock", "Display"))
+        add(AutomaticMountInfo(AudioEndpoint.GUEST_AUTH_DIRECTORY, "PulseAudio authentication", "Audio"))
+        if (GFXSTREAM_PROFILE_ENABLED) {
+            add(AutomaticMountInfo(GfxstreamGuestRuntime.GUEST_DIRECTORY, "Graphics runtime", "Acceleration"))
+            add(AutomaticMountInfo(GfxstreamGuestRuntime.GUEST_GPU_SOCKET, "Graphics socket", "Acceleration"))
+        }
+    }
 
 @Composable
 fun ProotMountConfigurationsPage(
@@ -126,7 +149,7 @@ fun ProotMountConfigurationsPage(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "configuration-list-header") {
             Row(
@@ -135,12 +158,13 @@ fun ProotMountConfigurationsPage(
             ) {
                 IconButton(onClick = onBack) {
                     Icon(
-                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Back to distro",
                     )
                 }
+                DistroMark(distribution = distribution, size = 38)
                 Column(modifier = Modifier.weight(1f).padding(start = 6.dp)) {
-                    Text("Mount configurations", style = MaterialTheme.typography.headlineSmall)
+                    Text("File access", style = MaterialTheme.typography.headlineSmall)
                     Text(
                         sourceSystemTitle,
                         maxLines = 1,
@@ -152,48 +176,21 @@ fun ProotMountConfigurationsPage(
             }
         }
 
-        item(key = "configuration-source") {
-            Surface(
-                color = UdroidRaised,
-                border = BorderStroke(1.dp, UdroidLine),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DistroMark(distribution = distribution, size = 44)
-                    Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("Source distro", color = UdroidMuted, style = MaterialTheme.typography.labelMedium)
-                        Text(sourceSystemTitle, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            sourceSystemId,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = UdroidMuted,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            }
-        }
-
         item(key = "create-configuration") {
             Button(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = onCreateConfiguration,
-                shape = RoundedCornerShape(10.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = null)
+                Icon(Icons.Rounded.Add, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text("Create configuration")
+                Text("New file setup")
             }
         }
 
         item(key = "configuration-list-label") {
             UdroidSectionLabel(
-                text = "Configurations",
+                text = "Linux systems",
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -253,68 +250,58 @@ private fun MountConfigurationCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit),
         color = UdroidRaised,
         border = BorderStroke(1.dp, UdroidLine),
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.large,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(configuration.profile.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        configuration.systemId,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = UdroidMuted,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                UdroidStatusBadge(
-                    label =
-                        when {
-                            configuration.active -> "Active"
-                            configuration.installed -> "Ready"
-                            configuration.setupInProgress -> "Creating"
-                            else -> "Saved"
-                        },
-                    color = if (configuration.setupInProgress) UdroidWarning else UdroidForest,
-                    background =
-                        if (configuration.setupInProgress) {
-                            UdroidWarningSurface
-                        } else {
-                            UdroidSoftGreen
-                        },
-                )
-            }
-            Text(
-                "$enabledDefaults of ${PROOT_DEFAULT_MOUNTS.size} defaults · $enabledCustom custom",
-                modifier = Modifier.padding(top = 9.dp),
-                color = UdroidMuted,
-                style = MaterialTheme.typography.bodySmall,
+        Column {
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = {
+                    Text(configuration.profile.name.ifBlank { "Default" })
+                },
+                supportingContent = {
+                    Text("$enabledDefaults system paths · $enabledCustom added folders")
+                },
+                leadingContent = {
+                    Icon(Icons.Rounded.Folder, contentDescription = null)
+                },
+                trailingContent = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        UdroidStatusBadge(
+                            label =
+                                when {
+                                    configuration.active -> "Active"
+                                    configuration.installed -> "Ready"
+                                    configuration.setupInProgress -> "Creating"
+                                    else -> "Saved"
+                                },
+                            color = if (configuration.setupInProgress) UdroidWarning else UdroidForest,
+                            background =
+                                if (configuration.setupInProgress) UdroidWarningSurface else UdroidSoftGreen,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                    }
+                },
             )
+            HorizontalDivider(color = UdroidLine)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(
+                TextButton(
                     enabled = configuration.installed,
                     onClick = onLaunch,
-                    shape = RoundedCornerShape(9.dp),
                 ) {
-                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Open distro")
-                }
-                OutlinedButton(onClick = onEdit, shape = RoundedCornerShape(9.dp)) {
-                    Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit")
+                    Text("Open")
                 }
                 if (!isSource && configuration.installed) {
                     IconButton(onClick = onDelete) {
                         Icon(
-                            Icons.Outlined.DeleteOutline,
-                            contentDescription = "Delete configuration",
+                            Icons.Rounded.DeleteOutline,
+                            contentDescription = "Delete file setup",
                             tint = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -335,6 +322,7 @@ fun ProotMountConfigurationEditorPage(
     editingEnabled: Boolean,
     externalMessage: String?,
     onBack: () -> Unit,
+    onOpenSessionFeatures: () -> Unit,
     onCreateDistro: (ProotMountProfile) -> Unit,
 ) {
     val context = LocalContext.current
@@ -362,11 +350,20 @@ fun ProotMountConfigurationEditorPage(
     var confirmDiscard by remember(sourceSystemId, configurationSystemId) {
         mutableStateOf(false)
     }
+    var openSessionFeaturesAfterDiscard by remember(sourceSystemId, configurationSystemId) {
+        mutableStateOf(false)
+    }
     val scope = rememberCoroutineScope()
     val dirty = draft != persistedProfile
 
     fun requestBack() {
+        openSessionFeaturesAfterDiscard = false
         if (dirty) confirmDiscard = true else onBack()
+    }
+
+    fun requestSessionFeatures() {
+        openSessionFeaturesAfterDiscard = true
+        if (dirty) confirmDiscard = true else onOpenSessionFeatures()
     }
 
     fun submit() {
@@ -421,13 +418,13 @@ fun ProotMountConfigurationEditorPage(
             ) {
                 IconButton(onClick = ::requestBack) {
                     Icon(
-                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        Icons.AutoMirrored.Rounded.ArrowBack,
                         contentDescription = "Back to configurations",
                     )
                 }
                 Column(modifier = Modifier.weight(1f).padding(start = 6.dp)) {
                     Text(
-                        if (creating) "Create configuration" else "Edit configuration",
+                        if (creating) "New file setup" else "File access",
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     Text(
@@ -442,7 +439,7 @@ fun ProotMountConfigurationEditorPage(
         }
 
         item(key = "configuration-attached-distro-label") {
-            UdroidSectionLabel(text = if (creating) "Source distro" else "Attached distro")
+            UdroidSectionLabel(text = "Linux system")
         }
 
         item(key = "configuration-attached-distro") {
@@ -458,14 +455,17 @@ fun ProotMountConfigurationEditorPage(
                     DistroMark(distribution = distribution, size = 44)
                     Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(systemTitle, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            configurationSystemId ?: sourceSystemId,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = UdroidMuted,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        val systemId = configurationSystemId ?: sourceSystemId
+                        if (systemTitle != systemId) {
+                            Text(
+                                systemId,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = UdroidMuted,
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                     if (!creating) {
                         UdroidStatusBadge(
@@ -487,9 +487,9 @@ fun ProotMountConfigurationEditorPage(
                     message = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Configuration name") },
+                label = { Text("Setup name") },
                 supportingText = {
-                    Text("This name identifies both the profile and its attached distro.")
+                    Text("Used to identify this Linux system.")
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
@@ -501,9 +501,9 @@ fun ProotMountConfigurationEditorPage(
                 Surface(color = UdroidWarningSurface, shape = RoundedCornerShape(10.dp)) {
                     Text(
                         if (creating) {
-                            "Finish the current Linux setup before creating another configuration."
+                        "Finish the current Linux setup before creating another one."
                         } else {
-                            "Stop the attached distro before changing this configuration."
+                            "Stop this Linux system before changing its file access."
                         },
                         modifier = Modifier.padding(12.dp),
                         color = UdroidWarning,
@@ -514,13 +514,12 @@ fun ProotMountConfigurationEditorPage(
         }
 
         item(key = "configuration-warning") {
-            Surface(color = UdroidWarningSurface, shape = RoundedCornerShape(10.dp)) {
+            Surface(color = UdroidInset, shape = MaterialTheme.shapes.medium) {
                 Text(
-                    "Mappings are applied exactly as saved. Removing /sys, /proc, or another " +
-                        "system path can intentionally prevent Linux from starting; uDroid keeps " +
-                        "the configuration and reports the crash.",
+                    "System paths are needed for Linux to start. Change them only when you know " +
+                        "the app you are running needs different access.",
                     modifier = Modifier.padding(12.dp),
-                    color = UdroidWarning,
+                    color = UdroidMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -529,10 +528,10 @@ fun ProotMountConfigurationEditorPage(
         item(key = "configuration-defaults-label") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Mount mappings", style = MaterialTheme.typography.titleMedium)
+                    Text("System access", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "${PROOT_DEFAULT_MOUNTS.count { draft.isDefaultEnabled(it.id) }} of " +
-                            "${PROOT_DEFAULT_MOUNTS.size} uDroid defaults enabled",
+                            "${PROOT_DEFAULT_MOUNTS.size} recommended paths enabled",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -548,7 +547,7 @@ fun ProotMountConfigurationEditorPage(
                         message = null
                     },
                 ) {
-                    Icon(Icons.Outlined.RestartAlt, contentDescription = null)
+                    Icon(Icons.Rounded.RestartAlt, contentDescription = null)
                     Spacer(Modifier.width(5.dp))
                     Text("Restore")
                 }
@@ -592,19 +591,39 @@ fun ProotMountConfigurationEditorPage(
                             )
                         }
                         if (index != PROOT_DEFAULT_MOUNTS.lastIndex) {
-                            Divider(color = UdroidLine)
+                            HorizontalDivider(color = UdroidLine)
                         }
                     }
                 }
             }
         }
 
+        item(key = "configuration-session-label") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Session mounts", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Added only while the owning feature is active",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(onClick = ::requestSessionFeatures) {
+                    Text("Manage features")
+                }
+            }
+        }
+
+        item(key = "configuration-session-mounts") {
+            AutomaticSessionMounts()
+        }
+
         item(key = "configuration-custom-label") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Custom mappings", style = MaterialTheme.typography.titleMedium)
+                    Text("Custom mounts", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Absolute host path to absolute guest destination",
+                        "Map any Android path into Linux",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -622,7 +641,7 @@ fun ProotMountConfigurationEditorPage(
                     },
                     shape = RoundedCornerShape(9.dp),
                 ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
+                    Icon(Icons.Rounded.Add, contentDescription = null)
                     Spacer(Modifier.width(5.dp))
                     Text("Add")
                 }
@@ -633,7 +652,7 @@ fun ProotMountConfigurationEditorPage(
             item(key = "configuration-custom-empty") {
                 Surface(color = UdroidInset, shape = RoundedCornerShape(11.dp)) {
                     Text(
-                        "No custom mappings. Add one when this configuration needs another path.",
+                        "No extra folders shared with this Linux system.",
                         modifier = Modifier.padding(14.dp),
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodyMedium,
@@ -686,8 +705,8 @@ fun ProotMountConfigurationEditorPage(
                 Text(
                     when {
                         saving -> "Saving…"
-                        creating -> "Create distro"
-                        else -> "Save configuration"
+                        creating -> "Create Linux system"
+                        else -> "Save changes"
                     },
                 )
             }
@@ -698,24 +717,36 @@ fun ProotMountConfigurationEditorPage(
 
     if (confirmDiscard) {
         AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
+            onDismissRequest = {
+                confirmDiscard = false
+                openSessionFeaturesAfterDiscard = false
+            },
             title = {
-                Text(if (creating) "Discard configuration?" else "Unsaved changes")
+                Text(if (creating) "Discard file setup?" else "Unsaved changes")
             },
             text = {
                 Text(
                     if (creating) {
-                        "This new mount configuration has not been created yet."
+                        "This new file setup has not been created yet."
                     } else {
-                        "Your changes to this configuration have not been saved."
+                        "Your file access changes have not been saved."
                     },
                 )
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) { Text("Keep editing") }
+                TextButton(
+                    onClick = {
+                        confirmDiscard = false
+                        openSessionFeaturesAfterDiscard = false
+                    },
+                ) { Text("Keep editing") }
             },
             confirmButton = {
-                TextButton(onClick = onBack) { Text("Discard") }
+                TextButton(
+                    onClick = {
+                        if (openSessionFeaturesAfterDiscard) onOpenSessionFeatures() else onBack()
+                    },
+                ) { Text("Discard") }
             },
         )
     }
@@ -729,11 +760,11 @@ private fun CustomMountEditor(
     onChange: (ProotCustomMount) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Surface(color = UdroidInset, shape = RoundedCornerShape(11.dp)) {
+    Surface(color = UdroidInset, shape = MaterialTheme.shapes.medium) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Mapping",
+                    "Shared folder",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge,
                 )
@@ -744,8 +775,8 @@ private fun CustomMountEditor(
                 )
                 IconButton(enabled = enabled, onClick = onDelete) {
                     Icon(
-                        Icons.Outlined.DeleteOutline,
-                        contentDescription = "Delete mapping",
+                        Icons.Rounded.DeleteOutline,
+                        contentDescription = "Remove shared folder",
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -755,8 +786,8 @@ private fun CustomMountEditor(
                 enabled = enabled,
                 onValueChange = { onChange(mount.copy(hostSource = it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Host source") },
-                placeholder = { Text("/data/local/project") },
+                label = { Text("Android path") },
+                placeholder = { Text("/storage/emulated/0/Projects") },
                 singleLine = true,
                 textStyle =
                     MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -767,7 +798,7 @@ private fun CustomMountEditor(
                 enabled = enabled,
                 onValueChange = { onChange(mount.copy(guestTarget = it)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Guest destination") },
+                label = { Text("Path inside Linux") },
                 placeholder = { Text("/workspace") },
                 singleLine = true,
                 textStyle =
@@ -782,3 +813,38 @@ private fun ProotMountProfile.updateCustomMount(
     update: (ProotCustomMount) -> ProotCustomMount,
 ): ProotMountProfile =
     copy(customMounts = customMounts.map { if (it.id == id) update(it) else it })
+
+@Composable
+internal fun AutomaticSessionMounts() {
+    Surface(
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column {
+            AUTOMATIC_SESSION_MOUNTS.forEachIndexed { index, mount ->
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(
+                            mount.guestTarget,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    },
+                    supportingContent = { Text(mount.purpose) },
+                    trailingContent = {
+                        Text(
+                            mount.owner,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    },
+                )
+                if (index != AUTOMATIC_SESSION_MOUNTS.lastIndex) {
+                    HorizontalDivider(color = UdroidLine)
+                }
+            }
+        }
+    }
+}

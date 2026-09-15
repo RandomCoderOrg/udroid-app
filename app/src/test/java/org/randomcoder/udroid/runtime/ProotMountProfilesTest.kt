@@ -71,6 +71,35 @@ class ProotMountProfilesTest {
     }
 
     @Test
+    fun `session destination can be customized when its feature is inactive`() {
+        val customX11 =
+            ProotCustomMount(
+                id = "custom.x11",
+                hostSource = "/data/local/custom-x11",
+                guestTarget = "/tmp/.X11-unix",
+            )
+        val profile = ProotMountProfile(customMounts = listOf(customX11))
+
+        assertEquals(customX11.guestTarget, ProotMountResolver.resolve(profile).last().guestTarget)
+
+        val failure =
+            runCatching {
+                ProotMountResolver.resolve(
+                    profile,
+                    sessionMounts =
+                        listOf(
+                            ResolvedProotMount(
+                                hostSource = "/data/local/automatic-x11",
+                                guestTarget = "/tmp/.X11-unix",
+                                origin = "runtime:x11",
+                            ),
+                        ),
+                )
+            }.exceptionOrNull()
+        assertTrue(failure?.message?.contains("active session feature") == true)
+    }
+
+    @Test
     fun `profile codec round trips overrides and custom mappings`() {
         val expected =
             ProotMountProfile(

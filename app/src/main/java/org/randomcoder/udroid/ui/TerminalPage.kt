@@ -302,7 +302,6 @@ private fun EmptyTerminalState(
             Button(
                 onClick = onStart,
                 enabled = snapshot.phase != RuntimePhase.STARTING,
-                shape = MaterialTheme.shapes.medium,
             ) {
                 Text(
                     if (snapshot.phase == RuntimePhase.CRASHED) {

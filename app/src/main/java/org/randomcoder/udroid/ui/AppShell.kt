@@ -51,10 +51,12 @@ import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -72,6 +74,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
@@ -300,7 +303,7 @@ fun UdroidApp(
                         destinations = requestedJourney.destinations,
                         onSelected = onPrimaryDestinationSelected,
                     )
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier.fillMaxHeight().width(1.dp),
                         color = UdroidLine,
                     )
@@ -750,6 +753,9 @@ private fun ManagementPane(
                                 onBack = {
                                     onDestinationSelected(UdroidDestination.MOUNTS)
                                 },
+                                onOpenSessionFeatures = {
+                                    onDestinationSelected(UdroidDestination.SYSTEM)
+                                },
                                 onCreateDistro = { profile ->
                                     onCreateRootfsVariation(
                                         sourceSystemId,
@@ -1166,7 +1172,7 @@ private fun AppUpdatePanel(
             if (state.phase == AppUpdatePhase.DOWNLOADING) {
                 Spacer(Modifier.height(12.dp))
                 LinearProgressIndicator(
-                    progress = state.percentage / 100f,
+                    progress = { state.percentage / 100f },
                     modifier = Modifier.fillMaxWidth(),
                     color = UdroidForest,
                 )
@@ -1195,21 +1201,18 @@ private fun AppUpdatePanel(
                     AppUpdatePhase.DOWNLOADING ->
                         OutlinedButton(
                             onClick = onCancel,
-                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Pause")
                         }
                     AppUpdatePhase.READY ->
                         Button(
                             onClick = onInstall,
-                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Install update")
                         }
                     else ->
                         Button(
                             onClick = onDownload,
-                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Download update")
                         }
@@ -1283,39 +1286,30 @@ private fun CapabilityRow(capability: CapabilityResult) {
             CapabilityStatus.INFO ->
                 Triple(Icons.Rounded.Info, MaterialTheme.colorScheme.tertiary, "Detected")
         }
-    Surface(
-        color = UdroidRaised,
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    ListItem(
+        modifier = Modifier.clip(MaterialTheme.shapes.medium),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        leadingContent = {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint,
             )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    capability.name,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    capability.detail,
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Spacer(Modifier.width(10.dp))
+        },
+        headlineContent = {
+            Text(capability.name, style = MaterialTheme.typography.titleMedium)
+        },
+        supportingContent = {
+            Text(capability.detail, style = MaterialTheme.typography.bodySmall)
+        },
+        trailingContent = {
             Text(
                 label,
                 color = tint,
                 style = MaterialTheme.typography.labelLarge,
             )
-        }
-    }
+        },
+    )
 }
 
 @Composable

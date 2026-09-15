@@ -104,8 +104,7 @@ data class InstallProgress(
             InstallStage.READY -> 0f
             InstallStage.ARCHIVE_READY -> 0.55f
             InstallStage.COMPLETE -> 1f
-            InstallStage.FAILED -> 0f
-            InstallStage.PAUSED -> stageProgress.coerceIn(0f, 1f)
+            InstallStage.FAILED, InstallStage.PAUSED -> stageProgress.coerceIn(0f, 1f)
             else ->
                 (stage.startFraction + (stage.weight * stageProgress.coerceIn(0f, 1f)))
                     .coerceIn(0f, 1f)

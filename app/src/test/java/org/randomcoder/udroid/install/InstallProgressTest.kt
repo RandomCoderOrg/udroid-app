@@ -39,6 +39,22 @@ class InstallProgressTest {
     }
 
     @Test
+    fun `failure preserves the progress reached before it stopped`() {
+        val progress =
+            InstallProgress(
+                work = work,
+                stage = InstallStage.FAILED,
+                stageProgress = 0.72f,
+                currentDetail = "Stopped",
+                terminalLines = emptyList(),
+                previewOnly = false,
+            )
+
+        assertEquals(0.72f, progress.overallProgress, 0.0001f)
+        assertEquals(72, progress.percentage)
+    }
+
+    @Test
     fun `preview reaches complete with a terminal event for every transition`() {
         val steps = InstallationUxPreview.steps(distro)
 

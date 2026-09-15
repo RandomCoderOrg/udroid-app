@@ -102,9 +102,6 @@ object ProotMountProfileValidator {
             require(SAFE_ID.matches(mount.id)) { "Invalid custom mount ID" }
             requireSafePath(mount.hostSource, "Host source")
             requireSafePath(mount.guestTarget, "Guest target")
-            require(mount.guestTarget !in RESERVED_GUEST_TARGETS) {
-                "${mount.guestTarget} is managed by the uDroid runtime"
-            }
         }
 
         val enabledTargets =
@@ -137,8 +134,6 @@ object ProotMountProfileValidator {
             "$label must not contain '.' or '..' segments"
         }
     }
-
-    val RESERVED_GUEST_TARGETS = setOf("/tmp/.X11-unix", "/tmp/.udroid-pulse")
 
     private const val MAX_CUSTOM_MOUNTS = 64
     private const val MAX_PROFILE_NAME_LENGTH = 64
@@ -177,9 +172,16 @@ object ProotMountResolver {
                 }
                 addAll(sessionMounts)
             }
-        val targets = resolved.map(ResolvedProotMount::guestTarget)
-        require(targets.distinct().size == targets.size) {
-            "Resolved mappings contain duplicate guest destinations"
+        val duplicateTarget =
+            resolved
+                .groupingBy(ResolvedProotMount::guestTarget)
+                .eachCount()
+                .entries
+                .firstOrNull { it.value > 1 }
+                ?.key
+        require(duplicateTarget == null) {
+            "$duplicateTarget is already mounted by an active session feature; disable that " +
+                "feature or choose another Linux path"
         }
         return resolved
     }

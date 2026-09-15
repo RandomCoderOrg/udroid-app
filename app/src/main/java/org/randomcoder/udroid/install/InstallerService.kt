@@ -283,7 +283,7 @@ class InstallerService : Service() {
                     InstallProgress(
                         work = work,
                         stage = InstallStage.FAILED,
-                        stageProgress = 0f,
+                        stageProgress = previous?.overallProgress ?: 0f,
                         currentDetail = error.message ?: error.javaClass.simpleName,
                         terminalLines =
                             previous?.terminalLines.orEmpty() +

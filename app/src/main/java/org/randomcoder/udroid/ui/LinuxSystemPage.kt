@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Refresh
@@ -31,9 +32,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -386,7 +389,7 @@ fun LinuxSystemPage(
             ) {
                 Column {
                     FactRow("Storage", rootfs.directory.name)
-                    Divider(color = UdroidLine)
+                    HorizontalDivider(color = UdroidLine)
                     FactRow(
                         "Installed",
                         DateFormat.getDateTimeInstance(
@@ -395,7 +398,7 @@ fun LinuxSystemPage(
                         ).format(Date(rootfs.readyAtEpochMs)),
                     )
                     distro?.let {
-                        Divider(color = UdroidLine)
+                        HorizontalDivider(color = UdroidLine)
                         FactRow("Architecture", it.architecture)
                     }
                 }
@@ -404,7 +407,7 @@ fun LinuxSystemPage(
 
         item(key = "mounts-label") {
             UdroidSectionLabel(
-                text = "Mount mappings",
+                text = "File access",
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
@@ -620,72 +623,48 @@ private fun MountProfilePanel(
     val enabledDefaults = PROOT_DEFAULT_MOUNTS.count { profile.isDefaultEnabled(it.id) }
     val enabledCustom = profile.customMounts.count { it.enabled }
     Surface(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onConfigure),
         color = Color.Transparent,
         border = BorderStroke(1.dp, UdroidLine),
         shape = MaterialTheme.shapes.medium,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                "$enabledDefaults of ${PROOT_DEFAULT_MOUNTS.size} defaults enabled",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Text(
-                if (enabledCustom == 1) {
-                    "1 enabled custom mapping"
-                } else {
-                    "$enabledCustom enabled custom mappings"
-                },
-                modifier = Modifier.padding(top = 3.dp),
-                color = UdroidMuted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (!enabled) {
-                Text(
-                    "Stop this Linux system before changing its launch profile.",
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (crashed) {
-                Text(
-                    "The last runtime exited unexpectedly. The saved profile was not changed.",
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = UdroidWarning,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            message?.let {
-                Text(
-                    it,
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    enabled = enabled,
-                    onClick = onConfigure,
-                ) {
-                    Icon(Icons.Rounded.Settings, contentDescription = null)
-                    Text("Configure mounts", modifier = Modifier.padding(start = 6.dp))
-                }
-                if (crashed) {
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = onRetry,
-                    ) {
-                        Icon(Icons.Rounded.Refresh, contentDescription = null)
-                        Text("Retry", modifier = Modifier.padding(start = 6.dp))
+        Column {
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = { Text("Android and system files") },
+                supportingContent = {
+                    Column {
+                        Text("$enabledDefaults defaults · session mounts as needed · $enabledCustom custom")
+                        if (!enabled) Text("Stop Linux to make changes")
+                        if (crashed) {
+                            Text(
+                                "Last launch stopped unexpectedly",
+                                color = UdroidWarning,
+                            )
+                        }
+                        message?.let { Text(it) }
                     }
+                },
+                leadingContent = {
+                    Icon(Icons.Rounded.Settings, contentDescription = null)
+                },
+                trailingContent = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (enabled) "Configure" else "Locked")
+                        if (enabled) {
+                            Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                        }
+                    }
+                },
+            )
+            if (crashed) {
+                HorizontalDivider(color = UdroidLine)
+                TextButton(
+                    modifier = Modifier.align(Alignment.End).padding(horizontal = 8.dp),
+                    onClick = onRetry,
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null)
+                    Text("Retry", modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }
@@ -718,7 +697,7 @@ private fun AudioSettingsPanel(
                 enabled = true,
                 onCheckedChange = onOutputChanged,
             )
-            Divider(color = UdroidLine)
+            HorizontalDivider(color = UdroidLine)
             SettingRow(
                 title = "Device microphone",
                 detail =
@@ -729,7 +708,7 @@ private fun AudioSettingsPanel(
                 onCheckedChange = onMicrophoneChanged,
             )
             message?.let {
-                Divider(color = UdroidLine)
+                HorizontalDivider(color = UdroidLine)
                 Text(
                     text = it,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -986,7 +965,7 @@ private fun DesktopSettingsPanel(
                 enabled = compositorConfigurable,
                 onCheckedChange = onCompositingChanged,
             )
-            Divider(color = UdroidLine)
+            HorizontalDivider(color = UdroidLine)
             SettingRow(
                 title = "Touch-sized interface",
                 detail =
@@ -997,7 +976,7 @@ private fun DesktopSettingsPanel(
                 onCheckedChange = onTouchScaleChanged,
             )
             if (GFXSTREAM_PROFILE_ENABLED) {
-                Divider(color = UdroidLine)
+                HorizontalDivider(color = UdroidLine)
                 GraphicsProfileSelector(
                     selected = configuration.graphicsProfile,
                     desktopRunning = desktopRunning,
@@ -1053,32 +1032,34 @@ private fun GraphicsProfileRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Row(
+    ListItem(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable(enabled = enabled, onClick = onClick)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(
-            selected = selected,
-            enabled = enabled,
-            onClick = onClick,
-        )
-        Column(modifier = Modifier.padding(start = 4.dp)) {
+                .clickable(enabled = enabled, onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = {
+            RadioButton(
+                selected = selected,
+                enabled = enabled,
+                onClick = null,
+            )
+        },
+        headlineContent = {
             Text(
                 title,
                 color = if (enabled) UdroidInk else UdroidMuted,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.titleMedium,
             )
+        },
+        supportingContent = {
             Text(
                 detail,
                 color = UdroidMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -1089,28 +1070,34 @@ private fun SettingRow(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
+    ListItem(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { onCheckedChange(!checked) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = {
             Text(
                 title,
                 color = if (enabled) UdroidInk else UdroidMuted,
                 style = MaterialTheme.typography.titleMedium,
             )
+        },
+        supportingContent = {
             Text(
                 detail,
                 color = UdroidMuted,
                 style = MaterialTheme.typography.bodySmall,
             )
-        }
-        Switch(
-            checked = checked,
-            enabled = enabled,
-            onCheckedChange = onCheckedChange,
-        )
-    }
+        },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = onCheckedChange,
+            )
+        },
+    )
 }
 
 @Composable

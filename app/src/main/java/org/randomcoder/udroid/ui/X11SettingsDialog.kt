@@ -1,7 +1,6 @@
 package org.randomcoder.udroid.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,11 +13,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -265,49 +267,21 @@ private fun SettingsLabel(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun <T> ChoiceGroup(
     selected: T,
     options: List<Pair<T, String>>,
     onSelected: (T) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        options.forEach { (value, label) ->
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (value, label) ->
             val isSelected = value == selected
-            Surface(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .clickable { onSelected(value) },
-                shape = MaterialTheme.shapes.medium,
-                color =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        UdroidTerminalRaised
-                    },
-                contentColor =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        UdroidTerminalText
-                    },
+            SegmentedButton(
+                selected = isSelected,
+                onClick = { onSelected(value) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = null,
-                    )
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
+                Text(text = label)
             }
         }
     }
@@ -385,7 +359,7 @@ private fun SettingsSwitch(
 
 @Composable
 private fun SettingsDivider() {
-    Divider(
+    HorizontalDivider(
         modifier = Modifier.padding(vertical = 18.dp),
         color = UdroidTerminalLine,
     )
