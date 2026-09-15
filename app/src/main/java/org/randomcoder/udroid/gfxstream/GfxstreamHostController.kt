@@ -83,6 +83,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
         return try {
             val guest = GfxstreamGuestRuntimeInstaller.install(appContext)
             val runtime = GfxstreamHostRuntimeInstaller.install(appContext)
+            val pairDiagnostic = GfxstreamRuntimeCompatibility.requireCompatible(runtime, guest)
             gpuSocket.delete()
             logFile.delete()
             val command =
@@ -122,7 +123,7 @@ class GfxstreamHostController(context: Context) : AutoCloseable {
                     GfxstreamHostSnapshot(
                         "running",
                         "Kumquat ${runtime.version} · guest ${guest.version} · " +
-                            "socket ${gpuSocket.name}",
+                            "$pairDiagnostic · socket ${gpuSocket.name}",
                     ),
                 )
             }

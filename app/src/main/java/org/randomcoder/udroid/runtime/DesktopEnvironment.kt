@@ -196,7 +196,7 @@ class DesktopEnvironmentScanner {
         guestPath: String,
     ): DesktopEnvironment? {
         val values = parseDesktopEntry(file)
-        if (values["Type"]?.trim() != "Application") return null
+        if (values["Type"]?.trim() !in SESSION_ENTRY_TYPES) return null
         if (values.boolean("Hidden") || values.boolean("NoDisplay")) return null
         val name = values["Name"]?.unescape()?.trim()?.takeIf(String::isNotBlank) ?: return null
         val rawExec = values["Exec"]?.trim()?.takeIf(String::isNotBlank) ?: return null
@@ -288,5 +288,6 @@ class DesktopEnvironmentScanner {
                 "/usr/share/xsessions",
                 "/usr/local/share/xsessions",
             )
+        val SESSION_ENTRY_TYPES = setOf("Application", "XSession")
     }
 }

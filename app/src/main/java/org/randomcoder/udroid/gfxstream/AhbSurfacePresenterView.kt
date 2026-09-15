@@ -33,7 +33,11 @@ class AhbSurfacePresenterView
                 }
             }
         private var nativeHandle: Long =
-            nativeCreate(transportSocket.absolutePath, externalProducer)
+            nativeCreate(transportSocket.absolutePath, externalProducer).also { handle ->
+                check(handle != 0L) {
+                    "Could not prepare the private graphics presenter listener"
+                }
+            }
         private var frameCallbackPosted = false
         private val frameCallback =
             object : Choreographer.FrameCallback {

@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -40,7 +41,32 @@ enum class ProducerMode {
     kExternalSupervisor,
 };
 
+struct TransportPathIdentity {
+    dev_t device = 0;
+    ino_t inode = 0;
+    bool valid = false;
+};
+
+bool readTransportPathIdentity(const std::string &path,
+                               TransportPathIdentity *identity) {
+    struct stat path_status = {};
+    if (lstat(path.c_str(), &path_status) != 0 || !S_ISSOCK(path_status.st_mode)) {
+        return false;
+    }
+    identity->device = path_status.st_dev;
+    identity->inode = path_status.st_ino;
+    identity->valid = true;
+    return true;
+}
+
+bool sameTransportPathIdentity(const TransportPathIdentity &left,
+                               const TransportPathIdentity &right) {
+    return left.valid && right.valid && left.device == right.device &&
+           left.inode == right.inode;
+}
+
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, kLogTag, __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, kLogTag, __VA_ARGS__)
 
 bool sendPacket(int socket_fd, const UdroidAhbTransportPacket &packet) {
     ssize_t sent;
@@ -252,8 +278,7 @@ class Presenter {
 public:
     Presenter(std::string transport_path, ProducerMode producer_mode)
         : transport_path_(std::move(transport_path)),
-          producer_mode_(producer_mode),
-          worker_(&Presenter::run, this) {}
+          producer_mode_(producer_mode) {}
 
     ~Presenter() {
         {
@@ -265,6 +290,7 @@ public:
         if (worker_.joinable()) {
             worker_.join();
         }
+        destroyTransport();
         std::lock_guard<std::mutex> lock(mutex_);
         if (pending_window_ != nullptr) {
             ANativeWindow_release(pending_window_);
@@ -274,6 +300,12 @@ public:
 
     Presenter(const Presenter &) = delete;
     Presenter &operator=(const Presenter &) = delete;
+
+    bool start() {
+        if (!prepareTransportListener()) return false;
+        worker_ = std::thread(&Presenter::run, this);
+        return true;
+    }
 
     void setWindow(ANativeWindow *window) {
         {
@@ -347,7 +379,24 @@ public:
     }
 
 private:
-    bool initializeTransport() {
+    static constexpr size_t kMaxExternalFrameResources = 4;
+
+    struct ExternalFrameResource {
+        uint64_t resource_id = 0;
+        uint64_t generation = 0;
+        AHardwareBuffer *buffer = nullptr;
+        EGLImageKHR image = EGL_NO_IMAGE_KHR;
+        GLuint texture = 0;
+        int width = 0;
+        int height = 0;
+        std::string identity;
+
+        bool registered() const {
+            return resource_id != 0 && generation != 0;
+        }
+    };
+
+    bool prepareTransportListener() {
         sockaddr_un address = {};
         if (transport_path_.empty() ||
             transport_path_.size() >= sizeof(address.sun_path)) {
@@ -365,12 +414,47 @@ private:
         memcpy(address.sun_path, transport_path_.c_str(), transport_path_.size() + 1);
         unlink(transport_path_.c_str());
         if (bind(listener_socket_, reinterpret_cast<const sockaddr *>(&address),
-                 sizeof(address)) != 0 ||
-            chmod(transport_path_.c_str(), S_IRUSR | S_IWUSR) != 0 ||
-            listen(listener_socket_, 1) != 0) {
+                 sizeof(address)) != 0) {
+            LOGE("private graphics listener bind failed for %s: %s",
+                 transport_path_.c_str(), strerror(errno));
             setStatus("private graphics listener setup failed");
+            destroyTransport();
             return false;
         }
+        if (!readTransportPathIdentity(transport_path_, &transport_path_identity_)) {
+            LOGE("private graphics listener identity lookup failed for %s: %s",
+                 transport_path_.c_str(), strerror(errno));
+            setStatus("private graphics listener identity verification failed");
+            destroyTransport();
+            return false;
+        }
+        if (chmod(transport_path_.c_str(), S_IRUSR | S_IWUSR) != 0 ||
+            listen(listener_socket_, 1) != 0) {
+            LOGE("private graphics listener permission/listen failed for %s: %s",
+                 transport_path_.c_str(), strerror(errno));
+            setStatus("private graphics listener setup failed");
+            destroyTransport();
+            return false;
+        }
+        TransportPathIdentity listening_identity;
+        if (!readTransportPathIdentity(transport_path_, &listening_identity) ||
+            !sameTransportPathIdentity(transport_path_identity_, listening_identity)) {
+            LOGE("private graphics listener pathname changed during setup: %s",
+                 transport_path_.c_str());
+            setStatus("private graphics listener identity changed during setup");
+            destroyTransport();
+            return false;
+        }
+        transport_path_identity_ = listening_identity;
+        setStatus("private graphics listener ready");
+        LOGI("private graphics listener ready at %s", transport_path_.c_str());
+        return true;
+    }
+
+    bool connectAndAcceptProducer() {
+        sockaddr_un address = {};
+        address.sun_family = AF_UNIX;
+        memcpy(address.sun_path, transport_path_.c_str(), transport_path_.size() + 1);
 
         if (producer_mode_ == ProducerMode::kInternalProbe) {
             transport_sockets_[0] =
@@ -425,7 +509,7 @@ private:
     }
 
     bool initializeEgl() {
-        if (!initializeTransport()) return false;
+        if (!connectAndAcceptProducer()) return false;
         display_ = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (display_ == EGL_NO_DISPLAY || !eglInitialize(display_, nullptr, nullptr)) {
             setStatus("EGL display initialization failed");
@@ -664,6 +748,67 @@ private:
         resize_requested_ = false;
     }
 
+    ExternalFrameResource *findExternalFrameResource(uint64_t resource_id,
+                                                     uint64_t generation) {
+        for (ExternalFrameResource &resource : external_frame_resources_) {
+            if (resource.registered() && resource.resource_id == resource_id &&
+                resource.generation == generation) {
+                return &resource;
+            }
+        }
+        return nullptr;
+    }
+
+    ExternalFrameResource *findFreeExternalFrameResource() {
+        for (ExternalFrameResource &resource : external_frame_resources_) {
+            if (!resource.registered()) return &resource;
+        }
+        return nullptr;
+    }
+
+    void destroyExternalFrameResource(ExternalFrameResource *resource) {
+        if (resource->texture != 0) {
+            glDeleteTextures(1, &resource->texture);
+        }
+        if (resource->image != EGL_NO_IMAGE_KHR && egl_destroy_image_ != nullptr) {
+            egl_destroy_image_(display_, resource->image);
+        }
+        if (resource->buffer != nullptr) {
+            AHardwareBuffer_release(resource->buffer);
+        }
+        *resource = {};
+    }
+
+    void destroyExternalFrameResources() {
+        bool has_resources = false;
+        for (const ExternalFrameResource &resource : external_frame_resources_) {
+            has_resources |= resource.registered();
+        }
+        if (!has_resources) return;
+
+        // EGLImage and texture lifetime is owned by the presenter context. Make
+        // that context current before destroying any registered pool entry.
+        if (presenter_context_ == EGL_NO_CONTEXT ||
+            presenter_pbuffer_ == EGL_NO_SURFACE ||
+            !makePresenterCurrent(presenter_pbuffer_)) {
+            LOGE("could not activate presenter context for external pool teardown");
+            // Do not issue EGL/GL destruction without the owning context. The
+            // resources will be reclaimed with the context; release our AHB refs.
+            for (ExternalFrameResource &resource : external_frame_resources_) {
+                if (resource.buffer != nullptr) {
+                    AHardwareBuffer_release(resource.buffer);
+                }
+                resource = {};
+            }
+        } else {
+            for (ExternalFrameResource &resource : external_frame_resources_) {
+                if (resource.registered()) destroyExternalFrameResource(&resource);
+            }
+        }
+        active_resource_id_.store(0);
+        buffer_generation_.store(0);
+    }
+
     bool importExternalFrameBuffer(const UdroidAhbTransportPacket &registration) {
         pollfd descriptor = {transport_sockets_[1], POLLIN, 0};
         int result;
@@ -696,58 +841,82 @@ private:
             return false;
         }
 
-        destroyFrameBuffer();
-        present_frame_buffer_ = received_buffer;
-        if (!makePresenterCurrent(window_surface_)) {
-            setStatus("presenter EGL context activation failed for external buffer");
-            destroyFrameBuffer();
+        if (findExternalFrameResource(registration.resource_id,
+                                      registration.generation) != nullptr) {
+            AHardwareBuffer_release(received_buffer);
+            ++transport_failures_;
+            setStatus("duplicate external AHardwareBuffer registration rejected");
             return false;
         }
-        EGLClientBuffer client_buffer =
-                egl_get_native_client_buffer_(present_frame_buffer_);
+        ExternalFrameResource *resource = findFreeExternalFrameResource();
+        if (resource == nullptr) {
+            AHardwareBuffer_release(received_buffer);
+            ++transport_failures_;
+            setStatus("external AHardwareBuffer pool limit reached");
+            return false;
+        }
+
+        if (!makePresenterCurrent(window_surface_)) {
+            AHardwareBuffer_release(received_buffer);
+            setStatus("presenter EGL context activation failed for external buffer");
+            return false;
+        }
+        resource->resource_id = registration.resource_id;
+        resource->generation = registration.generation;
+        resource->buffer = received_buffer;
+        resource->width = static_cast<int>(description.width);
+        resource->height = static_cast<int>(description.height);
+
+        EGLClientBuffer client_buffer = egl_get_native_client_buffer_(resource->buffer);
+        if (client_buffer == nullptr) {
+            setStatus("external AHardwareBuffer has no EGL client buffer");
+            destroyExternalFrameResource(resource);
+            return false;
+        }
         const EGLint image_attributes[] = {
             EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
             EGL_NONE,
         };
-        present_image_ = egl_create_image_(display_, EGL_NO_CONTEXT,
-                                          EGL_NATIVE_BUFFER_ANDROID, client_buffer,
-                                          image_attributes);
-        if (present_image_ == EGL_NO_IMAGE_KHR) {
+        resource->image = egl_create_image_(display_, EGL_NO_CONTEXT,
+                                            EGL_NATIVE_BUFFER_ANDROID, client_buffer,
+                                            image_attributes);
+        if (resource->image == EGL_NO_IMAGE_KHR) {
             setStatus("external AHardwareBuffer EGLImage import failed");
-            destroyFrameBuffer();
+            destroyExternalFrameResource(resource);
             return false;
         }
 
-        glGenTextures(1, &present_texture_);
-        glBindTexture(GL_TEXTURE_2D, present_texture_);
+        glGenTextures(1, &resource->texture);
+        glBindTexture(GL_TEXTURE_2D, resource->texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        gl_egl_image_target_texture_(GL_TEXTURE_2D, present_image_);
+        while (glGetError() != GL_NO_ERROR) {}
+        gl_egl_image_target_texture_(GL_TEXTURE_2D, resource->image);
         if (glGetError() != GL_NO_ERROR) {
             setStatus("external AHardwareBuffer texture binding failed");
-            destroyFrameBuffer();
+            destroyExternalFrameResource(resource);
             return false;
         }
 
         active_resource_id_.store(registration.resource_id);
         buffer_generation_.store(registration.generation);
         uint64_t buffer_id = 0;
-        const bool has_buffer_id =
-                getHardwareBufferId(present_frame_buffer_, &buffer_id);
+        const bool has_buffer_id = getHardwareBufferId(resource->buffer, &buffer_id);
+        if (has_buffer_id) {
+            char identity[64];
+            std::snprintf(identity, sizeof(identity), "external id %llu",
+                          static_cast<unsigned long long>(buffer_id));
+            resource->identity = identity;
+        } else {
+            resource->identity = "external (Android < 12)";
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            frame_width_ = static_cast<int>(description.width);
-            frame_height_ = static_cast<int>(description.height);
-            if (has_buffer_id) {
-                char identity[64];
-                std::snprintf(identity, sizeof(identity), "external id %llu",
-                              static_cast<unsigned long long>(buffer_id));
-                buffer_identity_ = identity;
-            } else {
-                buffer_identity_ = "external (Android < 12)";
-            }
+            frame_width_ = resource->width;
+            frame_height_ = resource->height;
+            buffer_identity_ = resource->identity;
             status_ = "external AHardwareBuffer registered; waiting for acquire fence";
         }
         return true;
@@ -977,6 +1146,13 @@ private:
             (descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ||
             (descriptor.revents & POLLIN) == 0) {
             ++transport_failures_;
+            destroyExternalFrameResources();
+            if (transport_sockets_[1] >= 0) {
+                close(transport_sockets_[1]);
+                transport_sockets_[1] = -1;
+            }
+            peer_uid_.store(-1);
+            peer_authenticated_.store(false);
             setStatus("external graphics producer disconnected");
             return false;
         }
@@ -1000,13 +1176,14 @@ private:
             return importExternalFrameBuffer(packet);
         }
 
+        ExternalFrameResource *resource =
+                findExternalFrameResource(packet.resource_id, packet.generation);
         if (packet.kind != UDROID_AHB_ACQUIRE_FENCE || received_fd < 0 ||
-            packet.resource_id != active_resource_id_.load() ||
-            packet.generation != buffer_generation_.load() ||
-            present_frame_buffer_ == nullptr || present_texture_ == 0) {
+            resource == nullptr || resource->buffer == nullptr ||
+            resource->texture == 0) {
             close(received_fd);
             ++transport_failures_;
-            setStatus("external acquire fence does not match active resource");
+            setStatus("external acquire fence does not match a registered resource");
             return false;
         }
 
@@ -1029,9 +1206,18 @@ private:
         glViewport(0, 0, surface_width_, surface_height_);
         glUseProgram(present_program_);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, present_texture_);
+        glBindTexture(GL_TEXTURE_2D, resource->texture);
         glUniform1i(glGetUniformLocation(present_program_, "uFrame"), 0);
         drawQuad();
+
+        active_resource_id_.store(resource->resource_id);
+        buffer_generation_.store(resource->generation);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            frame_width_ = resource->width;
+            frame_height_ = resource->height;
+            buffer_identity_ = resource->identity;
+        }
 
         const int release_fence = exportNativeFence();
         if (release_fence < 0) {
@@ -1195,6 +1381,9 @@ private:
 
     void destroyEgl() {
         destroyWindowSurface();
+        if (producer_mode_ == ProducerMode::kExternalSupervisor) {
+            destroyExternalFrameResources();
+        }
         if (makeProducerCurrent() && pattern_program_ != 0) {
             glDeleteProgram(pattern_program_);
         }
@@ -1217,6 +1406,10 @@ private:
             }
             eglTerminate(display_);
         }
+        destroyTransport();
+    }
+
+    void destroyTransport() {
         for (int &socket_fd : transport_sockets_) {
             if (socket_fd >= 0) {
                 close(socket_fd);
@@ -1227,7 +1420,14 @@ private:
             close(listener_socket_);
             listener_socket_ = -1;
         }
-        if (!transport_path_.empty()) unlink(transport_path_.c_str());
+        if (transport_path_identity_.valid) {
+            TransportPathIdentity current_identity;
+            if (readTransportPathIdentity(transport_path_, &current_identity) &&
+                sameTransportPathIdentity(transport_path_identity_, current_identity)) {
+                unlink(transport_path_.c_str());
+            }
+            transport_path_identity_ = {};
+        }
     }
 
     void run() {
@@ -1336,6 +1536,7 @@ private:
     std::chrono::steady_clock::time_point fps_sample_started_;
     int transport_sockets_[2] = {-1, -1};
     int listener_socket_ = -1;
+    TransportPathIdentity transport_path_identity_;
     std::atomic<int64_t> peer_uid_{-1};
     std::atomic<bool> peer_authenticated_{false};
     uint64_t next_resource_id_ = 0;
@@ -1359,6 +1560,8 @@ private:
     GLuint pattern_program_ = 0;
     GLuint present_program_ = 0;
     int release_fence_fd_ = -1;
+    std::array<ExternalFrameResource, kMaxExternalFrameResources>
+            external_frame_resources_{};
 
     PFNEGLCREATEIMAGEKHRPROC egl_create_image_ = nullptr;
     PFNEGLDESTROYIMAGEKHRPROC egl_destroy_image_ = nullptr;
@@ -1384,12 +1587,16 @@ Java_org_randomcoder_udroid_gfxstream_AhbSurfacePresenterView_nativeCreate(
     if (path == nullptr) return 0;
     std::string transport_path(path);
     env->ReleaseStringUTFChars(socket_path, path);
-    return static_cast<jlong>(
-            reinterpret_cast<intptr_t>(new Presenter(
-                    std::move(transport_path),
-                    external_producer == JNI_TRUE
-                            ? ProducerMode::kExternalSupervisor
-                            : ProducerMode::kInternalProbe)));
+    Presenter *presenter = new Presenter(
+            std::move(transport_path),
+            external_producer == JNI_TRUE
+                    ? ProducerMode::kExternalSupervisor
+                    : ProducerMode::kInternalProbe);
+    if (!presenter->start()) {
+        delete presenter;
+        return 0;
+    }
+    return static_cast<jlong>(reinterpret_cast<intptr_t>(presenter));
 }
 
 extern "C" JNIEXPORT void JNICALL

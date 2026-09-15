@@ -7,6 +7,8 @@ data class GfxstreamGuestRuntime(
     val directory: File,
     val launcher: File,
     val version: String,
+    val protocolHostCommit: String = "",
+    val mesaCommit: String = "",
 ) {
     companion object {
         const val GUEST_DIRECTORY = "/opt/udroid/gfxstream"
@@ -16,7 +18,7 @@ data class GfxstreamGuestRuntime(
 
 /** Installs the matched glibc gfxstream Vulkan ICD used by opt-in PRoot launches. */
 object GfxstreamGuestRuntimeInstaller {
-    internal const val RUNTIME_VERSION = "7-fb349a2d3b5"
+    internal const val RUNTIME_VERSION = "8-71a3fb15925"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "gfxstream guest",
@@ -32,14 +34,17 @@ object GfxstreamGuestRuntimeInstaller {
                     "share/vulkan/icd.d/gfxstream_icd.json",
                 ),
             executables = setOf("bin/udroid-gfxstream-run"),
+            metadataKeys = setOf("protocol_host_commit", "mesa_commit"),
         )
 
     fun install(context: Context): GfxstreamGuestRuntime {
-        val directory = VerifiedRuntimeAssetInstaller.install(context, bundle)
+        val installation = VerifiedRuntimeAssetInstaller.installWithMetadata(context, bundle)
         return GfxstreamGuestRuntime(
-            directory = directory,
-            launcher = File(directory, "bin/udroid-gfxstream-run"),
+            directory = installation.directory,
+            launcher = File(installation.directory, "bin/udroid-gfxstream-run"),
             version = RUNTIME_VERSION,
+            protocolHostCommit = installation.metadata.getValue("protocol_host_commit"),
+            mesaCommit = installation.metadata.getValue("mesa_commit"),
         )
     }
 }

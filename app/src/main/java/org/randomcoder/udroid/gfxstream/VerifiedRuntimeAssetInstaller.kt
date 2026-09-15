@@ -2,6 +2,7 @@ package org.randomcoder.udroid.gfxstream
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -15,18 +16,31 @@ internal data class VerifiedRuntimeAssetBundle(
     val version: String,
     val entries: List<String>,
     val executables: Set<String> = emptySet(),
+    val metadataKeys: Set<String> = emptySet(),
     val supportedAbis: Set<String> = setOf("arm64-v8a"),
+)
+
+internal data class VerifiedRuntimeInstallation(
+    val directory: File,
+    val metadata: Map<String, String>,
 )
 
 /** Atomically installs an immutable, digest-verified runtime from signed APK assets. */
 internal object VerifiedRuntimeAssetInstaller {
     private const val MANIFEST_ENTRY = "MANIFEST.properties"
+    private const val LOG_TAG = "uDroid-Runtime"
     private val digestPattern = Regex("[0-9a-f]{64}")
+    private val commitPattern = Regex("[0-9a-f]{40}")
 
     fun install(
         context: Context,
         bundle: VerifiedRuntimeAssetBundle,
-    ): File {
+    ): File = installWithMetadata(context, bundle).directory
+
+    fun installWithMetadata(
+        context: Context,
+        bundle: VerifiedRuntimeAssetBundle,
+    ): VerifiedRuntimeInstallation {
         val abi = Build.SUPPORTED_ABIS.firstOrNull { it in bundle.supportedAbis }
         checkNotNull(abi) {
             "${bundle.name} does not support ${Build.SUPPORTED_ABIS.joinToString()}"
@@ -37,7 +51,15 @@ internal object VerifiedRuntimeAssetInstaller {
 
         val runtimeParent = File(context.filesDir, "runtime").apply { mkdirs() }
         val destination = File(runtimeParent, "${bundle.destinationPrefix}-${bundle.version}-$abi")
-        if (!isComplete(destination, bundle, abi, packagedManifest)) {
+        val verificationStarted = System.nanoTime()
+        val complete = isComplete(destination, bundle, abi, packagedManifest)
+        val verificationMillis = (System.nanoTime() - verificationStarted) / 1_000_000
+        Log.d(
+            LOG_TAG,
+            "Verified ${bundle.name} reuse in ${verificationMillis}ms " +
+                "(${bundle.entries.size} entries, complete=$complete)",
+        )
+        if (!complete) {
             val staging =
                 File(runtimeParent, ".${bundle.destinationPrefix}-${UUID.randomUUID()}.staging")
                     .apply {
@@ -87,7 +109,10 @@ internal object VerifiedRuntimeAssetInstaller {
                 if (staging.exists()) staging.deleteRecursively()
             }
         }
-        return destination
+        return VerifiedRuntimeInstallation(
+            directory = destination,
+            metadata = bundle.metadataKeys.associateWith(packagedManifest::getProperty),
+        )
     }
 
     internal fun validateManifest(
@@ -108,9 +133,14 @@ internal object VerifiedRuntimeAssetInstaller {
                 "Missing ${bundle.name} digest for $entry"
             }
         }
+        bundle.metadataKeys.forEach { key ->
+            check(manifest.getProperty(key)?.matches(commitPattern) == true) {
+                "Missing or malformed ${bundle.name} metadata: $key"
+            }
+        }
     }
 
-    private fun isComplete(
+    internal fun isComplete(
         directory: File,
         bundle: VerifiedRuntimeAssetBundle,
         abi: String,
@@ -127,7 +157,11 @@ internal object VerifiedRuntimeAssetInstaller {
                 manifest.getProperty("$entry.sha256") ==
                     packagedManifest.getProperty("$entry.sha256")
             } &&
-            bundle.entries.all { File(directory, it).isFile } &&
+            bundle.entries.all { entry ->
+                val installedEntry = File(directory, entry)
+                installedEntry.isFile &&
+                    installedEntry.sha256() == packagedManifest.getProperty("$entry.sha256")
+            } &&
             bundle.executables.all { File(directory, it).canExecute() }
     }
 

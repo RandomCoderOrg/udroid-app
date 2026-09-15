@@ -1,0 +1,20 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -20,6 +20,17 @@ find_package(Python3 REQUIRED)
+ find_package(BISON REQUIRED)
+ 
+ function(target_apply_patch patch_target d p)
++    # uDroid: later native patches extend xserver.patch, so its reverse dry-run
++    # is no longer a reliable idempotence check. The semantic marker remains
++    # stable across those extensions and across Android ABI configurations.
++    if(p MATCHES "/patches/xserver\\.patch$" AND
++       EXISTS "${d}/present/present_scmd.c")
++        file(READ "${d}/present/present_scmd.c" xserver_present_source)
++        string(FIND "${xserver_present_source}" "lorieRecheckGpuCopies(void)" xserver_patch_marker)
++        if(NOT xserver_patch_marker EQUAL -1)
++            return()
++        endif()
++    endif()
+     execute_process(COMMAND "bash" "-c" "patch -p1 -d ${d} -i ${p} -R --dry-run > /dev/null 2>&1 || patch -p1 -N -d ${d} -i ${p} -r -")
+ endfunction()
+ 

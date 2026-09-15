@@ -40,6 +40,28 @@ class DesktopEnvironmentScannerTest {
     }
 
     @Test
+    fun `discovers display manager XSession entries`() {
+        val rootfs = Files.createTempDirectory("udroid-plasma").toFile()
+        val sessions = rootfs.resolve("usr/share/xsessions").apply { mkdirs() }
+        sessions.resolve("plasmax11.desktop").writeText(
+            """
+            [Desktop Entry]
+            Type=XSession
+            Exec=/usr/bin/startplasma-x11
+            DesktopNames=KDE
+            Name=Plasma (X11)
+            """.trimIndent(),
+        )
+
+        val result = DesktopEnvironmentScanner().scan(rootfs)
+
+        assertEquals(1, result.size)
+        assertEquals("plasmax11", result.single().id)
+        assertEquals(listOf("/usr/bin/startplasma-x11"), result.single().command)
+        assertEquals(DesktopEnvironmentKind.PLASMA, result.single().kind)
+    }
+
+    @Test
     fun `ignores malformed session commands`() {
         val rootfs = Files.createTempDirectory("udroid-desktops").toFile()
         val sessions = rootfs.resolve("usr/share/xsessions").apply { mkdirs() }

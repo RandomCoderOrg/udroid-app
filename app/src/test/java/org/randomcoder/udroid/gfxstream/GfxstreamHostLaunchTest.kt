@@ -2,6 +2,7 @@ package org.randomcoder.udroid.gfxstream
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class GfxstreamHostLaunchTest {
@@ -45,5 +46,6 @@ class GfxstreamHostLaunchTest {
 
         assertEquals("/system/lib64/libvulkan.so", environment["ANDROID_EMU_VK_LOADER_PATH"])
         assertEquals("1", environment["ANDROID_EMUGL_VERBOSE"])
+        assertFalse(environment.containsKey("ANDROID_EMU_VK_RAW_DMABUF"))
     }
 }
