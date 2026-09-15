@@ -183,12 +183,26 @@ val verifyGfxstreamRuntimeAssets by
                 return false
             }
 
-            listOf("gfxstream-host", "gfxstream-guest").forEach { bundleName ->
-                val bundle = runtimeRoot.resolve(bundleName)
-                val manifest =
+            val bundleNames = listOf("gfxstream-host", "gfxstream-guest")
+            val manifests =
+                bundleNames.associateWith { bundleName ->
+                    val bundle = runtimeRoot.resolve(bundleName)
                     Properties().apply {
                         bundle.resolve("MANIFEST.properties").inputStream().use(::load)
                     }
+                }
+            val hostProtocolGeneration = manifests.getValue("gfxstream-host").getProperty("protocol_generation")
+            val guestProtocolGeneration = manifests.getValue("gfxstream-guest").getProperty("protocol_generation")
+            check(hostProtocolGeneration == "2") {
+                "gfxstream host protocol_generation must be 2"
+            }
+            check(guestProtocolGeneration == hostProtocolGeneration) {
+                "gfxstream host/guest protocol_generation mismatch"
+            }
+
+            bundleNames.forEach { bundleName ->
+                val bundle = runtimeRoot.resolve(bundleName)
+                val manifest = manifests.getValue(bundleName)
                 manifest.stringPropertyNames()
                     .filter { it.endsWith(".sha256") }
                     .forEach { digestProperty ->

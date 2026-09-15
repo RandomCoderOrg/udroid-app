@@ -62,6 +62,7 @@ import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
+import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
@@ -884,12 +885,14 @@ private fun DesktopSettingsPanel(
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
             )
-            Divider(color = UdroidLine)
-            GraphicsProfileSelector(
-                selected = configuration.graphicsProfile,
-                desktopRunning = desktopRunning,
-                onSelected = onGraphicsProfileChanged,
-            )
+            if (GFXSTREAM_PROFILE_ENABLED) {
+                Divider(color = UdroidLine)
+                GraphicsProfileSelector(
+                    selected = configuration.graphicsProfile,
+                    desktopRunning = desktopRunning,
+                    onSelected = onGraphicsProfileChanged,
+                )
+            }
         }
     }
 }

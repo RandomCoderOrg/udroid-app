@@ -45,12 +45,15 @@ class GfxstreamPresenterProbeActivity : Activity() {
         super.onCreate(savedInstanceState)
         val externalProducer = intent.getBooleanExtra(EXTRA_EXTERNAL_PRODUCER, false)
         val contractTrace = intent.getBooleanExtra(EXTRA_CONTRACT_TRACE, false)
+        val directSurfaceControl =
+            intent.getBooleanExtra(EXTRA_DIRECT_SURFACE_CONTROL, false)
         val resourceCycleFrames = intent.getIntExtra(EXTRA_RESOURCE_CYCLE_FRAMES, 0)
         presenter =
             AhbSurfacePresenterView(
                 this,
                 externalProducer = externalProducer,
                 contractTrace = contractTrace,
+                directSurfaceControl = directSurfaceControl,
                 resourceCycleFrames = resourceCycleFrames,
             )
         if (externalProducer) {
@@ -125,6 +128,7 @@ class GfxstreamPresenterProbeActivity : Activity() {
     companion object {
         const val EXTRA_EXTERNAL_PRODUCER = "externalProducer"
         const val EXTRA_CONTRACT_TRACE = "contractTrace"
+        const val EXTRA_DIRECT_SURFACE_CONTROL = "directSurfaceControl"
         const val EXTRA_RESOURCE_CYCLE_FRAMES = "resourceCycleFrames"
         const val EXTRA_X11_SERVER = "x11Server"
         const val EXTRA_ROOTFS_NAME = "rootfsName"

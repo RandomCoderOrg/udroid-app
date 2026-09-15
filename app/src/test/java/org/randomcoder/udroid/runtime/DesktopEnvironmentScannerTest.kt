@@ -156,4 +156,14 @@ class DesktopEnvironmentScannerTest {
             DesktopGraphicsProfile.fromStorage("future-driver"),
         )
     }
+
+    @Test
+    fun `inactive gfxstream profile safely falls back to standard`() {
+        assertEquals(
+            DesktopGraphicsProfile.STANDARD,
+            DesktopGraphicsProfile.fromStorage(
+                DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL.storageValue,
+            ),
+        )
+    }
 }

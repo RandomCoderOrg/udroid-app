@@ -31,6 +31,8 @@ data class DesktopEnvironment(
     val kind: DesktopEnvironmentKind,
 )
 
+internal const val GFXSTREAM_PROFILE_ENABLED = false
+
 enum class DesktopGraphicsProfile(
     val storageValue: String,
 ) {
@@ -40,7 +42,10 @@ enum class DesktopGraphicsProfile(
 
     companion object {
         fun fromStorage(value: String?): DesktopGraphicsProfile =
-            entries.firstOrNull { it.storageValue == value } ?: STANDARD
+            entries.firstOrNull {
+                it.storageValue == value &&
+                    (it != GFXSTREAM_EXPERIMENTAL || GFXSTREAM_PROFILE_ENABLED)
+            } ?: STANDARD
     }
 }
 

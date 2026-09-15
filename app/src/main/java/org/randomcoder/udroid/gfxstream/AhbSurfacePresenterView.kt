@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.gfxstream
 
 import android.content.Context
+import android.os.Build
 import android.util.AttributeSet
 import android.view.Choreographer
 import android.view.Surface
@@ -24,8 +25,10 @@ class AhbSurfacePresenterView
         attrs: AttributeSet? = null,
         externalProducer: Boolean = false,
         contractTrace: Boolean = false,
+        directSurfaceControl: Boolean = false,
         resourceCycleFrames: Int = 0,
     ) : SurfaceView(context, attrs), SurfaceHolder.Callback, AutoCloseable {
+        private val usesExternalProducer = externalProducer
         private val transportSocket =
             File(context.noBackupFilesDir, "graphics/ahb-presenter.sock").also {
                 it.parentFile?.let { directory ->
@@ -39,6 +42,7 @@ class AhbSurfacePresenterView
                 transportSocket.absolutePath,
                 externalProducer,
                 contractTrace,
+                directSurfaceControl,
                 resourceCycleFrames.coerceAtLeast(0),
             )
         private var frameCallbackPosted = false
@@ -59,6 +63,13 @@ class AhbSurfacePresenterView
         }
 
         override fun surfaceCreated(holder: SurfaceHolder) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // The surface must be valid before declaring its cadence.
+                holder.surface.setFrameRate(
+                    60f,
+                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                )
+            }
             attach(holder.surface)
             startFrameCallbacks()
         }
@@ -105,7 +116,7 @@ class AhbSurfacePresenterView
         }
 
         private fun startFrameCallbacks() {
-            if (frameCallbackPosted || nativeHandle == 0L) return
+            if (usesExternalProducer || frameCallbackPosted || nativeHandle == 0L) return
             frameCallbackPosted = true
             Choreographer.getInstance().postFrameCallback(frameCallback)
         }
@@ -120,6 +131,7 @@ class AhbSurfacePresenterView
             socketPath: String,
             externalProducer: Boolean,
             contractTrace: Boolean,
+            directSurfaceControl: Boolean,
             resourceCycleFrames: Int,
         ): Long
 
