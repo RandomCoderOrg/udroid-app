@@ -7,6 +7,8 @@ data class GfxstreamHostRuntime(
     val executable: File,
     val libraryDirectory: File,
     val version: String,
+    val gfxstreamCommit: String = "",
+    val mesaProtocolCommit: String = "",
 )
 
 /** Installs the optional Android-host Kumquat runtime from signed APK assets. */
@@ -20,14 +22,17 @@ object GfxstreamHostRuntimeInstaller {
             version = RUNTIME_VERSION,
             entries = listOf("bin/kumquat", "lib/libc++_shared.so"),
             executables = setOf("bin/kumquat"),
+            metadataKeys = setOf("gfxstream_commit", "mesa_protocol_commit"),
         )
 
     fun install(context: Context): GfxstreamHostRuntime {
-        val directory = VerifiedRuntimeAssetInstaller.install(context, bundle)
+        val installation = VerifiedRuntimeAssetInstaller.installWithMetadata(context, bundle)
         return GfxstreamHostRuntime(
-            executable = File(directory, "bin/kumquat"),
-            libraryDirectory = File(directory, "lib"),
+            executable = File(installation.directory, "bin/kumquat"),
+            libraryDirectory = File(installation.directory, "lib"),
             version = RUNTIME_VERSION,
+            gfxstreamCommit = installation.metadata.getValue("gfxstream_commit"),
+            mesaProtocolCommit = installation.metadata.getValue("mesa_protocol_commit"),
         )
     }
 }
