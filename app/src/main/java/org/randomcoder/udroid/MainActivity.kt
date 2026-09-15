@@ -65,6 +65,7 @@ import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
+import org.randomcoder.udroid.ui.UdroidDarkCanvas
 import org.randomcoder.udroid.ui.UdroidDestination
 import org.randomcoder.udroid.ui.UdroidTerminal
 import org.randomcoder.udroid.ui.UdroidTheme
@@ -379,19 +380,21 @@ class MainActivity : ComponentActivity() {
         val terminal =
             destination == UdroidDestination.TERMINAL ||
                 destination == UdroidDestination.DESKTOP
-        val scrim = if (terminal) UdroidTerminal.toArgb() else UdroidCanvas.toArgb()
+        val terminalScrim = UdroidTerminal.toArgb()
+        val lightScrim = UdroidCanvas.toArgb()
+        val darkScrim = UdroidDarkCanvas.toArgb()
         enableEdgeToEdge(
             statusBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(scrim)
+                    SystemBarStyle.dark(terminalScrim)
                 } else {
-                    SystemBarStyle.light(scrim, scrim)
+                    SystemBarStyle.auto(lightScrim, darkScrim)
                 },
             navigationBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(scrim)
+                    SystemBarStyle.dark(terminalScrim)
                 } else {
-                    SystemBarStyle.light(scrim, scrim)
+                    SystemBarStyle.auto(lightScrim, darkScrim)
                 },
         )
     }
@@ -831,7 +834,7 @@ class MainActivity : ComponentActivity() {
                     desktopConfiguration = configuration
                     desktopScanMessage =
                         if (environments.isEmpty()) {
-                            "No X11 session was found in /usr/share/xsessions"
+                            "Install a desktop environment, then scan again"
                         } else {
                             "${environments.size} desktop session" +
                                 if (environments.size == 1) " detected" else "s detected"

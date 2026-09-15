@@ -10,11 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -158,7 +158,7 @@ private fun DesktopControlBar(
     ) {
         IconButton(onClick = onExit) {
             Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "Close desktop",
                 tint = UdroidTerminalText,
             )
@@ -183,21 +183,21 @@ private fun DesktopControlBar(
         }
         IconButton(onClick = onKeyboard) {
             Icon(
-                imageVector = Icons.Outlined.Keyboard,
+                imageVector = Icons.Rounded.Keyboard,
                 contentDescription = "Show keyboard",
                 tint = UdroidTerminalText,
             )
         }
         IconButton(onClick = onSettings) {
             Icon(
-                imageVector = Icons.Outlined.Settings,
+                imageVector = Icons.Rounded.Settings,
                 contentDescription = "Desktop settings",
                 tint = UdroidTerminalText,
             )
         }
         IconButton(onClick = onCollapse) {
             Icon(
-                imageVector = Icons.Outlined.KeyboardArrowUp,
+                imageVector = Icons.Rounded.KeyboardArrowUp,
                 contentDescription = "Collapse desktop controls",
                 tint = UdroidTerminalMuted,
             )
@@ -231,7 +231,7 @@ private fun CollapsedDesktopControlBar(
             modifier = Modifier.height(32.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.KeyboardArrowDown,
+                imageVector = Icons.Rounded.KeyboardArrowDown,
                 contentDescription = "Show desktop controls",
                 tint = UdroidTerminalMuted,
             )

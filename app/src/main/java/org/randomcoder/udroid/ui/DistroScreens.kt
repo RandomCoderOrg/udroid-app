@@ -1,6 +1,11 @@
 package org.randomcoder.udroid.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,9 +24,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +51,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.catalog.LinuxDistribution
@@ -79,9 +85,9 @@ fun DistroCataloguePage(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator()
                     Spacer(Modifier.height(12.dp))
-                    Text("Finding Linux images")
+                    Text("Loading Linux systems")
                     Text(
-                        "Checking uDroid and proot-distro sources",
+                        "From uDroid and proot-distro",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -100,11 +106,11 @@ fun DistroCataloguePage(
                 Surface(
                     color = UdroidSurface,
                     border = BorderStroke(1.dp, UdroidLine),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            "Couldn’t load Linux images",
+                            "Couldn’t load Linux systems",
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Spacer(Modifier.height(6.dp))
@@ -112,7 +118,7 @@ fun DistroCataloguePage(
                         Spacer(Modifier.height(16.dp))
                         Button(
                             onClick = onRetry,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Try again")
                         }
@@ -203,10 +209,10 @@ fun DistroCataloguePage(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search Ubuntu, Debian, Fedora…") },
+                        placeholder = { Text("Search Linux systems") },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Outlined.Search,
+                                imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
                             )
                         },
@@ -217,14 +223,14 @@ fun DistroCataloguePage(
                                 {
                                     IconButton(onClick = { searchQuery = "" }) {
                                         Icon(
-                                            imageVector = Icons.Outlined.Close,
+                                            imageVector = Icons.Rounded.Close,
                                             contentDescription = "Clear search",
                                         )
                                     }
                                 }
                             },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                     )
                 }
 
@@ -247,17 +253,16 @@ fun DistroCataloguePage(
                     item(key = "empty-search") {
                         Surface(
                             color = UdroidRaised,
-                            border = BorderStroke(1.dp, UdroidLine),
-                            shape = RoundedCornerShape(11.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    "No matching Linux system",
+                                    "No systems found",
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Try a distro, release, desktop, or architecture.",
+                                    "Search by distribution, release, desktop, or architecture",
                                     color = UdroidMuted,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
@@ -301,7 +306,7 @@ fun DistroCataloguePage(
                 ) {
                     item(key = "oci-source") {
                         UdroidSectionLabel(
-                            text = "Official container images",
+                            text = "More official images",
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
@@ -311,8 +316,8 @@ fun DistroCataloguePage(
                         item(key = "oci-loading") {
                             InlineCatalogueStatus(
                                 loading = true,
-                                title = "Finding compatible official images",
-                                detail = "This does not block the standard Linux images above.",
+                                title = "Finding more Linux systems",
+                                detail = "Systems listed above are still available",
                             )
                         }
                     }
@@ -321,7 +326,7 @@ fun DistroCataloguePage(
                         item(key = "oci-failed") {
                             InlineCatalogueStatus(
                                 loading = false,
-                                title = "Official images are unavailable",
+                                title = "Can’t load more Linux systems",
                                 detail = ociState.message,
                                 actionLabel = "Retry",
                                 onAction = onRetry,
@@ -369,15 +374,12 @@ private fun DistroCard(
                 .clickable(onClick = onSelect),
         color = UdroidRaised,
         border =
-            BorderStroke(
-                1.dp,
-                when {
-                    active -> UdroidForest.copy(alpha = 0.45f)
-                    distro.recommended && !installed -> Color(0xFFF5C8B3)
-                    else -> UdroidLine
-                },
-            ),
-        shape = RoundedCornerShape(11.dp),
+            when {
+                active -> BorderStroke(1.dp, UdroidForest.copy(alpha = 0.45f))
+                distro.recommended && !installed -> BorderStroke(1.dp, UdroidUbuntu.copy(alpha = 0.55f))
+                else -> null
+            },
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -429,7 +431,7 @@ private fun DistroCard(
                     Spacer(Modifier.size(2.dp))
                 }
                 Icon(
-                    imageVector = Icons.Outlined.ChevronRight,
+                    imageVector = Icons.Rounded.ChevronRight,
                     contentDescription =
                         if (installed) {
                             "Open ${distro.releaseName}"
@@ -457,8 +459,7 @@ private fun OciRepositoryCard(
                 .fillMaxWidth()
                 .clickable(onClick = onSelect),
         color = UdroidRaised,
-        border = BorderStroke(1.dp, UdroidLine),
-        shape = RoundedCornerShape(11.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -495,7 +496,7 @@ private fun OciRepositoryCard(
                 )
             }
             Icon(
-                imageVector = Icons.Outlined.ChevronRight,
+                imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = "Choose a $title version",
                 tint = UdroidFaint,
             )
@@ -519,7 +520,7 @@ private fun OciRepositoryMark(repository: OciHubRepository) {
         Surface(
             modifier = Modifier.size(42.dp),
             color = UdroidWarm,
-            shape = RoundedCornerShape(11.dp),
+            shape = MaterialTheme.shapes.medium,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
@@ -543,8 +544,7 @@ private fun InlineCatalogueStatus(
 ) {
     Surface(
         color = UdroidRaised,
-        border = BorderStroke(1.dp, UdroidLine),
-        shape = RoundedCornerShape(11.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -572,7 +572,7 @@ private fun InlineCatalogueStatus(
                 Spacer(Modifier.size(8.dp))
                 Button(
                     onClick = onAction,
-                    shape = RoundedCornerShape(9.dp),
+                    shape = MaterialTheme.shapes.medium,
                 ) {
                     Text(it)
                 }
@@ -633,7 +633,7 @@ fun OciTagCataloguePage(
                 modifier =
                     Modifier
                         .padding(top = 8.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(MaterialTheme.shapes.small)
                         .clickable(onClick = onBack)
                         .padding(vertical = 8.dp, horizontal = 2.dp),
                 color = UdroidForest,
@@ -646,7 +646,7 @@ fun OciTagCataloguePage(
                 Column(modifier = Modifier.padding(start = 12.dp)) {
                     Text(title, style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        "Official image · choose a compatible version",
+                        "Choose a version that works on this device",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -661,8 +661,8 @@ fun OciTagCataloguePage(
                 item(key = "loading") {
                     InlineCatalogueStatus(
                         loading = true,
-                        title = "Loading versions",
-                        detail = "Checking this phone’s architecture against available tags.",
+                        title = "Finding compatible versions",
+                        detail = "Checking which versions work on this device",
                     )
                 }
             }
@@ -671,7 +671,7 @@ fun OciTagCataloguePage(
                 item(key = "failed") {
                     InlineCatalogueStatus(
                         loading = false,
-                        title = "Versions are unavailable",
+                        title = "Couldn’t load versions",
                         detail = state.message,
                         actionLabel = "Retry",
                         onAction = onRetry,
@@ -688,7 +688,7 @@ fun OciTagCataloguePage(
                         placeholder = { Text("Search versions") },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Outlined.Search,
+                                imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
                             )
                         },
@@ -699,14 +699,14 @@ fun OciTagCataloguePage(
                                 {
                                     IconButton(onClick = { searchQuery = "" }) {
                                         Icon(
-                                            imageVector = Icons.Outlined.Close,
+                                            imageVector = Icons.Rounded.Close,
                                             contentDescription = "Clear version search",
                                         )
                                     }
                                 }
                             },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                     )
                 }
                 item(key = "tag-count") {
@@ -725,7 +725,7 @@ fun OciTagCataloguePage(
                         InlineCatalogueStatus(
                             loading = false,
                             title = "No matching version",
-                            detail = "Try a release number, codename, or latest.",
+                            detail = "Search by release number or name",
                         )
                     }
                 } else {
@@ -764,8 +764,7 @@ private fun OciTagCard(
                 .fillMaxWidth()
                 .clickable(onClick = onSelect),
         color = UdroidRaised,
-        border = BorderStroke(1.dp, UdroidLine),
-        shape = RoundedCornerShape(11.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -800,7 +799,7 @@ private fun OciTagCard(
                 Spacer(Modifier.size(2.dp))
             }
             Icon(
-                imageVector = Icons.Outlined.ChevronRight,
+                imageVector = Icons.Rounded.ChevronRight,
                 contentDescription = if (installed) "Open ${tag.tag}" else "Review ${tag.tag}",
                 tint = if (installed) UdroidForest else UdroidFaint,
             )
@@ -855,6 +854,10 @@ fun InstallExperiencePage(
     onRetryDownload: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    val spatialMotion = UdroidMotion.defaultSpatial<IntOffset>()
+    val effectsMotion = UdroidMotion.defaultEffects<Float>()
+    val fastEffectsMotion = UdroidMotion.fastEffects<Float>()
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier =
@@ -876,7 +879,7 @@ fun InstallExperiencePage(
                         },
                         modifier =
                             Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(MaterialTheme.shapes.small)
                                 .clickable(onClick = onBack)
                                 .padding(vertical = 8.dp, horizontal = 2.dp),
                         color = UdroidForest,
@@ -894,7 +897,7 @@ fun InstallExperiencePage(
                     } ?: Surface(
                         modifier = Modifier.size(48.dp),
                         color = UdroidWarm,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -922,7 +925,7 @@ fun InstallExperiencePage(
                 item {
                     Surface(
                         color = UdroidWarm,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = MaterialTheme.shapes.medium,
                     ) {
                         Row(
                             modifier =
@@ -933,12 +936,12 @@ fun InstallExperiencePage(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "PREVIEW",
+                                "Preview",
                                 color = UdroidUbuntu,
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Text(
-                                "  No rootfs will be downloaded",
+                                "  Nothing will be downloaded",
                                 color = UdroidInk,
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -952,7 +955,7 @@ fun InstallExperiencePage(
                     progress.stage == InstallStage.READY -> {
                         Button(
                             onClick = onStartDownload,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Download image")
                         }
@@ -963,7 +966,7 @@ fun InstallExperiencePage(
                             "Pause installation",
                             modifier =
                                 Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(MaterialTheme.shapes.small)
                                     .clickable(onClick = onPauseDownload)
                                     .padding(vertical = 9.dp, horizontal = 2.dp),
                             color = UdroidForest,
@@ -974,7 +977,7 @@ fun InstallExperiencePage(
                     progress.stage == InstallStage.PAUSED -> {
                         Button(
                             onClick = onRetryDownload,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Resume installation")
                         }
@@ -983,7 +986,7 @@ fun InstallExperiencePage(
                     progress.stage == InstallStage.FAILED -> {
                         Button(
                             onClick = onRetryDownload,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Try again")
                         }
@@ -992,7 +995,7 @@ fun InstallExperiencePage(
                     progress.stage == InstallStage.ARCHIVE_READY -> {
                         Button(
                             onClick = onRetryDownload,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Install verified image")
                         }
@@ -1001,7 +1004,7 @@ fun InstallExperiencePage(
                     progress.stage == InstallStage.COMPLETE -> {
                         Button(
                             onClick = onOpenTerminal,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
                             Text("Open terminal")
                         }
@@ -1013,7 +1016,7 @@ fun InstallExperiencePage(
                 Surface(
                     color = UdroidSurface,
                     border = BorderStroke(1.dp, UdroidLine),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.large,
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -1046,7 +1049,7 @@ fun InstallExperiencePage(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(4.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
+                                    .clip(MaterialTheme.shapes.extraSmall),
                             color =
                                 if (progress.stage == InstallStage.COMPLETE) {
                                     UdroidForest
@@ -1063,7 +1066,7 @@ fun InstallExperiencePage(
                         )
                         Spacer(Modifier.height(5.dp))
                         Text(
-                            "•  ${progress.currentDetail}",
+                            progress.currentDetail,
                             color = UdroidInk,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -1079,7 +1082,7 @@ fun InstallExperiencePage(
                             .clickable(onClick = onToggleTerminal),
                     color = if (showTerminal) UdroidSoftGreen else Color.Transparent,
                     border = BorderStroke(1.dp, UdroidLine),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium,
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
@@ -1110,17 +1113,17 @@ fun InstallExperiencePage(
                 Text(
                     when {
                         progress.stage == InstallStage.READY ->
-                            "Nothing downloads until you press Download image."
+                            "The download starts only when you choose Download image"
                         progress.cancellable ->
-                            "You can leave this screen. The foreground service keeps installing."
+                            "You can leave this screen while installation continues"
                         progress.stage == InstallStage.PAUSED ->
-                            "Partial downloads and verified data remain available for retry."
+                            "Your download is saved and ready to resume"
                         progress.stage == InstallStage.ARCHIVE_READY ->
-                            "The archive is cached safely while rootfs setup begins."
+                            "The verified image is saved while installation continues"
                         progress.stage == InstallStage.COMPLETE ->
-                            "Downloaded image data was removed after the rootfs passed its checks."
+                            "The downloaded image was removed after setup completed"
                         else ->
-                            "Open the terminal for exact operation details."
+                            "Open the terminal for technical details"
                     },
                     color = UdroidMuted,
                     style = MaterialTheme.typography.bodySmall,
@@ -1129,16 +1132,29 @@ fun InstallExperiencePage(
             }
         }
 
-        if (showTerminal) {
+        AnimatedVisibility(
+            visible = showTerminal,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter =
+                slideInVertically(
+                    animationSpec = spatialMotion,
+                    initialOffsetY = { height -> height },
+                ) + fadeIn(animationSpec = effectsMotion),
+            exit =
+                slideOutVertically(
+                    animationSpec = spatialMotion,
+                    targetOffsetY = { height -> height },
+                ) + fadeOut(animationSpec = fastEffectsMotion),
+            label = "install-log-sheet",
+        ) {
             Surface(
                 modifier =
                     Modifier
-                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .fillMaxHeight(0.50f),
                 color = UdroidTerminal,
-                shadowElevation = 18.dp,
-                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                shadowElevation = 1.dp,
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             ) {
                 Column {
                     Row(
@@ -1152,14 +1168,14 @@ fun InstallExperiencePage(
                     ) {
                         Column {
                             Text(
-                                "TERMINAL · INSTALL",
+                                "Install log",
                                 color = UdroidTerminalGreen,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             Text(
                                 progress.sourceIdentity,
-                                color = Color(0xFF8EA99A),
+                                color = UdroidTerminalMuted,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.labelSmall,
                             )
@@ -1175,7 +1191,7 @@ fun InstallExperiencePage(
                             Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
-                                .background(Color(0xFF24342B)),
+                                .background(UdroidTerminalLine),
                     )
                     LazyColumn(
                         modifier =
@@ -1191,7 +1207,7 @@ fun InstallExperiencePage(
                                     if (line.startsWith("[ok]") || line.startsWith("[complete]")) {
                                         UdroidTerminalGreen
                                     } else {
-                                        Color(0xFFD8E2DC)
+                                        UdroidTerminalText
                                     },
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
@@ -1226,11 +1242,11 @@ private val InstallStage.stepLabel: String
                 InstallStage.PAUSED -> 0
             }
         return when (this) {
-            InstallStage.READY -> "DOWNLOAD PLAN"
-            InstallStage.ARCHIVE_READY -> "STEP 3 OF 5"
-            InstallStage.PAUSED -> "INSTALLATION PAUSED"
-            InstallStage.FAILED -> "INSTALLATION STOPPED"
-            else -> "STEP $index OF 5"
+            InstallStage.READY -> "Ready to download"
+            InstallStage.ARCHIVE_READY -> "Step 3 of 5"
+            InstallStage.PAUSED -> "Installation paused"
+            InstallStage.FAILED -> "Installation stopped"
+            else -> "Step $index of 5"
         }
     }
 
@@ -1271,7 +1287,7 @@ private fun InstallStageRail(progress: InstallProgress) {
                     Modifier
                         .weight(1f)
                         .height(5.dp)
-                        .clip(RoundedCornerShape(5.dp))
+                        .clip(MaterialTheme.shapes.extraSmall)
                         .background(if (active) UdroidForest else UdroidLine),
             )
         }

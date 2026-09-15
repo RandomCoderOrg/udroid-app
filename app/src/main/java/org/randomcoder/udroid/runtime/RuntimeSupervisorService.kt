@@ -1386,10 +1386,10 @@ class RuntimeSupervisorService : Service() {
             .createNotificationChannel(
                 NotificationChannel(
                     NOTIFICATION_CHANNEL,
-                    "uDroid runtime",
+                    "Linux sessions",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = "Linux runtime and desktop lifecycle"
+                    description = "Terminal, desktop, and audio status"
                 },
             )
     }
@@ -1474,7 +1474,7 @@ class RuntimeSupervisorService : Service() {
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("uDroid Linux")
+            .setContentTitle("Linux session")
             .setContentText(text)
             .setContentIntent(openIntent)
             .setOngoing(true)

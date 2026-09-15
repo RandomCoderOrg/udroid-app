@@ -24,9 +24,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.StopCircle
-import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.StopCircle
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -126,7 +126,7 @@ private fun TerminalSessionBar(
     ) {
         IconButton(onClick = onExit) {
             Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "Leave terminal",
                 tint = UdroidTerminalMuted,
             )
@@ -137,7 +137,7 @@ private fun TerminalSessionBar(
                     .weight(1f)
                     .height(46.dp),
             color = UdroidTerminalRaised,
-            shape = RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
             border = BorderStroke(1.dp, UdroidTerminalLine),
         ) {
             Row(
@@ -145,7 +145,7 @@ private fun TerminalSessionBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Terminal,
+                    imageVector = Icons.Rounded.Terminal,
                     contentDescription = null,
                     modifier = Modifier.size(19.dp),
                     tint = if (running) UdroidTerminalGreen else UdroidTerminalMuted,
@@ -185,7 +185,7 @@ private fun TerminalSessionBar(
         } else if (running) {
             IconButton(onClick = onStop) {
                 Icon(
-                    imageVector = Icons.Filled.StopCircle,
+                    imageVector = Icons.Rounded.StopCircle,
                     contentDescription = "Stop Linux session",
                     tint = MaterialTheme.colorScheme.error,
                 )
@@ -268,11 +268,11 @@ private fun EmptyTerminalState(
             Surface(
                 modifier = Modifier.size(52.dp),
                 color = UdroidTerminalRaised,
-                shape = RoundedCornerShape(13.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Outlined.Terminal,
+                        imageVector = Icons.Rounded.Terminal,
                         contentDescription = null,
                         tint = UdroidTerminalGreen,
                     )
@@ -293,7 +293,7 @@ private fun EmptyTerminalState(
                 if (snapshot.phase == RuntimePhase.CRASHED) {
                     snapshot.message
                 } else {
-                    "The supervised PTY keeps running when you move around uDroid."
+                    "Your terminal keeps running when you move around uDroid"
                 },
                 color = UdroidTerminalMuted,
                 style = MaterialTheme.typography.bodyMedium,
@@ -302,7 +302,7 @@ private fun EmptyTerminalState(
             Button(
                 onClick = onStart,
                 enabled = snapshot.phase != RuntimePhase.STARTING,
-                shape = RoundedCornerShape(9.dp),
+                shape = MaterialTheme.shapes.medium,
             ) {
                 Text(
                     if (snapshot.phase == RuntimePhase.CRASHED) {
@@ -428,7 +428,7 @@ private fun TerminalKey(
                         } else {
                             UdroidTerminalRaised
                         },
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.small,
                 )
                 .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

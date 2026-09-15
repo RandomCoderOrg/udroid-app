@@ -327,8 +327,8 @@ object AppUpdateNotifier {
             AVAILABLE_NOTIFICATION,
             NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle("uDroid ${release.version} is available")
-                .setContentText("Review and install the verified GitHub release")
+                .setContentTitle("Update available")
+                .setContentText("Version ${release.version} is ready to install")
                 .setContentIntent(openUpdateIntent(context))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)

@@ -15,18 +15,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.AddToHomeScreen
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.DesktopWindows
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.automirrored.rounded.AddToHomeScreen
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.DesktopWindows
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -90,13 +89,12 @@ fun LinuxAppsPage(
                     text =
                         when (state) {
                             LinuxApplicationsState.Loading ->
-                                "Reading installed desktop entries"
+                                "Looking for installed apps"
                             is LinuxApplicationsState.Ready -> {
                                 val count = state.result.applications.size
-                                "$count ${if (count == 1) "app" else "apps"} · " +
-                                    "${state.rootfsName} · ${state.result.elapsedMillis} ms"
+                                "$count installed ${if (count == 1) "app" else "apps"}"
                             }
-                            is LinuxApplicationsState.Failed -> "Application catalogue unavailable"
+                            is LinuxApplicationsState.Failed -> "App list unavailable"
                         },
                     color = UdroidMuted,
                     style = MaterialTheme.typography.bodyMedium,
@@ -104,14 +102,14 @@ fun LinuxAppsPage(
             }
             IconButton(onClick = onOpenDesktop) {
                 Icon(
-                    imageVector = Icons.Outlined.DesktopWindows,
+                    imageVector = Icons.Rounded.DesktopWindows,
                     contentDescription = "Open desktop",
                     tint = UdroidForest,
                 )
             }
             IconButton(onClick = onRefresh) {
                 Icon(
-                    imageVector = Icons.Outlined.Refresh,
+                    imageVector = Icons.Rounded.Refresh,
                     contentDescription = "Refresh Linux apps",
                     tint = UdroidForest,
                 )
@@ -124,7 +122,7 @@ fun LinuxAppsPage(
                     Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 color = UdroidSoftGreen,
             ) {
                 Text(
@@ -146,7 +144,7 @@ fun LinuxAppsPage(
                 }
             is LinuxApplicationsState.Failed ->
                 LinuxAppsEmptyState(
-                    title = "Could not read Linux apps",
+                    title = "Couldn’t load Linux apps",
                     body = state.message,
                 )
             is LinuxApplicationsState.Ready -> {
@@ -174,11 +172,11 @@ fun LinuxAppsPage(
                         label = { Text("Search installed apps") },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Outlined.Search,
+                                imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
                             )
                         },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.large,
                     )
                 }
                 if (applications.isEmpty()) {
@@ -191,9 +189,9 @@ fun LinuxAppsPage(
                             },
                         body =
                             if (query.isBlank()) {
-                                "Install a Linux GUI package with a .desktop entry, then refresh."
+                                "Install an app in Linux, then refresh"
                             } else {
-                                "Try a different app name or category."
+                                "Search by app name or category"
                             },
                     )
                 } else {
@@ -226,7 +224,7 @@ private fun LinuxApplicationCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = MaterialTheme.shapes.large,
         color = UdroidSurface,
         border = androidx.compose.foundation.BorderStroke(1.dp, UdroidLine),
     ) {
@@ -261,9 +259,9 @@ private fun LinuxApplicationCard(
                     Icon(
                         imageVector =
                             if (application.terminal) {
-                                Icons.Outlined.Terminal
+                                Icons.Rounded.Terminal
                             } else {
-                                Icons.Outlined.DesktopWindows
+                                Icons.Rounded.DesktopWindows
                             },
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
@@ -280,13 +278,13 @@ private fun LinuxApplicationCard(
             Spacer(Modifier.size(10.dp))
             IconButton(onClick = onPin) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.AddToHomeScreen,
+                    imageVector = Icons.AutoMirrored.Rounded.AddToHomeScreen,
                     contentDescription = "Add ${application.name} to home screen",
                     tint = UdroidForest,
                 )
             }
             Button(onClick = onLaunch) {
-                Text(if (application.terminal) "Open" else "Launch")
+                Text("Open")
             }
         }
     }
@@ -306,7 +304,7 @@ private fun LinuxApplicationIcon(application: LinuxApplication) {
                         ?.asImageBitmap()
                 }
         }
-    val shape = RoundedCornerShape(14.dp)
+    val shape = MaterialTheme.shapes.large
     Surface(
         modifier = Modifier.size(58.dp),
         shape = shape,
@@ -339,11 +337,11 @@ private fun LinuxApplicationIcon(application: LinuxApplication) {
 
 private fun categoryIcon(categories: List<String>): ImageVector =
     when {
-        categories.any { it in setOf("Development", "IDE") } -> Icons.Outlined.Code
-        categories.any { it in setOf("Network", "WebBrowser") } -> Icons.Outlined.Public
-        categories.any { it in setOf("Graphics", "Photography") } -> Icons.Outlined.Palette
-        categories.any { it in setOf("Settings", "System") } -> Icons.Outlined.Settings
-        else -> Icons.Outlined.Apps
+        categories.any { it in setOf("Development", "IDE") } -> Icons.Rounded.Code
+        categories.any { it in setOf("Network", "WebBrowser") } -> Icons.Rounded.Public
+        categories.any { it in setOf("Graphics", "Photography") } -> Icons.Rounded.Palette
+        categories.any { it in setOf("Settings", "System") } -> Icons.Rounded.Settings
+        else -> Icons.Rounded.Apps
     }
 
 @Composable
@@ -360,7 +358,7 @@ private fun LinuxAppsEmptyState(
             modifier = Modifier.padding(28.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.Apps,
+                imageVector = Icons.Rounded.Apps,
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
                 tint = UdroidMuted,

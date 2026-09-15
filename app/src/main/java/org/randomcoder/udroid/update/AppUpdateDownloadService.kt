@@ -59,7 +59,7 @@ class AppUpdateDownloadService : Service() {
         }
         startForeground(
             AppUpdateNotifier.DOWNLOAD_NOTIFICATION,
-            downloadNotification(release, "Preparing verified update", null),
+            downloadNotification("Preparing verified update", null),
         )
         val task = executor.submit { download(release) }
         if (!activeTask.compareAndSet(null, task)) {
@@ -115,7 +115,7 @@ class AppUpdateDownloadService : Service() {
                 AppUpdateNotifier.DOWNLOAD_NOTIFICATION,
                 AppUpdateNotifier.builder(this)
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                    .setContentTitle("uDroid ${release.version} is ready")
+                    .setContentTitle("Update ready")
                     .setContentText("Tap to review and install")
                     .setOngoing(false)
                     .setAutoCancel(true)
@@ -241,7 +241,6 @@ class AppUpdateDownloadService : Service() {
     }
 
     private fun downloadNotification(
-        release: AppRelease,
         detail: String,
         progress: Int?,
     ): Notification {
@@ -253,7 +252,7 @@ class AppUpdateDownloadService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         return AppUpdateNotifier.builder(this)
-            .setContentTitle("uDroid ${release.version}")
+            .setContentTitle("Downloading update")
             .setContentText(detail)
             .setOngoing(true)
             .apply {
@@ -299,7 +298,6 @@ class AppUpdateDownloadService : Service() {
                 this@AppUpdateDownloadService,
                 AppUpdateNotifier.DOWNLOAD_NOTIFICATION,
                 downloadNotification(
-                    release,
                     state.message.orEmpty(),
                     state.percentage.takeIf { total > 0L },
                 ),

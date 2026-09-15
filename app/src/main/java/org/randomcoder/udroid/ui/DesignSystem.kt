@@ -1,32 +1,132 @@
 package org.randomcoder.udroid.ui
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
-// Management surfaces: quiet Android neutrals with one operational green.
-val UdroidCanvas = Color(0xFFF2F4F3)
-val UdroidSurface = Color(0xFFF9FAF9)
-val UdroidRaised = Color(0xFFFFFFFF)
-val UdroidInset = Color(0xFFEAEEEC)
-val UdroidInk = Color(0xFF171C19)
-val UdroidMuted = Color(0xFF626B66)
-val UdroidFaint = Color(0xFF8B938F)
-val UdroidForest = Color(0xFF176B4A)
-val UdroidSoftGreen = Color(0xFFDDEEE6)
-val UdroidLine = Color(0xFFD9DEDB)
-val UdroidStrongLine = Color(0xFFC6CDC9)
-val UdroidUbuntu = Color(0xFFE95420)
-val UdroidWarm = Color(0xFFFFE9DF)
-val UdroidWarning = Color(0xFF8A5B00)
-val UdroidWarningSurface = Color(0xFFFFE9B8)
+private val UdroidLightColors =
+    lightColorScheme(
+        primary = Color(0xFF236A4C),
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFFAAF2CB),
+        onPrimaryContainer = Color(0xFF005236),
+        inversePrimary = Color(0xFF8FD5B0),
+        secondary = Color(0xFF4D6356),
+        onSecondary = Color.White,
+        secondaryContainer = Color(0xFFD0E8D8),
+        onSecondaryContainer = Color(0xFF364B3F),
+        tertiary = Color(0xFF3D6472),
+        onTertiary = Color.White,
+        tertiaryContainer = Color(0xFFC0E9FA),
+        onTertiaryContainer = Color(0xFF234C5A),
+        background = Color(0xFFF5FBF4),
+        onBackground = Color(0xFF171D19),
+        surface = Color(0xFFF5FBF4),
+        onSurface = Color(0xFF171D19),
+        surfaceVariant = Color(0xFFDCE5DD),
+        onSurfaceVariant = Color(0xFF404943),
+        surfaceTint = Color(0xFF236A4C),
+        inverseSurface = Color(0xFF2C322E),
+        inverseOnSurface = Color(0xFFEDF2EC),
+        surfaceDim = Color(0xFFD6DBD5),
+        surfaceBright = Color(0xFFF5FBF4),
+        surfaceContainerLowest = Color.White,
+        surfaceContainerLow = Color(0xFFF0F5EF),
+        surfaceContainer = Color(0xFFEAEFE9),
+        surfaceContainerHigh = Color(0xFFE4EAE3),
+        surfaceContainerHighest = Color(0xFFDEE4DE),
+        outline = Color(0xFF707973),
+        outlineVariant = Color(0xFFC0C9C1),
+        error = Color(0xFFBA1A1A),
+        onError = Color.White,
+        errorContainer = Color(0xFFFFDAD6),
+        onErrorContainer = Color(0xFF93000A),
+    )
+
+private val UdroidDarkColors =
+    darkColorScheme(
+        primary = Color(0xFF8FD5B0),
+        onPrimary = Color(0xFF003824),
+        primaryContainer = Color(0xFF005236),
+        onPrimaryContainer = Color(0xFFAAF2CB),
+        inversePrimary = Color(0xFF236A4C),
+        secondary = Color(0xFFB4CCBC),
+        onSecondary = Color(0xFF20352A),
+        secondaryContainer = Color(0xFF364B3F),
+        onSecondaryContainer = Color(0xFFD0E8D8),
+        tertiary = Color(0xFFA4CDDE),
+        onTertiary = Color(0xFF063543),
+        tertiaryContainer = Color(0xFF234C5A),
+        onTertiaryContainer = Color(0xFFC0E9FA),
+        background = Color(0xFF0F1511),
+        onBackground = Color(0xFFDEE4DE),
+        surface = Color(0xFF0F1511),
+        onSurface = Color(0xFFDEE4DE),
+        surfaceVariant = Color(0xFF404943),
+        onSurfaceVariant = Color(0xFFC0C9C1),
+        surfaceTint = Color(0xFF8FD5B0),
+        inverseSurface = Color(0xFFDEE4DE),
+        inverseOnSurface = Color(0xFF2C322E),
+        surfaceDim = Color(0xFF0F1511),
+        surfaceBright = Color(0xFF353B36),
+        surfaceContainerLowest = Color(0xFF0A0F0C),
+        surfaceContainerLow = Color(0xFF171D19),
+        surfaceContainer = Color(0xFF1B211D),
+        surfaceContainerHigh = Color(0xFF262B27),
+        surfaceContainerHighest = Color(0xFF303632),
+        outline = Color(0xFF8A938C),
+        outlineVariant = Color(0xFF404943),
+        error = Color(0xFFFFB4AB),
+        onError = Color(0xFF690005),
+        errorContainer = Color(0xFF93000A),
+        onErrorContainer = Color(0xFFFFDAD6),
+    )
+
+// Existing call sites now consume Material roles instead of fixed light-only colors.
+val UdroidCanvas = Color(0xFFF5FBF4)
+val UdroidDarkCanvas = Color(0xFF0F1511)
+val UdroidSurface: Color
+    @Composable get() = MaterialTheme.colorScheme.surface
+val UdroidRaised: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerLow
+val UdroidInset: Color
+    @Composable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+val UdroidInk: Color
+    @Composable get() = MaterialTheme.colorScheme.onSurface
+val UdroidMuted: Color
+    @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+val UdroidFaint: Color
+    @Composable get() = MaterialTheme.colorScheme.outline
+val UdroidForest: Color
+    @Composable get() = MaterialTheme.colorScheme.primary
+val UdroidSoftGreen: Color
+    @Composable get() = MaterialTheme.colorScheme.primaryContainer
+val UdroidLine: Color
+    @Composable get() = MaterialTheme.colorScheme.outlineVariant
+val UdroidStrongLine: Color
+    @Composable get() = MaterialTheme.colorScheme.outline
+
+val UdroidUbuntu: Color
+    @Composable get() = if (isSystemInDarkTheme()) Color(0xFFFFB59A) else Color(0xFF9D2B00)
+val UdroidWarm: Color
+    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF5C1900) else Color(0xFFFFDBCD)
+val UdroidWarning: Color
+    @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE9C349) else Color(0xFF6F5300)
+val UdroidWarningSurface: Color
+    @Composable get() = if (isSystemInDarkTheme()) Color(0xFF3B2F00) else Color(0xFFFFE08B)
 
 // Terminal workspace: the management shell gives way to a focused instrument.
 val UdroidTerminal = Color(0xFF11131F)
@@ -45,106 +145,42 @@ object UdroidSpacing {
     val section = 24
 }
 
-private val UdroidTypography =
-    Typography(
-        headlineMedium =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                fontSize = 25.sp,
-                lineHeight = 30.sp,
-                letterSpacing = (-0.35).sp,
-            ),
-        headlineSmall =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                fontSize = 21.sp,
-                lineHeight = 26.sp,
-                letterSpacing = (-0.2).sp,
-            ),
-        titleLarge =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 18.sp,
-                lineHeight = 23.sp,
-            ),
-        titleMedium =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-            ),
-        bodyLarge =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Normal,
-                fontSize = 16.sp,
-                lineHeight = 23.sp,
-            ),
-        bodyMedium =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Normal,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            ),
-        bodySmall =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Normal,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-            ),
-        labelLarge =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-            ),
-        labelMedium =
-            TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Medium,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
-                letterSpacing = 0.25.sp,
-            ),
-        labelSmall =
-            TextStyle(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Normal,
-                fontSize = 10.sp,
-                lineHeight = 14.sp,
-            ),
+// Material 3 standard motion tokens. Use MotionScheme directly once it is public in stable M3.
+internal object UdroidMotion {
+    fun <T> defaultSpatial(): SpringSpec<T> = spring(dampingRatio = 0.9f, stiffness = 700f)
+
+    fun <T> defaultEffects(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 1600f)
+
+    fun <T> fastEffects(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 3800f)
+
+    fun <T> slowEffects(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 800f)
+}
+
+private val UdroidShapes =
+    Shapes(
+        extraSmall = RoundedCornerShape(4.dp),
+        small = RoundedCornerShape(8.dp),
+        medium = RoundedCornerShape(12.dp),
+        large = RoundedCornerShape(16.dp),
+        extraLarge = RoundedCornerShape(28.dp),
     )
 
 @Composable
 fun UdroidTheme(content: @Composable () -> Unit) {
+    val darkTheme = isSystemInDarkTheme()
+    val colors =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (darkTheme) dynamicDarkColorScheme(LocalContext.current)
+            else dynamicLightColorScheme(LocalContext.current)
+        } else if (darkTheme) {
+            UdroidDarkColors
+        } else {
+            UdroidLightColors
+        }
     MaterialTheme(
-        colorScheme =
-            lightColorScheme(
-                primary = UdroidForest,
-                onPrimary = Color.White,
-                primaryContainer = UdroidSoftGreen,
-                onPrimaryContainer = UdroidInk,
-                secondaryContainer = UdroidInset,
-                onSecondaryContainer = UdroidInk,
-                surface = UdroidSurface,
-                surfaceVariant = UdroidInset,
-                onSurface = UdroidInk,
-                onSurfaceVariant = UdroidMuted,
-                background = UdroidCanvas,
-                onBackground = UdroidInk,
-                outline = UdroidStrongLine,
-                outlineVariant = UdroidLine,
-                error = Color(0xFFB3261E),
-                errorContainer = Color(0xFFF9DEDC),
-            ),
-        typography = UdroidTypography,
+        colorScheme = colors,
+        typography = Typography(),
+        shapes = UdroidShapes,
         content = content,
     )
 }
@@ -167,7 +203,8 @@ fun UdroidTerminalTheme(content: @Composable () -> Unit) {
                 outline = UdroidTerminalLine,
                 error = Color(0xFFFFB4AB),
             ),
-        typography = UdroidTypography,
+        typography = Typography(),
+        shapes = UdroidShapes,
         content = content,
     )
 }
