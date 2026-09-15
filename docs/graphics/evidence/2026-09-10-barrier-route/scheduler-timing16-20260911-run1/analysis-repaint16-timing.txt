@@ -1,0 +1,23 @@
+aggregate interval: frames/presents/releases=2400; warm=720 final=3120; no-free-slot=0
+approximate interval means reconstructed from integer cumulative means:
+metric                                  mean_us  rounding_bound_us  samples
+gl.use-output                              7.600              1.600     2400
+gl.setup                                  22.400              1.600     2400
+gl.draw                                  138.200              1.600     2400
+gl.create-sync                          14225.900              1.600     2400
+gl.flush                                   7.600              1.600     2400
+gl.post                                    5.300              1.600     2400
+headless.present                        1686.400              1.600     2400
+headless.release-after-response         3974.200              1.600     2400
+headless.inter-repaint                  24867.260              1.599     2400
+headless.finish-interval                24870.952              1.599     2400
+headless.finish-to-repaint              3897.029              1.599     2400
+headless.repaint-full                   17573.800              1.600     2400
+headless.repaint-renderer               14427.100              1.600     2400
+headless.repaint-fence                  1403.300              1.600     2400
+headless.repaint-remainder                54.700              1.600     2400
+inter-present interval buckets <=8.3/<=16.7/<=25/<=33.3/<=50/>50 ms: 25/325/1131/764/66/89
+SurfaceView layer: f574b98 SurfaceView[org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity](BLAST)#154
+SurfaceView totalFrames=2336 reported averageFPS=39.664
+SurfaceView nonzero present2present buckets: 15ms=2 16ms=1315 17ms=2 32ms=3 33ms=914 34ms=2 50ms=16 66ms=29 86ms=42 102ms=10 118ms=1
+CAUTION: maxima were discarded; reconstructed means are approximate due to integer-microsecond cumulative logging. SurfaceFlinger averageFPS and buckets are coarse layer diagnostics, not a >59 FPS qualification. The files do not prove temporal overlap; use only an atomically collected warm/performance set.

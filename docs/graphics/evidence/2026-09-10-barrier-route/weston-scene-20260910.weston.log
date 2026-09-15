@@ -1,0 +1,236 @@
+Date: 2026-09-10 UTC
+[07:23:56.963] weston 14.0.1
+               https://wayland.freedesktop.org
+               Bug reports to: https://gitlab.freedesktop.org/wayland/weston/issues/
+               Build: 14.0.1
+[07:23:56.973] Command line: /root/udroid-weston-socket-v1/frontend/weston --debug --backend=headless --renderer=gl --shell=desktop --no-config --gbm-allocator-socket=/tmp/kumquat-gpu-0 --gfxstream-presenter-icd=/opt/udroid-diag/sync-export-20260906/gfxstream/lib/libvulkan_gfxstream.so --socket=wayland-gfxstream-scene-20260910 --width=720 --height=720 --idle-time=0 --log=/root/udroid-weston-socket-v1/weston-scene-20260910.log -- /usr/bin/weston-simple-shm
+[07:23:56.973] OS: Linux, 6.1.157-android14-11-gbd23337e42e7-ab14791245, #1 SMP PREEMPT Wed Jan 28 05:34:14 UTC 2026, aarch64
+[07:23:56.974] Flight recorder: enabled
+[07:23:56.975] Starting with no config file.
+[07:23:56.992] Output repaint window is 7 ms maximum.
+[07:23:57.002] Loading module '/root/udroid-weston-socket-v1/libweston/backend-headless/headless-backend.so'
+[07:23:57.294] Loading module '/root/udroid-weston-contract/libweston/renderer-gl/gl-renderer.so'
+[07:23:57.454] warning: failed to query rendering device from EGL
+[07:23:57.473] Using external GBM allocator backend: gfxstream
+[07:23:57.474] EGL version: 1.5
+[07:23:57.474] EGL vendor: Mesa Project
+[07:23:57.474] EGL client APIs: OpenGL OpenGL_ES 
+[07:23:57.474] EGL features:
+               EGL Wayland extension: no
+               context priority: no
+               buffer age: no
+               partial update: yes
+               swap buffers with damage: no
+               configless context: yes
+               surfaceless context: yes
+               dmabuf support: modifiers
+[07:23:57.485] GL version: OpenGL ES 2.0 Mesa 25.0.7
+[07:23:57.485] GLSL version: OpenGL ES GLSL ES 1.0.16
+[07:23:57.485] GL vendor: Mesa
+[07:23:57.485] GL renderer: zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78) (Driver Unknown))
+[07:23:57.499] GL ES 2.0 - renderer features:
+               read-back format: ARGB8888
+               glReadPixels supports y-flip: yes
+               glReadPixels supports PBO: yes
+               wl_shm 10 bpc formats: yes
+               wl_shm 16 bpc formats: no
+               wl_shm half-float formats: no
+               internal R and RG formats: yes
+               OES_EGL_image_external: yes
+[07:23:57.500] Using GL renderer
+[07:23:57.500] Registered plugin API 'weston_windowed_output_api_headless_v2' of size 16
+[07:23:57.500] Color manager: no-op
+                 protocol support: no
+[07:23:57.500] Output 'headless' attempts EOTF mode SDR and colorimetry mode default.
+[07:23:57.500] Output 'headless' using color profile: stock sRGB color profile
+[07:23:57.554] Direct gfxstream output enabled with 6 slots.
+[07:23:57.554] Output 'headless' enabled with head(s) headless
+[07:23:57.554] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: yes
+               cursor planes: no
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: yes
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC_RAW, id 4
+               presentation clock resolution: 0.000000001 s
+[07:23:57.558] Loading module '/usr/lib/aarch64-linux-gnu/weston/desktop-shell.so'
+[07:23:57.561] launching '/usr/local/libexec/weston-keyboard'
+[07:23:57.563] launching '/usr/local/libexec/weston-desktop-shell'
+[07:24:00.561] GL repaint stages at frame 120 (avg/max us): use-output=12/28 setup=36/177 draw=764/68073 create-sync=14504/74531 flush=11/50 post=6/13 total=12623
+[07:24:00.571] gfxstream output: presents=120 releases=120 present-us(avg/max)=1483/4287 release-signal-after-response-us(avg/max)=4270/14782 no-free-slot=0.
+[07:24:00.571] gfxstream cadence: inter-repaint-us(avg/max)=25032/207271 finish-interval-us(avg/max)=24446/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=3081/195836.
+[07:24:00.572] gfxstream repaint: full-us(avg/max)=18389/85140 renderer-us(avg/max)=15355/84685 fence-us(avg/max)=1484/7180 remainder-us(avg/max)=65/649 thread-cpu/wall-window-us=501421/2206680.
+[07:24:00.573] gfxstream inter-present buckets (n=119): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/23/68/17/6/5.
+[07:24:03.250] GL repaint stages at frame 240 (avg/max us): use-output=12/79 setup=37/441 draw=480/68073 create-sync=14070/74531 flush=11/50 post=6/17 total=12766
+[07:24:03.259] gfxstream output: presents=240 releases=240 present-us(avg/max)=1508/4287 release-signal-after-response-us(avg/max)=4402/14782 no-free-slot=0.
+[07:24:03.261] gfxstream cadence: inter-repaint-us(avg/max)=23713/207271 finish-interval-us(avg/max)=23420/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=2186/195836.
+[07:24:03.262] gfxstream repaint: full-us(avg/max)=17749/85140 renderer-us(avg/max)=14636/84685 fence-us(avg/max)=1539/8087 remainder-us(avg/max)=64/649 thread-cpu/wall-window-us=437439/2053158.
+[07:24:03.263] gfxstream inter-present buckets (n=239): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/39/157/27/6/10.
+[07:24:05.916] GL repaint stages at frame 360 (avg/max us): use-output=12/91 setup=36/441 draw=384/68073 create-sync=13965/76681 flush=11/50 post=6/17 total=10019
+[07:24:05.926] gfxstream output: presents=360 releases=360 present-us(avg/max)=1621/4287 release-signal-after-response-us(avg/max)=4314/14782 no-free-slot=0.
+[07:24:05.927] gfxstream cadence: inter-repaint-us(avg/max)=23222/207271 finish-interval-us(avg/max)=23020/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1914/195836.
+[07:24:05.928] gfxstream repaint: full-us(avg/max)=17581/85140 renderer-us(avg/max)=14434/84685 fence-us(avg/max)=1460/8087 remainder-us(avg/max)=65/649 thread-cpu/wall-window-us=437715/2069618.
+[07:24:05.929] gfxstream inter-present buckets (n=359): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/53/251/34/6/15.
+[07:24:08.652] GL repaint stages at frame 480 (avg/max us): use-output=13/430 setup=36/441 draw=336/68073 create-sync=14003/97939 flush=11/50 post=6/36 total=13407
+[07:24:08.663] gfxstream output: presents=480 releases=480 present-us(avg/max)=1655/6390 release-signal-after-response-us(avg/max)=4338/14782 no-free-slot=0.
+[07:24:08.664] gfxstream cadence: inter-repaint-us(avg/max)=23107/207271 finish-interval-us(avg/max)=22965/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1769/195836.
+[07:24:08.665] gfxstream repaint: full-us(avg/max)=17594/101953 renderer-us(avg/max)=14424/98167 fence-us(avg/max)=1447/8087 remainder-us(avg/max)=66/649 thread-cpu/wall-window-us=436581/2115808.
+[07:24:08.666] gfxstream inter-present buckets (n=479): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/64/346/42/7/20.
+[07:24:11.204] GL repaint stages at frame 600 (avg/max us): use-output=12/430 setup=35/441 draw=307/68073 create-sync=13746/97939 flush=11/50 post=6/224 total=11973
+[07:24:11.213] gfxstream output: presents=600 releases=600 present-us(avg/max)=1647/6390 release-signal-after-response-us(avg/max)=4322/14782 no-free-slot=0.
+[07:24:11.214] gfxstream cadence: inter-repaint-us(avg/max)=22742/207271 finish-interval-us(avg/max)=22622/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1681/195836.
+[07:24:11.214] gfxstream repaint: full-us(avg/max)=17319/101953 renderer-us(avg/max)=14138/98167 fence-us(avg/max)=1467/8087 remainder-us(avg/max)=65/649 thread-cpu/wall-window-us=400047/1946624.
+[07:24:11.215] gfxstream inter-present buckets (n=599): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=1/88/426/53/7/24.
+[07:24:13.414] GL repaint stages at frame 720 (avg/max us): use-output=12/430 setup=34/441 draw=280/68073 create-sync=13333/97939 flush=10/54 post=7/224 total=8512
+[07:24:13.421] gfxstream output: presents=720 releases=720 present-us(avg/max)=1662/7392 release-signal-after-response-us(avg/max)=4122/21870 no-free-slot=0.
+[07:24:13.422] gfxstream cadence: inter-repaint-us(avg/max)=22025/207271 finish-interval-us(avg/max)=21918/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1618/195836.
+[07:24:13.423] gfxstream repaint: full-us(avg/max)=16861/101953 renderer-us(avg/max)=13694/98167 fence-us(avg/max)=1441/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=347648/1748673.
+[07:24:13.424] gfxstream inter-present buckets (n=719): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=6/136/486/56/8/27.
+[07:24:15.694] GL repaint stages at frame 840 (avg/max us): use-output=12/430 setup=34/441 draw=263/68073 create-sync=13083/97939 flush=10/85 post=6/224 total=12841
+[07:24:15.703] gfxstream output: presents=840 releases=840 present-us(avg/max)=1649/7392 release-signal-after-response-us(avg/max)=4031/21870 no-free-slot=0.
+[07:24:15.704] gfxstream cadence: inter-repaint-us(avg/max)=21587/207271 finish-interval-us(avg/max)=21503/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1572/195836.
+[07:24:15.705] gfxstream repaint: full-us(avg/max)=16555/101953 renderer-us(avg/max)=13427/98167 fence-us(avg/max)=1414/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=374428/1765821.
+[07:24:15.706] gfxstream inter-present buckets (n=839): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=8/184/547/59/10/31.
+[07:24:18.299] GL repaint stages at frame 960 (avg/max us): use-output=12/430 setup=34/441 draw=255/68073 create-sync=13121/97939 flush=11/100 post=6/224 total=12693
+[07:24:18.309] gfxstream output: presents=960 releases=960 present-us(avg/max)=1653/7392 release-signal-after-response-us(avg/max)=4013/21870 no-free-slot=0.
+[07:24:18.310] gfxstream cadence: inter-repaint-us(avg/max)=21602/207271 finish-interval-us(avg/max)=21529/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1556/195836.
+[07:24:18.311] gfxstream repaint: full-us(avg/max)=16596/101953 renderer-us(avg/max)=13458/98167 fence-us(avg/max)=1420/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=421684/2026166.
+[07:24:18.312] gfxstream inter-present buckets (n=959): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=8/208/627/69/11/36.
+[07:24:20.716] GL repaint stages at frame 1080 (avg/max us): use-output=12/430 setup=34/441 draw=245/68073 create-sync=13029/97939 flush=11/103 post=6/224 total=10113
+[07:24:20.726] gfxstream output: presents=1080 releases=1080 present-us(avg/max)=1660/7924 release-signal-after-response-us(avg/max)=3981/21870 no-free-slot=0.
+[07:24:20.726] gfxstream cadence: inter-repaint-us(avg/max)=21442/207271 finish-interval-us(avg/max)=21375/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1529/195836.
+[07:24:20.727] gfxstream repaint: full-us(avg/max)=16483/101953 renderer-us(avg/max)=13356/98167 fence-us(avg/max)=1403/8087 remainder-us(avg/max)=62/649 thread-cpu/wall-window-us=391989/1869338.
+[07:24:20.728] gfxstream inter-present buckets (n=1079): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/244/698/74/13/40.
+[07:24:23.273] GL repaint stages at frame 1200 (avg/max us): use-output=12/430 setup=34/441 draw=239/68073 create-sync=13029/97939 flush=11/146 post=6/224 total=8601
+[07:24:23.281] gfxstream output: presents=1200 releases=1200 present-us(avg/max)=1679/7924 release-signal-after-response-us(avg/max)=3972/21870 no-free-slot=0.
+[07:24:23.282] gfxstream cadence: inter-repaint-us(avg/max)=21430/207271 finish-interval-us(avg/max)=21366/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1507/195836.
+[07:24:23.282] gfxstream repaint: full-us(avg/max)=16492/101953 renderer-us(avg/max)=13350/98167 fence-us(avg/max)=1399/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=419931/1989452.
+[07:24:23.283] gfxstream inter-present buckets (n=1199): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/277/776/78/13/45.
+[07:24:25.817] GL repaint stages at frame 1320 (avg/max us): use-output=12/430 setup=34/441 draw=233/68073 create-sync=13022/97939 flush=11/146 post=6/224 total=12235
+[07:24:25.825] gfxstream output: presents=1320 releases=1320 present-us(avg/max)=1676/7924 release-signal-after-response-us(avg/max)=3969/21870 no-free-slot=0.
+[07:24:25.826] gfxstream cadence: inter-repaint-us(avg/max)=21406/207271 finish-interval-us(avg/max)=21352/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1490/195836.
+[07:24:25.827] gfxstream repaint: full-us(avg/max)=16486/101953 renderer-us(avg/max)=13337/98167 fence-us(avg/max)=1409/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=416870/1971341.
+[07:24:25.828] gfxstream inter-present buckets (n=1319): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/302/860/84/13/50.
+[07:24:28.435] GL repaint stages at frame 1440 (avg/max us): use-output=12/430 setup=34/807 draw=228/68073 create-sync=13049/97939 flush=11/146 post=6/224 total=12661
+[07:24:28.446] gfxstream output: presents=1440 releases=1440 present-us(avg/max)=1681/8548 release-signal-after-response-us(avg/max)=3975/21870 no-free-slot=0.
+[07:24:28.447] gfxstream cadence: inter-repaint-us(avg/max)=21440/207271 finish-interval-us(avg/max)=21392/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1478/195836.
+[07:24:28.448] gfxstream repaint: full-us(avg/max)=16529/101953 renderer-us(avg/max)=13359/98167 fence-us(avg/max)=1425/8087 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=425511/2040341.
+[07:24:28.449] gfxstream inter-present buckets (n=1439): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/328/938/95/13/55.
+[07:24:31.050] GL repaint stages at frame 1560 (avg/max us): use-output=12/430 setup=34/807 draw=225/68073 create-sync=13044/97939 flush=11/146 post=6/224 total=14539
+[07:24:31.060] gfxstream output: presents=1560 releases=1560 present-us(avg/max)=1684/8548 release-signal-after-response-us(avg/max)=4004/21870 no-free-slot=0.
+[07:24:31.061] gfxstream cadence: inter-repaint-us(avg/max)=21466/207271 finish-interval-us(avg/max)=21422/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1465/195836.
+[07:24:31.062] gfxstream repaint: full-us(avg/max)=16539/101953 renderer-us(avg/max)=13352/98167 fence-us(avg/max)=1438/12425 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=421090/1998654.
+[07:24:31.062] gfxstream inter-present buckets (n=1559): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/341/1033/103/13/59.
+[07:24:33.714] GL repaint stages at frame 1680 (avg/max us): use-output=12/430 setup=34/807 draw=223/68073 create-sync=13078/97939 flush=11/146 post=6/224 total=11692
+[07:24:33.725] gfxstream output: presents=1680 releases=1680 present-us(avg/max)=1678/8548 release-signal-after-response-us(avg/max)=4035/21870 no-free-slot=0.
+[07:24:33.726] gfxstream cadence: inter-repaint-us(avg/max)=21520/207271 finish-interval-us(avg/max)=21478/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1453/195836.
+[07:24:33.727] gfxstream repaint: full-us(avg/max)=16572/101953 renderer-us(avg/max)=13384/98167 fence-us(avg/max)=1445/12425 remainder-us(avg/max)=64/649 thread-cpu/wall-window-us=410869/2039832.
+[07:24:33.728] gfxstream inter-present buckets (n=1679): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/356/1121/115/13/64.
+[07:24:36.375] GL repaint stages at frame 1800 (avg/max us): use-output=12/430 setup=34/807 draw=221/68073 create-sync=13095/97939 flush=11/177 post=6/228 total=15342
+[07:24:36.383] gfxstream output: presents=1800 releases=1800 present-us(avg/max)=1678/8548 release-signal-after-response-us(avg/max)=4061/21870 no-free-slot=0.
+[07:24:36.384] gfxstream cadence: inter-repaint-us(avg/max)=21562/207271 finish-interval-us(avg/max)=21524/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1445/195836.
+[07:24:36.385] gfxstream repaint: full-us(avg/max)=16598/101953 renderer-us(avg/max)=13398/98167 fence-us(avg/max)=1456/12425 remainder-us(avg/max)=64/649 thread-cpu/wall-window-us=447172/2034923.
+[07:24:36.386] gfxstream inter-present buckets (n=1799): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/366/1216/126/13/68.
+[07:24:39.039] GL repaint stages at frame 1920 (avg/max us): use-output=12/430 setup=34/807 draw=219/68073 create-sync=13111/97939 flush=11/177 post=6/228 total=10712
+[07:24:39.049] gfxstream output: presents=1920 releases=1920 present-us(avg/max)=1693/8548 release-signal-after-response-us(avg/max)=4072/21870 no-free-slot=0.
+[07:24:39.050] gfxstream cadence: inter-repaint-us(avg/max)=21604/207271 finish-interval-us(avg/max)=21566/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1436/195836.
+[07:24:39.051] gfxstream repaint: full-us(avg/max)=16634/101953 renderer-us(avg/max)=13413/98167 fence-us(avg/max)=1463/12425 remainder-us(avg/max)=65/649 thread-cpu/wall-window-us=434248/2061979.
+[07:24:39.052] gfxstream inter-present buckets (n=1919): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=10/380/1308/135/13/73.
+[07:24:41.255] GL repaint stages at frame 2040 (avg/max us): use-output=12/430 setup=34/807 draw=215/68073 create-sync=12986/97939 flush=11/177 post=6/228 total=10863
+[07:24:41.263] gfxstream output: presents=2040 releases=2040 present-us(avg/max)=1678/8548 release-signal-after-response-us(avg/max)=4042/21870 no-free-slot=0.
+[07:24:41.264] gfxstream cadence: inter-repaint-us(avg/max)=21419/207271 finish-interval-us(avg/max)=21383/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1426/195836.
+[07:24:41.264] gfxstream repaint: full-us(avg/max)=16485/101953 renderer-us(avg/max)=13283/98167 fence-us(avg/max)=1458/12425 remainder-us(avg/max)=64/649 thread-cpu/wall-window-us=355592/1692089.
+[07:24:41.265] gfxstream inter-present buckets (n=2039): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=30/408/1362/150/13/76.
+[07:24:42.992] GL repaint stages at frame 2160 (avg/max us): use-output=12/430 setup=33/807 draw=212/68073 create-sync=12762/97939 flush=11/177 post=6/228 total=5118
+[07:24:42.997] gfxstream output: presents=2160 releases=2160 present-us(avg/max)=1663/8548 release-signal-after-response-us(avg/max)=3939/21870 no-free-slot=0.
+[07:24:42.998] gfxstream cadence: inter-repaint-us(avg/max)=21036/207271 finish-interval-us(avg/max)=20998/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1421/195836.
+[07:24:42.998] gfxstream repaint: full-us(avg/max)=16202/101953 renderer-us(avg/max)=13054/98167 fence-us(avg/max)=1421/12425 remainder-us(avg/max)=63/649 thread-cpu/wall-window-us=278133/1366406.
+[07:24:42.999] gfxstream inter-present buckets (n=2159): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=43/487/1385/151/15/78.
+[07:24:44.614] GL repaint stages at frame 2280 (avg/max us): use-output=12/430 setup=32/807 draw=206/68073 create-sync=12524/97939 flush=10/177 post=6/228 total=11019
+[07:24:44.620] gfxstream output: presents=2280 releases=2280 present-us(avg/max)=1635/8548 release-signal-after-response-us(avg/max)=3852/21870 no-free-slot=0.
+[07:24:44.621] gfxstream cadence: inter-repaint-us(avg/max)=20637/207271 finish-interval-us(avg/max)=20604/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1411/195836.
+[07:24:44.621] gfxstream repaint: full-us(avg/max)=15901/101953 renderer-us(avg/max)=12809/98167 fence-us(avg/max)=1393/12425 remainder-us(avg/max)=62/649 thread-cpu/wall-window-us=258584/1257604.
+[07:24:44.622] gfxstream inter-present buckets (n=2279): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/560/1399/154/17/80.
+[07:24:46.926] GL repaint stages at frame 2400 (avg/max us): use-output=11/430 setup=32/807 draw=205/68073 create-sync=12487/97939 flush=10/177 post=6/228 total=8943
+[07:24:46.932] gfxstream output: presents=2400 releases=2400 present-us(avg/max)=1631/8548 release-signal-after-response-us(avg/max)=3837/21870 no-free-slot=0.
+[07:24:46.932] gfxstream cadence: inter-repaint-us(avg/max)=20570/207271 finish-interval-us(avg/max)=20537/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1404/195836.
+[07:24:46.933] gfxstream repaint: full-us(avg/max)=15854/101953 renderer-us(avg/max)=12770/98167 fence-us(avg/max)=1390/12425 remainder-us(avg/max)=61/649 thread-cpu/wall-window-us=374814/1796175.
+[07:24:46.933] gfxstream inter-present buckets (n=2399): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/616/1454/159/17/84.
+[07:24:49.328] GL repaint stages at frame 2520 (avg/max us): use-output=11/430 setup=32/807 draw=203/68073 create-sync=12470/97939 flush=10/177 post=6/228 total=13678
+[07:24:49.336] gfxstream output: presents=2520 releases=2520 present-us(avg/max)=1632/8548 release-signal-after-response-us(avg/max)=3833/21870 no-free-slot=0.
+[07:24:49.337] gfxstream cadence: inter-repaint-us(avg/max)=20541/207271 finish-interval-us(avg/max)=20513/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1397/195836.
+[07:24:49.338] gfxstream repaint: full-us(avg/max)=15838/101953 renderer-us(avg/max)=12752/98167 fence-us(avg/max)=1391/12425 remainder-us(avg/max)=62/649 thread-cpu/wall-window-us=415121/1862442.
+[07:24:49.338] gfxstream inter-present buckets (n=2519): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/655/1523/166/17/89.
+[07:24:52.034] GL repaint stages at frame 2640 (avg/max us): use-output=12/430 setup=33/807 draw=203/68073 create-sync=12527/97939 flush=11/177 post=6/228 total=17991
+[07:24:52.044] gfxstream output: presents=2640 releases=2640 present-us(avg/max)=1637/8548 release-signal-after-response-us(avg/max)=3863/21870 no-free-slot=0.
+[07:24:52.045] gfxstream cadence: inter-repaint-us(avg/max)=20631/207271 finish-interval-us(avg/max)=20607/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1394/195836.
+[07:24:52.046] gfxstream repaint: full-us(avg/max)=15904/101953 renderer-us(avg/max)=12810/98167 fence-us(avg/max)=1394/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=458797/2074027.
+[07:24:52.048] gfxstream inter-present buckets (n=2639): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/670/1611/177/18/94.
+[07:24:54.652] GL repaint stages at frame 2760 (avg/max us): use-output=12/430 setup=33/807 draw=202/68073 create-sync=12561/97995 flush=11/177 post=6/228 total=9610
+[07:24:54.660] gfxstream output: presents=2760 releases=2760 present-us(avg/max)=1643/8548 release-signal-after-response-us(avg/max)=3877/21870 no-free-slot=0.
+[07:24:54.661] gfxstream cadence: inter-repaint-us(avg/max)=20686/207271 finish-interval-us(avg/max)=20659/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1392/195836.
+[07:24:54.662] gfxstream repaint: full-us(avg/max)=15943/103077 renderer-us(avg/max)=12842/98296 fence-us(avg/max)=1394/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=429221/2017272.
+[07:24:54.662] gfxstream inter-present buckets (n=2759): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/687/1702/184/18/99.
+[07:24:57.234] GL repaint stages at frame 2880 (avg/max us): use-output=12/430 setup=33/807 draw=201/68073 create-sync=12581/97995 flush=11/177 post=6/228 total=13886
+[07:24:57.244] gfxstream output: presents=2880 releases=2880 present-us(avg/max)=1646/8548 release-signal-after-response-us(avg/max)=3888/21870 no-free-slot=0.
+[07:24:57.251] gfxstream cadence: inter-repaint-us(avg/max)=20719/207271 finish-interval-us(avg/max)=20695/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1389/195836.
+[07:24:57.252] gfxstream repaint: full-us(avg/max)=15971/103077 renderer-us(avg/max)=12861/98296 fence-us(avg/max)=1401/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=426226/1994843.
+[07:24:57.253] gfxstream inter-present buckets (n=2879): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=69/716/1776/195/19/104.
+[07:24:59.774] GL repaint stages at frame 3000 (avg/max us): use-output=12/430 setup=33/807 draw=201/68073 create-sync=12596/97995 flush=11/177 post=6/228 total=12036
+[07:24:59.781] gfxstream output: presents=3000 releases=3000 present-us(avg/max)=1646/8548 release-signal-after-response-us(avg/max)=3886/21870 no-free-slot=0.
+[07:24:59.782] gfxstream cadence: inter-repaint-us(avg/max)=20737/207271 finish-interval-us(avg/max)=20713/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1389/195836.
+[07:24:59.783] gfxstream repaint: full-us(avg/max)=15991/103077 renderer-us(avg/max)=12876/98296 fence-us(avg/max)=1406/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=402023/1976167.
+[07:24:59.784] gfxstream inter-present buckets (n=2999): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=71/737/1857/206/20/108.
+[07:25:01.741] GL repaint stages at frame 3120 (avg/max us): use-output=11/430 setup=32/807 draw=198/68073 create-sync=12488/97995 flush=11/177 post=6/228 total=6403
+[07:25:01.748] gfxstream output: presents=3120 releases=3120 present-us(avg/max)=1637/8548 release-signal-after-response-us(avg/max)=3867/37105 no-free-slot=0.
+[07:25:01.749] gfxstream cadence: inter-repaint-us(avg/max)=20572/207271 finish-interval-us(avg/max)=20547/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1383/195836.
+[07:25:01.749] gfxstream repaint: full-us(avg/max)=15858/103077 renderer-us(avg/max)=12765/98296 fence-us(avg/max)=1394/12425 remainder-us(avg/max)=61/877 thread-cpu/wall-window-us=310198/1502585.
+[07:25:01.750] gfxstream inter-present buckets (n=3119): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=80/799/1900/209/21/110.
+[07:25:04.504] GL repaint stages at frame 3240 (avg/max us): use-output=11/430 setup=32/807 draw=200/68073 create-sync=12550/98496 flush=11/298 post=6/228 total=16856
+[07:25:04.516] gfxstream output: presents=3240 releases=3240 present-us(avg/max)=1642/8548 release-signal-after-response-us(avg/max)=3885/37105 no-free-slot=0.
+[07:25:04.516] gfxstream cadence: inter-repaint-us(avg/max)=20659/207271 finish-interval-us(avg/max)=20640/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1381/195836.
+[07:25:04.517] gfxstream repaint: full-us(avg/max)=15936/103732 renderer-us(avg/max)=12830/98755 fence-us(avg/max)=1400/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=432234/2154724.
+[07:25:04.518] gfxstream inter-present buckets (n=3239): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=80/818/1983/220/23/115.
+[07:25:07.223] GL repaint stages at frame 3360 (avg/max us): use-output=11/430 setup=33/807 draw=200/68073 create-sync=12594/98496 flush=11/298 post=6/228 total=11207
+[07:25:07.233] gfxstream output: presents=3360 releases=3360 present-us(avg/max)=1644/8548 release-signal-after-response-us(avg/max)=3903/37105 no-free-slot=0.
+[07:25:07.235] gfxstream cadence: inter-repaint-us(avg/max)=20732/207271 finish-interval-us(avg/max)=20711/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1380/195836.
+[07:25:07.236] gfxstream repaint: full-us(avg/max)=15990/103732 renderer-us(avg/max)=12873/98755 fence-us(avg/max)=1409/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=426581/2096044.
+[07:25:07.237] gfxstream inter-present buckets (n=3359): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=80/832/2071/233/23/120.
+[07:25:09.966] GL repaint stages at frame 3480 (avg/max us): use-output=11/430 setup=33/807 draw=199/68073 create-sync=12649/98496 flush=11/298 post=6/228 total=12964
+[07:25:09.976] gfxstream output: presents=3480 releases=3480 present-us(avg/max)=1646/8548 release-signal-after-response-us(avg/max)=3943/90032 no-free-slot=0.
+[07:25:09.977] gfxstream cadence: inter-repaint-us(avg/max)=20805/207271 finish-interval-us(avg/max)=20785/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1380/195836.
+[07:25:09.978] gfxstream repaint: full-us(avg/max)=16048/103732 renderer-us(avg/max)=12928/98755 fence-us(avg/max)=1410/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=437605/2119105.
+[07:25:09.979] gfxstream inter-present buckets (n=3479): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=80/844/2164/242/24/125.
+[07:25:12.671] GL repaint stages at frame 3600 (avg/max us): use-output=11/430 setup=33/848 draw=199/68073 create-sync=12684/98496 flush=11/298 post=6/228 total=18657
+[07:25:12.682] gfxstream output: presents=3600 releases=3600 present-us(avg/max)=1653/8548 release-signal-after-response-us(avg/max)=3955/90032 no-free-slot=0.
+[07:25:12.683] gfxstream cadence: inter-repaint-us(avg/max)=20862/207271 finish-interval-us(avg/max)=20844/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1380/195836.
+[07:25:12.684] gfxstream repaint: full-us(avg/max)=16095/103732 renderer-us(avg/max)=12964/98755 fence-us(avg/max)=1415/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=428610/2095996.
+[07:25:12.685] gfxstream inter-present buckets (n=3599): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=80/859/2251/255/24/130.
+[07:25:15.060] GL repaint stages at frame 3720 (avg/max us): use-output=11/430 setup=33/848 draw=198/68073 create-sync=12664/98496 flush=11/298 post=6/228 total=7550
+[07:25:15.068] gfxstream output: presents=3720 releases=3720 present-us(avg/max)=1650/8548 release-signal-after-response-us(avg/max)=3948/90032 no-free-slot=0.
+[07:25:15.069] gfxstream cadence: inter-repaint-us(avg/max)=20834/207271 finish-interval-us(avg/max)=20813/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1376/195836.
+[07:25:15.069] gfxstream repaint: full-us(avg/max)=16071/103732 renderer-us(avg/max)=12943/98755 fence-us(avg/max)=1414/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=389127/1841703.
+[07:25:15.070] gfxstream inter-present buckets (n=3719): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=88/890/2317/265/25/134.
+[07:25:17.464] GL repaint stages at frame 3840 (avg/max us): use-output=11/430 setup=34/2589 draw=199/68073 create-sync=12657/98496 flush=11/298 post=6/228 total=13354
+[07:25:17.475] gfxstream output: presents=3840 releases=3840 present-us(avg/max)=1650/8548 release-signal-after-response-us(avg/max)=3934/90032 no-free-slot=0.
+[07:25:17.479] gfxstream cadence: inter-repaint-us(avg/max)=20807/207271 finish-interval-us(avg/max)=20790/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1374/195836.
+[07:25:17.480] gfxstream repaint: full-us(avg/max)=16062/103732 renderer-us(avg/max)=12938/98755 fence-us(avg/max)=1410/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=391233/1894871.
+[07:25:17.481] gfxstream inter-present buckets (n=3839): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=90/931/2380/274/26/138.
+[07:25:20.032] GL repaint stages at frame 3960 (avg/max us): use-output=12/430 setup=34/2589 draw=198/68073 create-sync=12667/98496 flush=11/298 post=6/228 total=13128
+[07:25:20.045] gfxstream output: presents=3960 releases=3960 present-us(avg/max)=1658/8548 release-signal-after-response-us(avg/max)=3934/90032 no-free-slot=0.
+[07:25:20.046] gfxstream cadence: inter-repaint-us(avg/max)=20825/207271 finish-interval-us(avg/max)=20809/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1374/195836.
+[07:25:20.046] gfxstream repaint: full-us(avg/max)=16081/103732 renderer-us(avg/max)=12949/98755 fence-us(avg/max)=1411/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=409800/2001927.
+[07:25:20.047] gfxstream inter-present buckets (n=3959): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=90/957/2457/287/26/142.
+[07:25:22.714] GL repaint stages at frame 4080 (avg/max us): use-output=12/430 setup=34/2589 draw=198/68073 create-sync=12695/98496 flush=11/298 post=6/228 total=18113
+[07:25:22.723] gfxstream output: presents=4080 releases=4080 present-us(avg/max)=1661/8548 release-signal-after-response-us(avg/max)=3945/90032 no-free-slot=0.
+[07:25:22.724] gfxstream cadence: inter-repaint-us(avg/max)=20869/207271 finish-interval-us(avg/max)=20853/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1371/195836.
+[07:25:22.726] gfxstream repaint: full-us(avg/max)=16115/103732 renderer-us(avg/max)=12976/98755 fence-us(avg/max)=1415/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=443297/2070301.
+[07:25:22.727] gfxstream inter-present buckets (n=4079): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=90/971/2549/295/27/147.
+[07:25:25.338] GL repaint stages at frame 4200 (avg/max us): use-output=12/430 setup=34/2589 draw=198/68073 create-sync=12712/98496 flush=11/298 post=6/228 total=11429
+[07:25:25.347] gfxstream output: presents=4200 releases=4200 present-us(avg/max)=1663/8548 release-signal-after-response-us(avg/max)=3950/90032 no-free-slot=0.
+[07:25:25.348] gfxstream cadence: inter-repaint-us(avg/max)=20899/207271 finish-interval-us(avg/max)=20882/207549 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=1369/195836.
+[07:25:25.349] gfxstream repaint: full-us(avg/max)=16139/103732 renderer-us(avg/max)=12993/98755 fence-us(avg/max)=1420/12425 remainder-us(avg/max)=62/877 thread-cpu/wall-window-us=432023/2033720.
+[07:25:25.350] gfxstream inter-present buckets (n=4199): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=90/997/2632/301/27/152.
+[07:25:26.766] caught signal 15

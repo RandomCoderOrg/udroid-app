@@ -1,0 +1,11 @@
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+[guest] vkEnumerateInstanceVersion=0 api=1.4.0
+[stage] vkCreateInstance
+[gpu] Virtio-GPU GFXStream (Mali-G78) api=1.4.0
+[guest] external memory: core=extension fd=yes dma-buf=yes
+[stage] vkCreateDevice
+[one-shot-release-api] selected=core2 command=vkCmdPipelineBarrier2 requested_api=1.3 instance_api=1.4.0 physical_api=1.4.0 VK_KHR_synchronization2=enabled synchronization2=enabled
+[probe] UDROID_GFXSTREAM_WSI_SCANOUT=1: WSI scanout + linear DRM modifier + external DMA-BUF
+[ring] size=1; release fences are waited only when their slot is reused
+[one-shot] one-shot frames=1 release_mode=ownership final_layout=TRANSFER_DST_OPTIMAL ownership=1 hold_env=set
+[stage] vkCreateImage(external DMA-BUF)

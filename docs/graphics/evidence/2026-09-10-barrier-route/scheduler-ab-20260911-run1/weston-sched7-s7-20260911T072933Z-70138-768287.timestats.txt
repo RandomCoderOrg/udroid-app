@@ -1,0 +1,172 @@
+SurfaceFlinger TimeStats:
+Legacy stats are as follows:
+statsStart = 1789111786
+statsEnd = 1789111847
+totalFrames = 1699
+missedFrames = 0
+clientCompositionFrames = 0
+clientCompositionReusedFrames = 0
+refreshRateSwitches = 0
+compositionStrategyChanges = 0
+compositionStrategyPredicted = 0
+compositionStrategyPredictionSucceeded = 0
+compositionStrategyPredictionFailed = 0
+displayOnTime = 60083 ms
+displayConfigStats is as below:
+totalP2PTime = 59522 ms
+presentToPresent histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=1 16ms=303 17ms=1 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=13 33ms=1044 34ms=3 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=271 54ms=0 58ms=0 62ms=0 66ms=14 70ms=0 74ms=0 78ms=0 82ms=0 86ms=18 90ms=0 94ms=0 98ms=0 102ms=12 106ms=0 110ms=0 114ms=0 118ms=5 122ms=0 126ms=0 130ms=0 134ms=4 138ms=0 142ms=0 146ms=0 150ms=6 200ms=2 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+averageFrameDuration = 3.023 ms
+frameDuration histogram is as below:
+0ms=10 1ms=180 2ms=501 3ms=492 4ms=233 5ms=175 6ms=91 7ms=11 8ms=6 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+averageRenderEngineTiming = 0.000 ms
+renderEngineTiming histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+
+Global aggregated jank payload (Timeline stats):
+displayRefreshRate = 60 fps
+renderRate = 60 fps
+totalTimelineFrames = 120
+jankyFrames = 0
+sfLongCpuJankyFrames = 0
+sfLongGpuJankyFrames = 0
+sfUnattributedJankyFrames = 0
+appUnattributedJankyFrames = 0
+sfSchedulingJankyFrames = 0
+sfPredictionErrorJankyFrames = 0
+appBufferStuffingJankyFrames = 0
+sfDeadlineMisses histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+sfPredictionErrors histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+
+displayRefreshRate = 60 fps
+renderRate = 60 fps
+uid = 10337
+layerName = f574b98 SurfaceView[org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity](BLAST)#154
+packageName = 
+gameMode = Unsupported
+totalFrames = 1655
+droppedFrames = 0
+lateAcquireFrames = 0
+badDesiredPresentFrames = 0
+Jank payload for this layer:
+totalTimelineFrames = 0
+jankyFrames = 0
+sfLongCpuJankyFrames = 0
+sfLongGpuJankyFrames = 0
+sfUnattributedJankyFrames = 0
+appUnattributedJankyFrames = 0
+sfSchedulingJankyFrames = 0
+sfPredictionErrorJankyFrames = 0
+appBufferStuffingJankyFrames = 0
+SetFrameRate vote for this layer:
+frameRate = 60.00
+frameRateCompatibility = ExactOrMultiple
+seamlessness = ShouldBeSeamless
+averageFPS = 27.784
+present2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=234 17ms=1 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=14 33ms=1063 34ms=3 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=277 54ms=0 58ms=0 62ms=0 66ms=14 70ms=0 74ms=0 78ms=0 82ms=0 86ms=19 90ms=0 94ms=0 98ms=0 102ms=12 106ms=0 110ms=0 114ms=0 118ms=6 122ms=0 126ms=0 130ms=0 134ms=4 138ms=0 142ms=0 146ms=0 150ms=6 200ms=2 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+latch2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=63 9ms=1270 10ms=322 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+desired2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=74 12ms=101 13ms=104 14ms=85 15ms=104 16ms=87 17ms=116 18ms=101 19ms=116 20ms=111 21ms=114 22ms=101 23ms=95 24ms=103 25ms=82 26ms=84 27ms=59 28ms=17 29ms=1 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+present2presentDelta histogram is as below:
+0ms=789 1ms=47 2ms=3 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=1 16ms=123 17ms=518 18ms=5 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=29 34ms=38 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=37 54ms=1 58ms=0 62ms=0 66ms=1 70ms=25 74ms=0 78ms=0 82ms=0 86ms=14 90ms=0 94ms=0 98ms=0 102ms=12 106ms=0 110ms=0 114ms=0 118ms=7 122ms=0 126ms=0 130ms=0 134ms=4 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+acquire2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=8 11ms=69 12ms=100 13ms=97 14ms=91 15ms=97 16ms=94 17ms=111 18ms=110 19ms=103 20ms=120 21ms=108 22ms=104 23ms=100 24ms=94 25ms=88 26ms=88 27ms=52 28ms=20 29ms=1 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+post2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=37 11ms=111 12ms=104 13ms=92 14ms=111 15ms=78 16ms=100 17ms=115 18ms=106 19ms=117 20ms=107 21ms=104 22ms=99 23ms=105 24ms=88 25ms=82 26ms=79 27ms=20 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+post2acquire histogram is as below:
+0ms=1224 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+
+displayRefreshRate = 60 fps
+renderRate = 60 fps
+uid = 10337
+layerName = VRI-org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity#149
+packageName = 
+gameMode = Unsupported
+totalFrames = 117
+droppedFrames = 0
+lateAcquireFrames = 0
+badDesiredPresentFrames = 0
+Jank payload for this layer:
+totalTimelineFrames = 117
+jankyFrames = 0
+sfLongCpuJankyFrames = 0
+sfLongGpuJankyFrames = 0
+sfUnattributedJankyFrames = 0
+appUnattributedJankyFrames = 0
+sfSchedulingJankyFrames = 0
+sfPredictionErrorJankyFrames = 0
+appBufferStuffingJankyFrames = 0
+SetFrameRate vote for this layer:
+frameRate = 0.00
+frameRateCompatibility = Undefined
+seamlessness = Undefined
+averageFPS = 1.935
+present2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=78 550ms=39 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+latch2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=4 9ms=105 10ms=8 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+desired2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=1 22ms=22 23ms=60 24ms=33 25ms=1 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+present2presentDelta histogram is as below:
+0ms=40 1ms=2 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=11 17ms=63 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+acquire2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=3 22ms=34 23ms=67 24ms=13 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+post2present histogram is as below:
+0ms=0 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=1 22ms=32 23ms=61 24ms=23 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+post2acquire histogram is as below:
+0ms=117 1ms=0 2ms=0 3ms=0 4ms=0 5ms=0 6ms=0 7ms=0 8ms=0 9ms=0 10ms=0 11ms=0 12ms=0 13ms=0 14ms=0 15ms=0 16ms=0 17ms=0 18ms=0 19ms=0 20ms=0 21ms=0 22ms=0 23ms=0 24ms=0 25ms=0 26ms=0 27ms=0 28ms=0 29ms=0 30ms=0 31ms=0 32ms=0 33ms=0 34ms=0 36ms=0 38ms=0 40ms=0 42ms=0 44ms=0 46ms=0 48ms=0 50ms=0 54ms=0 58ms=0 62ms=0 66ms=0 70ms=0 74ms=0 78ms=0 82ms=0 86ms=0 90ms=0 94ms=0 98ms=0 102ms=0 106ms=0 110ms=0 114ms=0 118ms=0 122ms=0 126ms=0 130ms=0 134ms=0 138ms=0 142ms=0 146ms=0 150ms=0 200ms=0 250ms=0 300ms=0 350ms=0 400ms=0 450ms=0 500ms=0 550ms=0 600ms=0 650ms=0 700ms=0 750ms=0 800ms=0 850ms=0 900ms=0 950ms=0 1000ms=0
+
+displayRefreshRate = 60 fps
+renderRate = 60 fps
+uid = 10242
+layerName = none
+packageName = 
+gameMode = Unsupported
+totalFrames = 0
+droppedFrames = 0
+lateAcquireFrames = 0
+badDesiredPresentFrames = 0
+Jank payload for this layer:
+totalTimelineFrames = 1
+jankyFrames = 0
+sfLongCpuJankyFrames = 0
+sfLongGpuJankyFrames = 0
+sfUnattributedJankyFrames = 0
+appUnattributedJankyFrames = 0
+sfSchedulingJankyFrames = 0
+sfPredictionErrorJankyFrames = 0
+appBufferStuffingJankyFrames = 0
+SetFrameRate vote for this layer:
+frameRate = 0.00
+frameRateCompatibility = Undefined
+seamlessness = Undefined
+
+displayRefreshRate = 60 fps
+renderRate = 60 fps
+uid = 10337
+layerName = none
+packageName = 
+gameMode = Unsupported
+totalFrames = 0
+droppedFrames = 0
+lateAcquireFrames = 0
+badDesiredPresentFrames = 0
+Jank payload for this layer:
+totalTimelineFrames = 2
+jankyFrames = 0
+sfLongCpuJankyFrames = 0
+sfLongGpuJankyFrames = 0
+sfUnattributedJankyFrames = 0
+appUnattributedJankyFrames = 0
+sfSchedulingJankyFrames = 0
+sfPredictionErrorJankyFrames = 0
+appBufferStuffingJankyFrames = 0
+SetFrameRate vote for this layer:
+frameRate = 0.00
+frameRateCompatibility = Undefined
+seamlessness = Undefined
+

@@ -1,0 +1,6 @@
+proot warning: can't sanitize binding "/data/data/org.randomcoder.udroid.dev/no_backup/graphics/kumquat-gpu.sock": No such file or directory
+[mode] writer=fullscreen-gradient-draw frames=120 serialized=1 UDROID_GBM_PROBE_DRAW=1 UDROID_GBM_PROBE_FRAMES=120
+[stage] dlopen libgbm.so.1
+[stage] dlopen libEGL.so.1 and libGLESv2.so.2
+[stage] connect GBM Kumquat transport
+[fail] connect /tmp/kumquat-gpu-0: Connection refused

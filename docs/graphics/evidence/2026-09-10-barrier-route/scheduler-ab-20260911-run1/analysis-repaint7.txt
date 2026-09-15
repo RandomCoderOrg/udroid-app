@@ -1,0 +1,23 @@
+aggregate interval: frames/presents/releases=1680; warm=360 final=2040; no-free-slot=0
+approximate interval means reconstructed from integer cumulative means:
+metric                                  mean_us  rounding_bound_us  samples
+gl.use-output                             10.429              1.429     1680
+gl.setup                                  21.643              1.429     1680
+gl.draw                                  144.143              1.429     1680
+gl.create-sync                          16099.714              1.429     1680
+gl.flush                                   8.214              1.429     1680
+gl.post                                    5.000              1.429     1680
+headless.present                        1843.357              1.429     1680
+headless.release-after-response         4306.786              1.429     1680
+headless.inter-repaint                  36121.820              1.427     1680
+headless.finish-interval                36130.122              1.427     1680
+headless.finish-to-repaint              12779.804              1.427     1680
+headless.repaint-full                   19619.643              1.429     1680
+headless.repaint-renderer               16306.857              1.429     1680
+headless.repaint-fence                  1406.786              1.429     1680
+headless.repaint-remainder                61.857              1.429     1680
+inter-present interval buckets <=8.3/<=16.7/<=25/<=33.3/<=50/>50 ms: 0/8/200/580/799/93
+SurfaceView layer: f574b98 SurfaceView[org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity](BLAST)#154
+SurfaceView totalFrames=1655 reported averageFPS=27.784
+SurfaceView nonzero present2present buckets: 16ms=234 17ms=1 32ms=14 33ms=1063 34ms=3 50ms=277 66ms=14 86ms=19 102ms=12 118ms=6 134ms=4 150ms=6 200ms=2
+CAUTION: maxima were discarded; reconstructed means are approximate due to integer-microsecond cumulative logging. SurfaceFlinger averageFPS and buckets are coarse layer diagnostics, not a >59 FPS qualification. The files do not prove temporal overlap; use only an atomically collected warm/performance set.

@@ -1,0 +1,357 @@
+WARNING: debug protocol has been enabled. This is a potential denial-of-service attack vector and information leak.
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+WARNING: Some incorrect rendering might occur because the selected Vulkan device (Virtio-GPU GFXStream (Mali-G78)) doesn't support base Zink requirements: feats.features.fillModeNonSolid feats.features.shaderClipDistance 
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+KUMQUAT_GUEST host-allocation-send resource=10695 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=19 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10695 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=4 resource=10695
+KUMQUAT_GUEST ffi-import-return result=0 bo=4 resource=10695
+KUMQUAT_GUEST host-allocation-send resource=10695 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=21 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10695 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=5 resource=10695
+KUMQUAT_GUEST ffi-import-return result=0 bo=5 resource=10695
+KUMQUAT_GUEST host-allocation-send resource=10695 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=10697 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=26 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10697 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=7 resource=10697
+KUMQUAT_GUEST ffi-import-return result=0 bo=7 resource=10697
+KUMQUAT_GUEST host-allocation-send resource=10697 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=28 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10697 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=8 resource=10697
+KUMQUAT_GUEST ffi-import-return result=0 bo=8 resource=10697
+KUMQUAT_GUEST host-allocation-send resource=10697 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=10699 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=33 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10699 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=10 resource=10699
+KUMQUAT_GUEST ffi-import-return result=0 bo=10 resource=10699
+KUMQUAT_GUEST host-allocation-send resource=10699 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=35 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10699 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=11 resource=10699
+KUMQUAT_GUEST ffi-import-return result=0 bo=11 resource=10699
+KUMQUAT_GUEST host-allocation-send resource=10699 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=10701 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=40 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10701 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=13 resource=10701
+KUMQUAT_GUEST ffi-import-return result=0 bo=13 resource=10701
+KUMQUAT_GUEST host-allocation-send resource=10701 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=42 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10701 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=14 resource=10701
+KUMQUAT_GUEST ffi-import-return result=0 bo=14 resource=10701
+KUMQUAT_GUEST host-allocation-send resource=10701 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=10703 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=47 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10703 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=16 resource=10703
+KUMQUAT_GUEST ffi-import-return result=0 bo=16 resource=10703
+KUMQUAT_GUEST host-allocation-send resource=10703 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=49 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10703 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=17 resource=10703
+KUMQUAT_GUEST ffi-import-return result=0 bo=17 resource=10703
+KUMQUAT_GUEST host-allocation-send resource=10703 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=10705 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=54 size=2073600
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10705 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=19 resource=10705
+KUMQUAT_GUEST ffi-import-return result=0 bo=19 resource=10705
+KUMQUAT_GUEST host-allocation-send resource=10705 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=56 size=2109440
+KUMQUAT_GUEST import-send context=10691 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=10705 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=20 resource=10705
+KUMQUAT_GUEST ffi-import-return result=0 bo=20 resource=10705
+KUMQUAT_GUEST host-allocation-send resource=10705 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+MESA: info: udroid gfxstream-submit caps nativeSync=1 fencePassing=1 externalSync=1
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1248.9 encode-us=880.1 prepare-us=134.4 submit-us=70.5 post-us=125.6 postLookup-ns=125267.6 postLookup-us=125.268 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1669.1 command-buffers=1.94 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=120 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1611 housekeeping-us(avg)=2566 finish-us(avg)=322
+MESA: info: udroid Zink sync batch count=120 pre-end-us(avg)=1 end-batch-us(avg)=959 submit-wait-us(avg)=4591 restart-us(avg)=907
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1824830.1 vkGetSemaphoreGOOGLE-us=1824.830 acquireSync-ns=432458.2 acquireSync-us=432.458 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2267517.8 GetSemaphoreFdKHR-us=2267.518 dmabufFdAcquire-ns=10549.6 dmabufFdAcquire-us=10.550 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=231103.8 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=231.104 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=120 prepare-us(avg)=0 semaphore-us(avg)=279 dispatch-us(avg)=6698 fence-setup-us(avg)=1 trailing-wait-us(avg)=1
+MESA: info: udroid DRI native-fence create count=120 glthread-us(avg)=0 st-flush-us(avg)=8076
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=294715.8 vkGetSemaphoreGOOGLE-us=294.716 acquireSync-ns=454791.2 acquireSync-us=454.791 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1639.6 encode-us=1130.7 prepare-us=171.2 submit-us=213.4 post-us=146.1 postLookup-ns=145667.6 postLookup-us=145.668 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=240 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1904 housekeeping-us(avg)=2831 finish-us(avg)=435
+MESA: info: udroid Zink sync batch count=240 pre-end-us(avg)=2 end-batch-us(avg)=1220 submit-wait-us(avg)=5292 restart-us(avg)=847
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2073433.4 vkGetSemaphoreGOOGLE-us=2073.433 acquireSync-ns=518723.5 acquireSync-us=518.724 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2603485.4 GetSemaphoreFdKHR-us=2603.485 dmabufFdAcquire-ns=12620.7 dmabufFdAcquire-us=12.621 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=277659.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=277.659 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=240 prepare-us(avg)=0 semaphore-us(avg)=339 dispatch-us(avg)=7283 fence-setup-us(avg)=1 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=240 glthread-us(avg)=0 st-flush-us(avg)=8639
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=372328.4 vkGetSemaphoreGOOGLE-us=372.328 acquireSync-ns=453466.8 acquireSync-us=453.467 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1454.8 encode-us=1015.5 prepare-us=174.1 submit-us=180.4 post-us=171.6 postLookup-ns=171161.8 postLookup-us=171.162 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=360 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1939 housekeeping-us(avg)=2901 finish-us(avg)=438
+MESA: info: udroid Zink sync batch count=360 pre-end-us(avg)=2 end-batch-us(avg)=1103 submit-wait-us(avg)=5411 restart-us(avg)=831
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1894882.2 vkGetSemaphoreGOOGLE-us=1894.882 acquireSync-ns=596847.9 acquireSync-us=596.848 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2500018.0 GetSemaphoreFdKHR-us=2500.018 dmabufFdAcquire-ns=13415.2 dmabufFdAcquire-us=13.415 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=317495.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=317.495 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=360 prepare-us(avg)=0 semaphore-us(avg)=349 dispatch-us(avg)=7145 fence-setup-us(avg)=1 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=360 glthread-us(avg)=0 st-flush-us(avg)=8588
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=357837.2 vkGetSemaphoreGOOGLE-us=357.837 acquireSync-ns=484247.2 acquireSync-us=484.247 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1103.3 encode-us=755.8 prepare-us=169.5 submit-us=186.1 post-us=181.9 postLookup-ns=181496.8 postLookup-us=181.497 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=480 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1870 housekeeping-us(avg)=2853 finish-us(avg)=452
+MESA: info: udroid Zink sync batch count=480 pre-end-us(avg)=2 end-batch-us(avg)=1082 submit-wait-us(avg)=5311 restart-us(avg)=808
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1819157.9 vkGetSemaphoreGOOGLE-us=1819.158 acquireSync-ns=532453.0 acquireSync-us=532.453 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2359003.7 GetSemaphoreFdKHR-us=2359.004 dmabufFdAcquire-ns=13482.0 dmabufFdAcquire-us=13.482 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=229216.9 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=229.217 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=480 prepare-us(avg)=0 semaphore-us(avg)=349 dispatch-us(avg)=7130 fence-setup-us(avg)=1 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=480 glthread-us(avg)=0 st-flush-us(avg)=8513
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=293309.6 vkGetSemaphoreGOOGLE-us=293.310 acquireSync-ns=387008.7 acquireSync-us=387.009 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1369.0 encode-us=1001.8 prepare-us=159.8 submit-us=243.9 post-us=133.0 postLookup-ns=132590.0 postLookup-us=132.590 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=600 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1881 housekeeping-us(avg)=2818 finish-us(avg)=469
+MESA: info: udroid Zink sync batch count=600 pre-end-us(avg)=2 end-batch-us(avg)=1067 submit-wait-us(avg)=5307 restart-us(avg)=792
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1878762.9 vkGetSemaphoreGOOGLE-us=1878.763 acquireSync-ns=560885.3 acquireSync-us=560.885 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2449889.1 GetSemaphoreFdKHR-us=2449.889 dmabufFdAcquire-ns=12168.4 dmabufFdAcquire-us=12.168 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=317305.5 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=317.306 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=600 prepare-us(avg)=0 semaphore-us(avg)=358 dispatch-us(avg)=7181 fence-setup-us(avg)=1 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=600 glthread-us(avg)=0 st-flush-us(avg)=8560
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=366257.0 vkGetSemaphoreGOOGLE-us=366.257 acquireSync-ns=503739.8 acquireSync-us=503.740 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1524.1 encode-us=1070.8 prepare-us=162.5 submit-us=210.5 post-us=171.5 postLookup-ns=171049.3 postLookup-us=171.049 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=720 setup-us(avg)=1 end-cmdbuf-us(avg)=4 queue-lock-us(avg)=0 queue-submit-us(avg)=1916 housekeeping-us(avg)=2871 finish-us(avg)=469
+MESA: info: udroid Zink sync batch count=720 pre-end-us(avg)=2 end-batch-us(avg)=1080 submit-wait-us(avg)=5389 restart-us(avg)=813
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1991762.0 vkGetSemaphoreGOOGLE-us=1991.762 acquireSync-ns=549273.4 acquireSync-us=549.273 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2559373.6 GetSemaphoreFdKHR-us=2559.374 dmabufFdAcquire-ns=12984.6 dmabufFdAcquire-us=12.985 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=410582.1 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=410.582 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=720 prepare-us(avg)=0 semaphore-us(avg)=365 dispatch-us(avg)=7358 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=720 glthread-us(avg)=0 st-flush-us(avg)=8711
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=373709.8 vkGetSemaphoreGOOGLE-us=373.710 acquireSync-ns=457786.4 acquireSync-us=457.786 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1729.9 encode-us=1225.4 prepare-us=262.2 submit-us=319.9 post-us=241.3 postLookup-ns=240667.8 postLookup-us=240.668 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=840 setup-us(avg)=1 end-cmdbuf-us(avg)=5 queue-lock-us(avg)=0 queue-submit-us(avg)=2012 housekeeping-us(avg)=3000 finish-us(avg)=505
+MESA: info: udroid Zink sync batch count=840 pre-end-us(avg)=2 end-batch-us(avg)=1207 submit-wait-us(avg)=5664 restart-us(avg)=844
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2403329.5 vkGetSemaphoreGOOGLE-us=2403.329 acquireSync-ns=1013404.3 acquireSync-us=1013.404 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3431674.2 GetSemaphoreFdKHR-us=3431.674 dmabufFdAcquire-ns=20263.6 dmabufFdAcquire-us=20.264 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=494587.5 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=494.587 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=840 prepare-us(avg)=0 semaphore-us(avg)=401 dispatch-us(avg)=7851 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=840 glthread-us(avg)=0 st-flush-us(avg)=9380
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=623926.8 vkGetSemaphoreGOOGLE-us=623.927 acquireSync-ns=695541.1 acquireSync-us=695.541 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2051.4 encode-us=1414.6 prepare-us=282.9 submit-us=288.2 post-us=256.3 postLookup-ns=255503.0 postLookup-us=255.503 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=960 setup-us(avg)=1 end-cmdbuf-us(avg)=5 queue-lock-us(avg)=0 queue-submit-us(avg)=2126 housekeeping-us(avg)=3133 finish-us(avg)=532
+MESA: info: udroid Zink sync batch count=960 pre-end-us(avg)=2 end-batch-us(avg)=1247 submit-wait-us(avg)=5946 restart-us(avg)=877
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2488929.9 vkGetSemaphoreGOOGLE-us=2488.930 acquireSync-ns=935093.8 acquireSync-us=935.094 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3439207.6 GetSemaphoreFdKHR-us=3439.208 dmabufFdAcquire-ns=18258.3 dmabufFdAcquire-us=18.258 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=479033.7 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=479.034 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=960 prepare-us(avg)=0 semaphore-us(avg)=423 dispatch-us(avg)=8316 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=960 glthread-us(avg)=0 st-flush-us(avg)=9898
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=549619.5 vkGetSemaphoreGOOGLE-us=549.620 acquireSync-ns=812437.3 acquireSync-us=812.437 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2376.4 encode-us=1636.9 prepare-us=381.4 submit-us=455.9 post-us=333.8 postLookup-ns=332766.5 postLookup-us=332.766 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1292.5 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1080 setup-us(avg)=2 end-cmdbuf-us(avg)=5 queue-lock-us(avg)=0 queue-submit-us(avg)=2288 housekeeping-us(avg)=3299 finish-us(avg)=584
+MESA: info: udroid Zink sync batch count=1080 pre-end-us(avg)=3 end-batch-us(avg)=1406 submit-wait-us(avg)=6347 restart-us(avg)=938
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2476281.7 vkGetSemaphoreGOOGLE-us=2476.282 acquireSync-ns=984278.0 acquireSync-us=984.278 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3476153.5 GetSemaphoreFdKHR-us=3476.154 dmabufFdAcquire-ns=20082.6 dmabufFdAcquire-us=20.083 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=545944.9 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=545.945 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1080 prepare-us(avg)=0 semaphore-us(avg)=441 dispatch-us(avg)=8811 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1080 glthread-us(avg)=0 st-flush-us(avg)=10449
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=629320.6 vkGetSemaphoreGOOGLE-us=629.321 acquireSync-ns=841197.4 acquireSync-us=841.197 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2346.4 encode-us=1691.3 prepare-us=325.7 submit-us=378.7 post-us=316.7 postLookup-ns=315795.6 postLookup-us=315.796 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1200 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2401 housekeeping-us(avg)=3415 finish-us(avg)=612
+MESA: info: udroid Zink sync batch count=1200 pre-end-us(avg)=3 end-batch-us(avg)=1502 submit-wait-us(avg)=6623 restart-us(avg)=967
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2557558.5 vkGetSemaphoreGOOGLE-us=2557.559 acquireSync-ns=1154873.3 acquireSync-us=1154.873 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3731612.8 GetSemaphoreFdKHR-us=3731.613 dmabufFdAcquire-ns=21300.2 dmabufFdAcquire-us=21.300 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=514159.5 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=514.159 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1200 prepare-us(avg)=0 semaphore-us(avg)=459 dispatch-us(avg)=9250 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1200 glthread-us(avg)=0 st-flush-us(avg)=10956
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=753584.8 vkGetSemaphoreGOOGLE-us=753.585 acquireSync-ns=953883.1 acquireSync-us=953.883 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2316.5 encode-us=1617.2 prepare-us=355.1 submit-us=401.6 post-us=345.6 postLookup-ns=344574.6 postLookup-us=344.575 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1320 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2497 housekeeping-us(avg)=3526 finish-us(avg)=632
+MESA: info: udroid Zink sync batch count=1320 pre-end-us(avg)=3 end-batch-us(avg)=1549 submit-wait-us(avg)=6860 restart-us(avg)=989
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2457543.9 vkGetSemaphoreGOOGLE-us=2457.544 acquireSync-ns=1020030.3 acquireSync-us=1020.030 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3491007.6 GetSemaphoreFdKHR-us=3491.008 dmabufFdAcquire-ns=18723.2 dmabufFdAcquire-us=18.723 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=443516.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=443.516 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1320 prepare-us(avg)=0 semaphore-us(avg)=464 dispatch-us(avg)=9460 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1320 glthread-us(avg)=0 st-flush-us(avg)=11193
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=638170.0 vkGetSemaphoreGOOGLE-us=638.170 acquireSync-ns=735365.8 acquireSync-us=735.366 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1972.1 encode-us=1400.0 prepare-us=337.7 submit-us=385.0 post-us=273.5 postLookup-ns=272651.1 postLookup-us=272.651 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1440 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2540 housekeeping-us(avg)=3572 finish-us(avg)=639
+MESA: info: udroid Zink sync batch count=1440 pre-end-us(avg)=3 end-batch-us(avg)=1612 submit-wait-us(avg)=6956 restart-us(avg)=996
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2609157.0 vkGetSemaphoreGOOGLE-us=2609.157 acquireSync-ns=1115731.8 acquireSync-us=1115.732 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3740622.6 GetSemaphoreFdKHR-us=3740.623 dmabufFdAcquire-ns=21212.1 dmabufFdAcquire-us=21.212 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=451792.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=451.792 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1440 prepare-us(avg)=0 semaphore-us(avg)=471 dispatch-us(avg)=9667 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1440 glthread-us(avg)=0 st-flush-us(avg)=11467
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=673510.8 vkGetSemaphoreGOOGLE-us=673.511 acquireSync-ns=825192.9 acquireSync-us=825.193 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2067.6 encode-us=1402.2 prepare-us=290.0 submit-us=412.9 post-us=354.1 postLookup-ns=353127.4 postLookup-us=353.127 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1560 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2588 housekeeping-us(avg)=3657 finish-us(avg)=648
+MESA: info: udroid Zink sync batch count=1560 pre-end-us(avg)=3 end-batch-us(avg)=1641 submit-wait-us(avg)=7097 restart-us(avg)=1011
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2616654.5 vkGetSemaphoreGOOGLE-us=2616.654 acquireSync-ns=1072418.5 acquireSync-us=1072.419 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3704748.5 GetSemaphoreFdKHR-us=3704.749 dmabufFdAcquire-ns=20906.5 dmabufFdAcquire-us=20.907 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=492282.8 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=492.283 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1560 prepare-us(avg)=0 semaphore-us(avg)=485 dispatch-us(avg)=9852 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1560 glthread-us(avg)=0 st-flush-us(avg)=11684
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=565809.5 vkGetSemaphoreGOOGLE-us=565.810 acquireSync-ns=825281.5 acquireSync-us=825.282 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2343.7 encode-us=1621.2 prepare-us=319.0 submit-us=410.4 post-us=348.0 postLookup-ns=347050.3 postLookup-us=347.050 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1680 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2651 housekeeping-us(avg)=3701 finish-us(avg)=655
+MESA: info: udroid Zink sync batch count=1680 pre-end-us(avg)=3 end-batch-us(avg)=1690 submit-wait-us(avg)=7215 restart-us(avg)=1026
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2655108.4 vkGetSemaphoreGOOGLE-us=2655.108 acquireSync-ns=1101222.5 acquireSync-us=1101.222 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3774263.5 GetSemaphoreFdKHR-us=3774.264 dmabufFdAcquire-ns=20617.0 dmabufFdAcquire-us=20.617 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=501141.2 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=501.141 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1680 prepare-us(avg)=0 semaphore-us(avg)=492 dispatch-us(avg)=10053 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1680 glthread-us(avg)=0 st-flush-us(avg)=11915
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=684155.6 vkGetSemaphoreGOOGLE-us=684.156 acquireSync-ns=869023.7 acquireSync-us=869.024 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2279.7 encode-us=1559.7 prepare-us=327.7 submit-us=352.3 post-us=281.8 postLookup-ns=280900.7 postLookup-us=280.901 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1800 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2693 housekeeping-us(avg)=3760 finish-us(avg)=674
+MESA: info: udroid Zink sync batch count=1800 pre-end-us(avg)=4 end-batch-us(avg)=1749 submit-wait-us(avg)=7340 restart-us(avg)=1034
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2613376.5 vkGetSemaphoreGOOGLE-us=2613.377 acquireSync-ns=989723.0 acquireSync-us=989.723 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3618116.3 GetSemaphoreFdKHR-us=3618.116 dmabufFdAcquire-ns=18565.2 dmabufFdAcquire-us=18.565 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=510194.6 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=510.195 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1800 prepare-us(avg)=0 semaphore-us(avg)=501 dispatch-us(avg)=10205 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1800 glthread-us(avg)=0 st-flush-us(avg)=12084
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=604187.7 vkGetSemaphoreGOOGLE-us=604.188 acquireSync-ns=856719.6 acquireSync-us=856.720 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2357.5 encode-us=1686.4 prepare-us=409.6 submit-us=449.8 post-us=355.1 postLookup-ns=354128.3 postLookup-us=354.128 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1920 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2751 housekeeping-us(avg)=3810 finish-us(avg)=687
+MESA: info: udroid Zink sync batch count=1920 pre-end-us(avg)=4 end-batch-us(avg)=1751 submit-wait-us(avg)=7463 restart-us(avg)=1043
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2621365.7 vkGetSemaphoreGOOGLE-us=2621.366 acquireSync-ns=1127713.7 acquireSync-us=1127.714 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3775349.6 GetSemaphoreFdKHR-us=3775.350 dmabufFdAcquire-ns=20057.8 dmabufFdAcquire-us=20.058 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=546573.9 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=546.574 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=1920 prepare-us(avg)=0 semaphore-us(avg)=507 dispatch-us(avg)=10340 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1920 glthread-us(avg)=0 st-flush-us(avg)=12260
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=675747.6 vkGetSemaphoreGOOGLE-us=675.748 acquireSync-ns=757730.1 acquireSync-us=757.730 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2184.3 encode-us=1512.8 prepare-us=330.6 submit-us=411.0 post-us=287.6 postLookup-ns=286602.7 postLookup-us=286.603 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2040 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2781 housekeeping-us(avg)=3859 finish-us(avg)=694
+MESA: info: udroid Zink sync batch count=2040 pre-end-us(avg)=4 end-batch-us(avg)=1782 submit-wait-us(avg)=7555 restart-us(avg)=1060
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2178189.5 vkGetSemaphoreGOOGLE-us=2178.189 acquireSync-ns=750473.7 acquireSync-us=750.474 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2940167.9 GetSemaphoreFdKHR-us=2940.168 dmabufFdAcquire-ns=16726.4 dmabufFdAcquire-us=16.726 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=426702.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=426.702 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2040 prepare-us(avg)=0 semaphore-us(avg)=503 dispatch-us(avg)=10266 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2040 glthread-us(avg)=0 st-flush-us(avg)=12160
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=422147.9 vkGetSemaphoreGOOGLE-us=422.148 acquireSync-ns=522203.2 acquireSync-us=522.203 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1315.9 encode-us=875.2 prepare-us=182.5 submit-us=195.7 post-us=231.7 postLookup-ns=231169.0 postLookup-us=231.169 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2160 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2735 housekeeping-us(avg)=3821 finish-us(avg)=688
+MESA: info: udroid Zink sync batch count=2160 pre-end-us(avg)=4 end-batch-us(avg)=1746 submit-wait-us(avg)=7459 restart-us(avg)=1041
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=1697439.9 vkGetSemaphoreGOOGLE-us=1697.440 acquireSync-ns=434214.6 acquireSync-us=434.215 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2141591.4 GetSemaphoreFdKHR-us=2141.591 dmabufFdAcquire-ns=12543.0 dmabufFdAcquire-us=12.543 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=236554.9 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=236.555 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2160 prepare-us(avg)=0 semaphore-us(avg)=493 dispatch-us(avg)=10027 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2160 glthread-us(avg)=0 st-flush-us(avg)=11873
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=220197.2 vkGetSemaphoreGOOGLE-us=220.197 acquireSync-ns=332936.3 acquireSync-us=332.936 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1147.7 encode-us=776.1 prepare-us=197.3 submit-us=180.2 post-us=148.6 postLookup-ns=148140.9 postLookup-us=148.141 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2280 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2680 housekeeping-us(avg)=3765 finish-us(avg)=677
+MESA: info: udroid Zink sync batch count=2280 pre-end-us(avg)=4 end-batch-us(avg)=1691 submit-wait-us(avg)=7332 restart-us(avg)=1019
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2578970.4 vkGetSemaphoreGOOGLE-us=2578.970 acquireSync-ns=1012430.2 acquireSync-us=1012.430 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3605350.1 GetSemaphoreFdKHR-us=3605.350 dmabufFdAcquire-ns=19423.8 dmabufFdAcquire-us=19.424 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=517062.0 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=517.062 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2280 prepare-us(avg)=0 semaphore-us(avg)=499 dispatch-us(avg)=10149 fence-setup-us(avg)=2 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2280 glthread-us(avg)=0 st-flush-us(avg)=12005
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=550704.9 vkGetSemaphoreGOOGLE-us=550.705 acquireSync-ns=775304.4 acquireSync-us=775.304 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2235.7 encode-us=1596.2 prepare-us=327.4 submit-us=382.7 post-us=296.5 postLookup-ns=295580.7 postLookup-us=295.581 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2400 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2710 housekeeping-us(avg)=3797 finish-us(avg)=684
+MESA: info: udroid Zink sync batch count=2400 pre-end-us(avg)=4 end-batch-us(avg)=1733 submit-wait-us(avg)=7403 restart-us(avg)=1027
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2156.6 encode-us=1519.8 prepare-us=326.8 submit-us=373.4 post-us=294.6 postLookup-ns=293647.3 postLookup-us=293.647 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2559769.0 vkGetSemaphoreGOOGLE-us=2559.769 acquireSync-ns=1056239.2 acquireSync-us=1056.239 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3630312.4 GetSemaphoreFdKHR-us=3630.312 dmabufFdAcquire-ns=22188.4 dmabufFdAcquire-us=22.188 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=507669.8 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=507.670 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink submit count=2520 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2733 housekeeping-us(avg)=3828 finish-us(avg)=695
+MESA: info: udroid Zink sync batch count=2520 pre-end-us(avg)=4 end-batch-us(avg)=1747 submit-wait-us(avg)=7472 restart-us(avg)=1039
+MESA: info: udroid Zink fence flush count=2400 prepare-us(avg)=0 semaphore-us(avg)=506 dispatch-us(avg)=10229 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2400 glthread-us(avg)=0 st-flush-us(avg)=12128
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=690448.7 vkGetSemaphoreGOOGLE-us=690.449 acquireSync-ns=1036902.9 acquireSync-us=1036.903 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2211.0 encode-us=1555.6 prepare-us=372.5 submit-us=480.8 post-us=328.1 postLookup-ns=327096.5 postLookup-us=327.097 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2640 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2765 housekeeping-us(avg)=3860 finish-us(avg)=703
+MESA: info: udroid Zink sync batch count=2640 pre-end-us(avg)=4 end-batch-us(avg)=1773 submit-wait-us(avg)=7548 restart-us(avg)=1048
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2565952.2 vkGetSemaphoreGOOGLE-us=2565.952 acquireSync-ns=1113962.2 acquireSync-us=1113.962 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3696972.7 GetSemaphoreFdKHR-us=3696.973 dmabufFdAcquire-ns=20463.7 dmabufFdAcquire-us=20.464 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=493860.5 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=493.861 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2520 prepare-us(avg)=0 semaphore-us(avg)=509 dispatch-us(avg)=10347 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2520 glthread-us(avg)=0 st-flush-us(avg)=12255
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=626025.4 vkGetSemaphoreGOOGLE-us=626.025 acquireSync-ns=914182.8 acquireSync-us=914.183 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2263.7 encode-us=1576.4 prepare-us=373.8 submit-us=423.3 post-us=278.5 postLookup-ns=277504.2 postLookup-us=277.504 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2760 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2793 housekeeping-us(avg)=3894 finish-us(avg)=718
+MESA: info: udroid Zink sync batch count=2760 pre-end-us(avg)=4 end-batch-us(avg)=1812 submit-wait-us(avg)=7634 restart-us(avg)=1063
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2705160.9 vkGetSemaphoreGOOGLE-us=2705.161 acquireSync-ns=1173341.6 acquireSync-us=1173.342 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3899705.1 GetSemaphoreFdKHR-us=3899.705 dmabufFdAcquire-ns=33118.0 dmabufFdAcquire-us=33.118 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=473780.0 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=473.780 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2640 prepare-us(avg)=0 semaphore-us(avg)=512 dispatch-us(avg)=10508 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2640 glthread-us(avg)=0 st-flush-us(avg)=12425
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=667956.2 vkGetSemaphoreGOOGLE-us=667.956 acquireSync-ns=843871.8 acquireSync-us=843.872 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1900.6 encode-us=1262.3 prepare-us=256.0 submit-us=333.0 post-us=259.9 postLookup-ns=259229.8 postLookup-us=259.230 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=2880 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2792 housekeeping-us(avg)=3885 finish-us(avg)=718
+MESA: info: udroid Zink sync batch count=2880 pre-end-us(avg)=4 end-batch-us(avg)=1795 submit-wait-us(avg)=7624 restart-us(avg)=1061
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2086817.1 vkGetSemaphoreGOOGLE-us=2086.817 acquireSync-ns=767297.7 acquireSync-us=767.298 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2867904.1 GetSemaphoreFdKHR-us=2867.904 dmabufFdAcquire-ns=18778.2 dmabufFdAcquire-us=18.778 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=469330.9 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=469.331 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2760 prepare-us(avg)=0 semaphore-us(avg)=513 dispatch-us(avg)=10491 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2760 glthread-us(avg)=0 st-flush-us(avg)=12401
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=453120.0 vkGetSemaphoreGOOGLE-us=453.120 acquireSync-ns=577560.8 acquireSync-us=577.561 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2202.2 encode-us=1573.5 prepare-us=320.9 submit-us=378.6 post-us=330.6 postLookup-ns=329722.7 postLookup-us=329.723 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1278.5 command-buffers=1.96 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=3000 setup-us(avg)=4 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2812 housekeeping-us(avg)=3912 finish-us(avg)=724
+MESA: info: udroid Zink sync batch count=3000 pre-end-us(avg)=4 end-batch-us(avg)=1812 submit-wait-us(avg)=7681 restart-us(avg)=1073
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2560973.5 vkGetSemaphoreGOOGLE-us=2560.973 acquireSync-ns=1170974.4 acquireSync-us=1170.974 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3747678.6 GetSemaphoreFdKHR-us=3747.679 dmabufFdAcquire-ns=20711.9 dmabufFdAcquire-us=20.712 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=508915.8 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=508.916 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=2880 prepare-us(avg)=0 semaphore-us(avg)=515 dispatch-us(avg)=10589 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=2880 glthread-us(avg)=0 st-flush-us(avg)=12505
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=647844.5 vkGetSemaphoreGOOGLE-us=647.845 acquireSync-ns=817338.0 acquireSync-us=817.338 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2192.4 encode-us=1496.9 prepare-us=359.4 submit-us=364.9 post-us=284.9 postLookup-ns=283961.6 postLookup-us=283.962 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=3120 setup-us(avg)=4 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2828 housekeeping-us(avg)=3940 finish-us(avg)=735
+MESA: info: udroid Zink sync batch count=3120 pre-end-us(avg)=4 end-batch-us(avg)=1822 submit-wait-us(avg)=7738 restart-us(avg)=1078
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2561486.9 vkGetSemaphoreGOOGLE-us=2561.487 acquireSync-ns=1188398.9 acquireSync-us=1188.399 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3771344.4 GetSemaphoreFdKHR-us=3771.344 dmabufFdAcquire-ns=19948.9 dmabufFdAcquire-us=19.949 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=490841.6 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=490.842 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=3000 prepare-us(avg)=0 semaphore-us(avg)=518 dispatch-us(avg)=10645 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=3000 glthread-us(avg)=0 st-flush-us(avg)=12596
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=556633.5 vkGetSemaphoreGOOGLE-us=556.633 acquireSync-ns=932491.7 acquireSync-us=932.492 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=2184.9 encode-us=1484.9 prepare-us=424.6 submit-us=393.2 post-us=298.1 postLookup-ns=297069.0 postLookup-us=297.069 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=3240 setup-us(avg)=4 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2847 housekeeping-us(avg)=3966 finish-us(avg)=741
+MESA: info: udroid Zink sync batch count=3240 pre-end-us(avg)=4 end-batch-us(avg)=1841 submit-wait-us(avg)=7795 restart-us(avg)=1084
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2672339.9 vkGetSemaphoreGOOGLE-us=2672.340 acquireSync-ns=1058328.9 acquireSync-us=1058.329 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=3746947.2 GetSemaphoreFdKHR-us=3746.947 dmabufFdAcquire-ns=20421.3 dmabufFdAcquire-us=20.421 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=529957.4 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=529.957 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=3120 prepare-us(avg)=0 semaphore-us(avg)=521 dispatch-us(avg)=10708 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=3120 glthread-us(avg)=0 st-flush-us(avg)=12665
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=597570.8 vkGetSemaphoreGOOGLE-us=597.571 acquireSync-ns=765644.3 acquireSync-us=765.644 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1793.2 encode-us=1258.0 prepare-us=277.0 submit-us=320.8 post-us=245.5 postLookup-ns=244715.0 postLookup-us=244.715 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=1267.8 command-buffers=1.95 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=3360 setup-us(avg)=4 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2841 housekeeping-us(avg)=3969 finish-us(avg)=740
+MESA: info: udroid Zink sync batch count=3360 pre-end-us(avg)=4 end-batch-us(avg)=1853 submit-wait-us(avg)=7789 restart-us(avg)=1082
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=2144674.7 vkGetSemaphoreGOOGLE-us=2144.675 acquireSync-ns=642700.5 acquireSync-us=642.701 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+MESA: info: udroid Zink dmabuf-semaphore-import samples=120 GetSemaphoreFdKHR-ns=2798168.6 GetSemaphoreFdKHR-us=2798.169 dmabufFdAcquire-ns=16960.0 dmabufFdAcquire-us=16.960 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-ns=406570.8 DMA_BUF_IOCTL_IMPORT_SYNC_FILE-us=406.571 getSemaphoreFdFailures=0/0.000 dmabufFdAcquireAttempts=120/1.000 dmabufFdAcquireSuccesses=120/1.000 resourceExportAttempts=120/1.000 importSyncFileCalls=120/1.000 importSyncFileFailures=0/0.000
+MESA: info: udroid Zink fence flush count=3240 prepare-us(avg)=0 semaphore-us(avg)=518 dispatch-us(avg)=10644 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=3240 glthread-us(avg)=0 st-flush-us(avg)=12583
+MESA: info: udroid gfxstream-get-semaphore-fd externalSync samples=120 vkGetSemaphoreGOOGLE-ns=461591.3 vkGetSemaphoreGOOGLE-us=461.591 acquireSync-ns=591149.5 acquireSync-us=591.150 vkGetSemaphoreGOOGLEFailures=0 acquireSyncFailures=0
+simple-shm exiting

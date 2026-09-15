@@ -1,0 +1,7 @@
+{
+  "file_format_version": "1.0.0",
+  "ICD": {
+    "library_path": "/root/udroid-gfxstream-wayland-linear-20260912/lib/libvulkan_gfxstream.so",
+    "api_version": "1.3.0"
+  }
+}

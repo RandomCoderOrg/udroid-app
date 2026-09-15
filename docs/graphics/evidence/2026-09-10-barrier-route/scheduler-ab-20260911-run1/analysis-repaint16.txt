@@ -1,0 +1,23 @@
+aggregate interval: frames/presents/releases=2400; warm=720 final=3120; no-free-slot=0
+approximate interval means reconstructed from integer cumulative means:
+metric                                  mean_us  rounding_bound_us  samples
+gl.use-output                              8.900              1.600     2400
+gl.setup                                  22.400              1.600     2400
+gl.draw                                  139.800              1.600     2400
+gl.create-sync                          14457.100              1.600     2400
+gl.flush                                   7.600              1.600     2400
+gl.post                                    5.600              1.600     2400
+headless.present                        1719.800              1.600     2400
+headless.release-after-response         4113.700              1.600     2400
+headless.inter-repaint                  25359.410              1.599     2400
+headless.finish-interval                25357.272              1.599     2400
+headless.finish-to-repaint              3974.363              1.599     2400
+headless.repaint-full                   17853.500              1.600     2400
+headless.repaint-renderer               14659.500              1.600     2400
+headless.repaint-fence                  1415.900              1.600     2400
+headless.repaint-remainder                56.000              1.600     2400
+inter-present interval buckets <=8.3/<=16.7/<=25/<=33.3/<=50/>50 ms: 40/225/1195/758/96/86
+SurfaceView layer: f574b98 SurfaceView[org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity](BLAST)#154
+SurfaceView totalFrames=2305 reported averageFPS=39.078
+SurfaceView nonzero present2present buckets: 16ms=1267 33ms=935 50ms=19 66ms=27 86ms=47 102ms=6 118ms=4
+CAUTION: maxima were discarded; reconstructed means are approximate due to integer-microsecond cumulative logging. SurfaceFlinger averageFPS and buckets are coarse layer diagnostics, not a >59 FPS qualification. The files do not prove temporal overlap; use only an atomically collected warm/performance set.

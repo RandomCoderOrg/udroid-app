@@ -1,0 +1,27 @@
+VK_BASE_VERSION_1_0 check failed: vkCreateInstance not found
+VK_BASE_VERSION_1_0 check failed: vkEnumerateInstanceExtensionProperties not found
+VK_BASE_VERSION_1_0 check failed: vkEnumerateInstanceLayerProperties not found
+[kumquat-blob] stage=create-request resource=2 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=2 ctx=1 blob_id=0
+[pending-blob-direct] stage=add context=1 blob=1 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=4 ctx=1 mem=2 flags=0x6 blob_id=1 size=2073600
+[pending-blob-direct] stage=take context=1 blob=1 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=4 context=1 blob=1 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=4 blob=1
+[blob-resource-direct] stage=export resource=4 blob=1 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=4 ctx=1 blob_id=1
+[winsys-share] stage=register resource=4 dev=9 ino=50328
+[kumquat-blob] stage=create-request resource=6 ctx=1 mem=2 flags=0x1 blob_id=2 size=2097152
+[pending-blob-direct] stage=take-missing context=1 blob=2 pending=0
+[kumquat-blob] stage=create-accepted resource=6 ctx=1 blob_id=2
+[winsys-share] stage=register resource=6 dev=9 ino=50332
+[winsys-share] stage=lookup dev=9 ino=50328 hit=Some(4)
+[winsys-import] stage=shared-attach resource=4 ctx=1
+[winsys-share] stage=lookup dev=9 ino=50328 hit=Some(4)
+[winsys-import] stage=shared-attach resource=4 ctx=1
+[kumquat-blob] stage=create-request resource=7 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=7 ctx=1 blob_id=0
+[winsys-share] stage=release resource=6 dev=9 ino=50332
+[winsys-share] stage=release resource=4 dev=9 ino=50328

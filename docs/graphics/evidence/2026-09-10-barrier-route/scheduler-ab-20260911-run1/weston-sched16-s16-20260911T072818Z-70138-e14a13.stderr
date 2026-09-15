@@ -1,0 +1,128 @@
+WARNING: debug protocol has been enabled. This is a potential denial-of-service attack vector and information leak.
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+WARNING: Some incorrect rendering might occur because the selected Vulkan device (Virtio-GPU GFXStream (Mali-G78)) doesn't support base Zink requirements: feats.features.fillModeNonSolid feats.features.shaderClipDistance 
+KUMQUAT_GUEST host-allocation-send resource=5 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=19 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=5 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=4 resource=5
+KUMQUAT_GUEST ffi-import-return result=0 bo=4 resource=5
+KUMQUAT_GUEST host-allocation-send resource=5 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=21 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=5 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=5 resource=5
+KUMQUAT_GUEST ffi-import-return result=0 bo=5 resource=5
+KUMQUAT_GUEST host-allocation-send resource=5 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=7 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=26 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=7 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=7 resource=7
+KUMQUAT_GUEST ffi-import-return result=0 bo=7 resource=7
+KUMQUAT_GUEST host-allocation-send resource=7 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=28 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=7 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=8 resource=7
+KUMQUAT_GUEST ffi-import-return result=0 bo=8 resource=7
+KUMQUAT_GUEST host-allocation-send resource=7 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=9 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=33 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=9 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=10 resource=9
+KUMQUAT_GUEST ffi-import-return result=0 bo=10 resource=9
+KUMQUAT_GUEST host-allocation-send resource=9 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=35 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=9 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=11 resource=9
+KUMQUAT_GUEST ffi-import-return result=0 bo=11 resource=9
+KUMQUAT_GUEST host-allocation-send resource=9 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=40 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=11 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=13 resource=11
+KUMQUAT_GUEST ffi-import-return result=0 bo=13 resource=11
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=42 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=11 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=14 resource=11
+KUMQUAT_GUEST ffi-import-return result=0 bo=14 resource=11
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=47 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=13 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=16 resource=13
+KUMQUAT_GUEST ffi-import-return result=0 bo=16 resource=13
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=49 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=13 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=17 resource=13
+KUMQUAT_GUEST ffi-import-return result=0 bo=17 resource=13
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=54 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=15 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=19 resource=15
+KUMQUAT_GUEST ffi-import-return result=0 bo=19 resource=15
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=56 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=15 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=20 resource=15
+KUMQUAT_GUEST ffi-import-return result=0 bo=20 resource=15
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+simple-shm exiting

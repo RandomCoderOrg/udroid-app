@@ -1,0 +1,23 @@
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+[guest] vkEnumerateInstanceVersion=0 api=1.4.0
+[stage] vkCreateInstance
+[gpu] Virtio-GPU GFXStream (Mali-G78) api=1.4.0
+[guest] external memory: core=extension fd=yes dma-buf=yes
+[stage] vkCreateDevice
+[probe] UDROID_GFXSTREAM_WSI_SCANOUT=1: WSI scanout + linear DRM modifier + external DMA-BUF
+[ring] size=1; release fences are waited only when their slot is reused
+[one-shot] one-shot frames=1 release_mode=ownership final_layout=TRANSFER_DST_OPTIMAL ownership=1 hold_env=set
+[stage] vkCreateImage(external DMA-BUF)
+[stage] vkAllocateMemory(export DMA-BUF)
+KUMQUAT_GUEST host-allocation-send resource=4 allocationSize=3686400
+KUMQUAT_GUEST host-allocation-return result=0
+[stage] vkBindImageMemory
+[ring] allocated slot=0
+[stage] render and present loop
+[one-shot-release] frame=1 mode=ownership oldLayout=TRANSFER_DST_OPTIMAL newLayout=TRANSFER_DST_OPTIMAL srcQueue=graphics(0) dstQueue=FOREIGN(4294967293)
+[one-shot] presented frame=1 slot=0 mode=ownership release_fd=7
+[timing] frames=1 sleep_us=0 wall_fps=132.36 active_ms mean=7.516 p50=7.516 p95=7.516 mode=ownership ownership=1
+[hold] keeping the final frame alive for 15 seconds
+[one-shot] waiting release fence before destroy mode=ownership ownership=1
+[one-shot] retiring slot after release fence wait mode=ownership ownership=1
+[pass] one-shot scanout frame presented mode=ownership ownership=1

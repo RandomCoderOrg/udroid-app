@@ -1,0 +1,187 @@
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+WARNING: Some incorrect rendering might occur because the selected Vulkan device (Virtio-GPU GFXStream (Mali-G78)) doesn't support base Zink requirements: feats.features.fillModeNonSolid feats.features.shaderClipDistance 
+gfxstream-gbm: transport type=5 peer_uid=10337 kernel_uid=10337 valid=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+gfxstream-gbm: Vulkan allocator initialized
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+MESA: info: udroid gfxstream-caps protocol=1 async-submit=1 aux-command-memory=0 queue-submit-with-commands=1 no-render-control=1
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=19 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=11 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=4 resource=11
+KUMQUAT_GUEST ffi-import-return result=0 bo=4 resource=11
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=21 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=11 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=5 resource=11
+KUMQUAT_GUEST ffi-import-return result=0 bo=5 resource=11
+KUMQUAT_GUEST host-allocation-send resource=11 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=26 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=13 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=7 resource=13
+KUMQUAT_GUEST ffi-import-return result=0 bo=7 resource=13
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=28 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=13 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=8 resource=13
+KUMQUAT_GUEST ffi-import-return result=0 bo=8 resource=13
+KUMQUAT_GUEST host-allocation-send resource=13 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=33 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=15 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=10 resource=15
+KUMQUAT_GUEST ffi-import-return result=0 bo=10 resource=15
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=35 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=15 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=11 resource=15
+KUMQUAT_GUEST ffi-import-return result=0 bo=11 resource=15
+KUMQUAT_GUEST host-allocation-send resource=15 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=17 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=40 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=17 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=13 resource=17
+KUMQUAT_GUEST ffi-import-return result=0 bo=13 resource=17
+KUMQUAT_GUEST host-allocation-send resource=17 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=42 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=17 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=14 resource=17
+KUMQUAT_GUEST ffi-import-return result=0 bo=14 resource=17
+KUMQUAT_GUEST host-allocation-send resource=17 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=19 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=47 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=19 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=16 resource=19
+KUMQUAT_GUEST ffi-import-return result=0 bo=16 resource=19
+KUMQUAT_GUEST host-allocation-send resource=19 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=49 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=19 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=17 resource=19
+KUMQUAT_GUEST ffi-import-return result=0 bo=17 resource=19
+KUMQUAT_GUEST host-allocation-send resource=19 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST host-allocation-send resource=21 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=54 size=2073600
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=21 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=19 resource=21
+KUMQUAT_GUEST ffi-import-return result=0 bo=19 resource=21
+KUMQUAT_GUEST host-allocation-send resource=21 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+KUMQUAT_GUEST ffi-import-call fd=56 size=2109440
+KUMQUAT_GUEST import-send context=7 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=21 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=20 resource=21
+KUMQUAT_GUEST ffi-import-return result=0 bo=20 resource=21
+KUMQUAT_GUEST host-allocation-send resource=21 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+MESA: info: udroid gfxstream-submit caps nativeSync=1 fencePassing=1 externalSync=1
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+could not load cursor 'dnd-copy'
+could not load cursor 'dnd-none'
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1783.5 encode-us=1101.8 prepare-us=357.3 submit-us=225.4 post-us=283.6 postLookup-ns=282848.4 postLookup-us=282.848 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=905.2 command-buffers=1.22 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=120 setup-us(avg)=3 end-cmdbuf-us(avg)=8 queue-lock-us(avg)=0 queue-submit-us(avg)=2694 housekeeping-us(avg)=4276 finish-us(avg)=52
+MESA: info: udroid Zink sync batch count=120 pre-end-us(avg)=5 end-batch-us(avg)=2064 submit-wait-us(avg)=7210 restart-us(avg)=2181
+MESA: info: udroid Zink fence flush count=120 prepare-us(avg)=0 semaphore-us(avg)=625 dispatch-us(avg)=11355 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=120 glthread-us(avg)=0 st-flush-us(avg)=13506
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1883.1 encode-us=1209.2 prepare-us=359.6 submit-us=303.5 post-us=324.6 postLookup-ns=323723.3 postLookup-us=323.723 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=890.6 command-buffers=1.22 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=240 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2804 housekeeping-us(avg)=4298 finish-us(avg)=27
+MESA: info: udroid Zink sync batch count=240 pre-end-us(avg)=5 end-batch-us(avg)=2296 submit-wait-us(avg)=7314 restart-us(avg)=1717
+MESA: info: udroid Zink fence flush count=240 prepare-us(avg)=0 semaphore-us(avg)=653 dispatch-us(avg)=11316 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=240 glthread-us(avg)=0 st-flush-us(avg)=13409
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1601.0 encode-us=968.7 prepare-us=309.3 submit-us=380.4 post-us=290.6 postLookup-ns=289720.7 postLookup-us=289.721 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=888.2 command-buffers=1.17 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=360 setup-us(avg)=2 end-cmdbuf-us(avg)=7 queue-lock-us(avg)=0 queue-submit-us(avg)=2745 housekeeping-us(avg)=4220 finish-us(avg)=19
+MESA: info: udroid Zink sync batch count=360 pre-end-us(avg)=5 end-batch-us(avg)=2132 submit-wait-us(avg)=7178 restart-us(avg)=1513
+MESA: info: udroid Zink fence flush count=360 prepare-us(avg)=0 semaphore-us(avg)=641 dispatch-us(avg)=10817 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=360 glthread-us(avg)=1 st-flush-us(avg)=12988
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1288.9 encode-us=770.8 prepare-us=274.2 submit-us=304.6 post-us=228.2 postLookup-ns=227462.7 postLookup-us=227.463 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=897.5 command-buffers=1.21 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=480 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2591 housekeeping-us(avg)=4060 finish-us(avg)=15
+MESA: info: udroid Zink sync batch count=480 pre-end-us(avg)=4 end-batch-us(avg)=2059 submit-wait-us(avg)=6854 restart-us(avg)=1389
+MESA: info: udroid Zink fence flush count=480 prepare-us(avg)=0 semaphore-us(avg)=611 dispatch-us(avg)=10190 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=480 glthread-us(avg)=1 st-flush-us(avg)=12170
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1552.0 encode-us=838.1 prepare-us=280.7 submit-us=357.4 post-us=229.2 postLookup-ns=228487.5 postLookup-us=228.487 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=888.6 command-buffers=1.18 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=600 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2564 housekeeping-us(avg)=4050 finish-us(avg)=12
+MESA: info: udroid Zink sync batch count=600 pre-end-us(avg)=4 end-batch-us(avg)=1973 submit-wait-us(avg)=6817 restart-us(avg)=1305
+MESA: info: udroid Zink fence flush count=600 prepare-us(avg)=0 semaphore-us(avg)=642 dispatch-us(avg)=10160 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=600 glthread-us(avg)=1 st-flush-us(avg)=12116
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1772.4 encode-us=1086.4 prepare-us=383.7 submit-us=481.8 post-us=299.9 postLookup-ns=298939.1 postLookup-us=298.939 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=889.8 command-buffers=1.20 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=720 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2634 housekeeping-us(avg)=4071 finish-us(avg)=11
+MESA: info: udroid Zink sync batch count=720 pre-end-us(avg)=4 end-batch-us(avg)=1952 submit-wait-us(avg)=6916 restart-us(avg)=1297
+MESA: info: udroid Zink fence flush count=720 prepare-us(avg)=0 semaphore-us(avg)=644 dispatch-us(avg)=10249 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=720 glthread-us(avg)=0 st-flush-us(avg)=12213
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1580.5 encode-us=992.7 prepare-us=293.2 submit-us=367.2 post-us=262.6 postLookup-ns=261757.4 postLookup-us=261.757 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=890.6 command-buffers=1.22 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=840 setup-us(avg)=2 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2620 housekeeping-us(avg)=4061 finish-us(avg)=10
+MESA: info: udroid Zink sync batch count=840 pre-end-us(avg)=4 end-batch-us(avg)=1895 submit-wait-us(avg)=6902 restart-us(avg)=1283
+MESA: info: udroid Zink fence flush count=840 prepare-us(avg)=0 semaphore-us(avg)=652 dispatch-us(avg)=10046 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=840 glthread-us(avg)=0 st-flush-us(avg)=12083
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1503.6 encode-us=886.1 prepare-us=325.8 submit-us=364.8 post-us=288.2 postLookup-ns=287306.0 postLookup-us=287.306 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=895.5 command-buffers=1.17 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=115/0.958 temporarySyncFdConsumes=115/0.958 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=960 setup-us(avg)=3 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2608 housekeeping-us(avg)=4072 finish-us(avg)=9
+MESA: info: udroid Zink sync batch count=960 pre-end-us(avg)=4 end-batch-us(avg)=1895 submit-wait-us(avg)=6899 restart-us(avg)=1275
+MESA: info: udroid Zink fence flush count=960 prepare-us(avg)=0 semaphore-us(avg)=652 dispatch-us(avg)=10019 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=960 glthread-us(avg)=1 st-flush-us(avg)=12040
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1576.3 encode-us=910.3 prepare-us=392.6 submit-us=455.4 post-us=294.7 postLookup-ns=293788.4 postLookup-us=293.788 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=890.2 command-buffers=1.21 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1080 setup-us(avg)=3 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2625 housekeeping-us(avg)=4088 finish-us(avg)=8
+MESA: info: udroid Zink sync batch count=1080 pre-end-us(avg)=4 end-batch-us(avg)=1887 submit-wait-us(avg)=6933 restart-us(avg)=1261
+MESA: info: udroid Zink fence flush count=1080 prepare-us(avg)=0 semaphore-us(avg)=655 dispatch-us(avg)=10069 fence-setup-us(avg)=3 trailing-wait-us(avg)=0
+MESA: info: udroid DRI native-fence create count=1080 glthread-us(avg)=0 st-flush-us(avg)=12089
+MESA: info: udroid gfxstream-submit samples=120 staging-us=1539.8 encode-us=919.7 prepare-us=374.1 submit-us=447.9 post-us=364.3 postLookup-ns=363341.9 postLookup-us=363.342 vkQueueWaitIdle-ns=0.0 vkQueueWaitIdle-us=0.000 vkQueueWaitIdle-called-ns=0.0 vkQueueWaitIdle-called-us=0.000 signalFinalize-ns=0.0 signalFinalize-us=0.000 bytes=889.4 command-buffers=1.19 externalFenceFdReason=0/0.000 post_wait_events=0/0.000 post_wait_sync_fds=0/0.000 waitIdleSubmits=0/0.000 temporarySyncFdWaits=114/0.950 temporarySyncFdConsumes=114/0.950 syncFdWaitErrors=0/0.000 async=1 aux=0
+MESA: info: udroid Zink submit count=1200 setup-us(avg)=3 end-cmdbuf-us(avg)=6 queue-lock-us(avg)=0 queue-submit-us(avg)=2640 housekeeping-us(avg)=4086 finish-us(avg)=8
+MESA: info: udroid Zink sync batch count=1200 pre-end-us(avg)=4 end-batch-us(avg)=1908 submit-wait-us(avg)=6947 restart-us(avg)=1263
+simple-shm exiting

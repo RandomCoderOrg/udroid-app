@@ -1,0 +1,19 @@
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+[guest] api=1.4.0
+[stage] vkCreateInstance
+[gpu] Virtio-GPU GFXStream (Mali-G78)
+[stage] vkCreateDevice
+[stage] create sync-fd semaphores
+[stage] export signaled fence sync-fd
+[sync-fd] signaled fence fd=5 signaled revents=0x1
+[stage] temporary import signaled fd, then re-export active temporary payload
+[export] vkGetSemaphoreFdKHR(temp signaled) fd=6
+[sync-fd] reexported temp fd=6 signaled revents=0x1
+[stage] re-import re-exported temp, wait it, and signal marker
+[stage] single queueSubmit multi-submit wait(temp)->signal(permanent)->wait(permanent)
+[sync-fd] multi-submit source fd=5 signaled revents=0x1
+[stage] signal and wait original semaphore after temporary payload consumption
+[stage] temporary import -1 and re-export it
+[export] vkGetSemaphoreFdKHR(-1 temp) fd=-1
+[stage] signal and wait original semaphore after -1 temporary export
+[pass] external semaphore sync-fd lifecycle probe completed

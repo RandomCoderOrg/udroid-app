@@ -1,0 +1,18 @@
+{
+  "activity": "org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity",
+  "arms": [
+    {
+      "arm_repaint_window_ms": 16,
+      "errors": [],
+      "run_label": "s16-20260911T073640Z-73159-dd5acc",
+      "valid": true
+    }
+  ],
+  "collection_order": [
+    16
+  ],
+  "completed_utc": "2026-09-11T07:37:54.733+00:00",
+  "schema": 1,
+  "valid": true,
+  "winsys_timing": true
+}

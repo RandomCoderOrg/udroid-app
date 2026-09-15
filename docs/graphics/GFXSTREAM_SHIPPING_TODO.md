@@ -3,6 +3,64 @@
 Status: experimental, fail closed. The Standard graphics profile remains the
 fallback until every required gate passes on the supported device matrix.
 
+Latest investigation: [September 10 release-barrier routing](2026-09-10-barrier-route.md),
+following [September 6 semaphore lifecycle and frame pacing](2026-09-06-semaphore-lifecycle.md).
+The temporary SYNC_FD regression probe passes, but removing queue-idle waits
+has not improved total repaint time. The matched four-way one-shot probe now
+isolates FOREIGN ownership release: ownership-only and ownership-plus-GENERAL
+display blue; neither and GENERAL-only remain black. The pre-clock Weston
+baseline remained black beneath a fully opaque desktop-shell fade curtain;
+its Zink release and fence import were nevertheless traced and are present.
+Matched legacy/core2/public-KHR2 ownership probes all display correctly. The
+imported-writer control currently stops before rendering:
+public image requirements are zero before and after bind, and the memory-plane
+layout is zero. Source review traced premature native AHB requirements caching
+and untranslated DRM-modifier layout queries. Full WSI-query redesign is
+deferred: Weston uses a different LINEAR socket-GBM allocation path. A matched
+surfaceless EGL/renderbuffer probe now visibly presents both a blue GPU clear
+and a real shader-drawn spatial RGB gradient through that allocator, independent
+presenter import, and native-fence sequence, with both fences signaled and exit 0.
+No readback or runtime-driver changes were used. Serialized reuse of one BO
+also passes 120 changing shader draws with all fences retired and clean exit.
+Short SurfaceView timestats record 88 frames with a quantized 57.629 rate;
+this does not qualify sustained desktop FPS. Native-fence creation/flush is
+the largest measured guest stage (9.70 ms mean over non-final frames).
+One-shot SHM-like BGRA upload and opaque RGBX sampling also visibly pass with
+both fences retired and clean exit. Client-memory indexed geometry using
+Weston's index order also visibly passes with GL_NO_ERROR and both fences
+retired; its recovered log ends `[pass]`, though the terminal exit status was
+not retained.
+
+Actual Weston scene diagnostics then showed the correctly mapped SHM client,
+panel, and background hidden beneath the stuck fade surface. Changing only the
+headless presentation completion from a NULL timestamp to a local presentation
+clock estimate, with flags 0, retires the fade and advances simple-shm frame
+callbacks. The visible 90-second diagnostic run completed 2,400 presents and
+releases with no free-slot starvation. Its 2,419 callback deltas average
+36.945 ms, about 27 callbacks/s under verbose diagnostics; this is not measured
+display FPS. Panel text is still upside-down at the bottom, so output
+orientation remains incorrect. Next run the atomic 7 ms / 16 ms repaint-window
+A/B to isolate scheduler delay, then re-enable the existing scoped sync timers
+on the selected visible arm. The first quiet 7 ms attempt had only about 33
+seconds of live overlap in a requested 60-second SurfaceFlinger window and is
+excluded. The >59 visible-FPS goal is still incomplete.
+
+The valid randomized scheduler A/B selected `repaint-window=16`: its exact
+60-second SurfaceFlinger layer result was 2,305 frames / 39.078 FPS versus
+1,655 / 27.784 FPS at 7 ms. Weston inter-repaint improved from 36.122 ms to
+25.359 ms, but full repaint remained 17.854 ms and GL native-fence creation
+remained 14.457 ms. The valid opt-in timing rerun of arm 16 then measured 2,336
+layer frames / 39.664 FPS against a 2,400-frame Weston interval, with 24.867 ms
+inter-repaint, 17.574 ms full repaint, and 14.226 ms native-fence creation.
+Matched cumulative subtraction places 8.443 ms in submission-worker wait;
+adjacent 120-sample reports place the actual DMA-BUF implicit attachment ioctl
+at 0.482 ms, not the full 3.512 ms semaphore-export path. The import-oriented,
+unimplemented `EGL_EXT_image_implicit_sync_control` is not an outbound fix.
+Next, test opt-in queue-submit-ready native-fence export while retaining
+implicit attachment and preserving the default behavior as baseline.
+Historical rendering passes below are not qualification of
+the current binary set.
+
 ## Current checkpoint
 
 - [x] Rootless Kumquat host reaches Android's vendor Vulkan driver.
@@ -13,6 +71,12 @@ fallback until every required gate passes on the supported device matrix.
 - [x] A standard GBM BO imports into the independent gfxstream EGLDevice and
   passes hardware-rendered pixel readback.
 - [x] Nested Plasma reaches `kwin_wayland`, Xwayland and `plasmashell`.
+- [x] Transport the public AHardwareBuffer description from Rutabaga through
+  matched Kumquat host/guest builds to common Vulkan WSI.
+- [x] Render and continuously recycle a native Wayland Vulkan/Zink client
+  using the transported AHardwareBuffer stride.
+- [x] Implement an opt-in Android `ASurfaceControl` presenter using public
+  API 29+ NDK entry points and protocol-v2 resource identities.
 - [ ] Weston publishes `zwp_linux_dmabuf_v1` v4 or newer.
 
 The compositor allocator boundary is now proven. Weston can keep its X11 EGL
@@ -21,6 +85,30 @@ separate allocator. The next gate is a non-DRM render-device contract: KWin
 must select that same gfxstream GBM transport and the Zink EGLDevice, while
 linux-dmabuf feedback advertises only resources created by this AHardwareBuffer
 allocator. A fake DRM node remains explicitly out of scope.
+
+The direct Android presentation path is implemented but not runtime-qualified.
+It accepts only AHardwareBuffers carrying both `GPU_SAMPLED_IMAGE` and
+`COMPOSER_OVERLAY`, and preserves the matched protocol-v2 guest/host
+resource-generation contract. Acquire eventfds are consumed asynchronously;
+release eventfds are signalled only after SurfaceFlinger releases the previous
+buffer. Unsupported buffers use the GLES presenter, while mixed protocol or
+resource generations fail the experimental profile closed. No Pixel success is
+claimed for this checkpoint because no device is currently visible over ADB.
+
+### Direct Android presentation micro-probe gates
+
+Complete these before using the path for Weston:
+
+- [ ] Negotiate matching protocol-v2 host and guest builds and register a
+  sampled+overlay AHardwareBuffer pool.
+- [ ] Verify acquire -> SurfaceControl submit -> previous-buffer release ->
+  `REUSE_READY` ordering across sustained frame recycling.
+- [ ] Pass first frame, replacement, final detach, Surface recreation, producer
+  disconnect/reconnect and process teardown without stale frames or hangs.
+- [ ] Confirm unsupported usage selects GLES, while mixed generations fail the
+  experimental profile closed to the Standard profile.
+- [ ] Measure BufferQueue submissions, physical presentation, frame pacing,
+  CPU use and dropped-detached frames before comparing against Weston.
 
 ## 1. Complete the gfxstream GBM contract
 
@@ -37,6 +125,24 @@ allocator. A fake DRM node remains explicitly out of scope.
 - [ ] Reject unsupported formats, modifiers, malformed descriptors and stale
   resources without falling back silently.
 - [ ] Pass repeated teardown, client crash and host reconnect probes.
+
+AHardwareBuffer layout checkpoint (2026-08-31): Android described each
+800x500 RGBA8 display allocation with a stride of 800 pixels. Rutabaga now
+retains that public descriptor, a versioned Kumquat resource-create reply
+carries it to the guest, and gfxstream exposes it to common WSI through a
+driver callback. WSI converts the known 32-bit format to a 3200-byte row pitch
+only after validating version, format, extent, layer count, linear modifier and
+the complete byte range against the exported DMA-BUF allocation. Unknown,
+padded-without-metadata and malformed layouts fail closed.
+
+The previous Vulkan memory-plane query returned an unset row pitch and a
+nonsensical offset on the Pixel vendor stack. The actual DMA-BUF allocation
+was 1,667,072 bytes, so inferring a tightly packed layout from allocation size
+was correctly rejected. The transported descriptor produced four valid
+swapchain images, a correct `weston-simple-egl` triangle and 3,969 observed
+`wl_buffer.release` events without the old forced-stride probe. Host and guest
+protocol files had identical SHA-256 hashes at validation; mixed generations
+remain unsupported and must be rejected by packaging.
 
 Pixel checkpoint (2026-08-30): the Pixel two-device probe passed both FD import
 types, destroyed the exporting BO and GBM device, then verified the full
@@ -120,12 +226,19 @@ string.
 ## 3. Qualify native Wayland clients
 
 - [ ] Pass `weston-simple-shm`.
-- [ ] Pass `weston-simple-egl` on gfxstream/Zink.
+- [x] Pass `weston-simple-egl` on gfxstream/Zink.
 - [ ] Pass `weston-simple-dmabuf-egl`.
 - [ ] Pass simultaneous SHM, EGL, DMA-BUF and Vulkan clients.
 - [ ] Fix stale exposed regions during move, resize, overlap and unmap.
 - [ ] Pass display detach, reattach, resize and rotation.
 - [ ] Record FPS, frame time, CPU, memory, GPU-offloaded copies and latency.
+
+Pixel native-Wayland checkpoint (2026-08-31): the clean nested proof stack
+remained alive after protocol tracing was removed. Its animated 800x500
+baseline consumed approximately 57% of one CPU in the host renderer, 24% in
+KWin, 13% in outer Weston and 7% in `weston-simple-egl`. These numbers are a
+measurement baseline for the deliberately nested proof topology, not a
+shipping performance result.
 
 ## 4. Qualify Plasma Wayland unchanged
 
@@ -135,8 +248,17 @@ string.
 - [ ] Verify panel, launcher, tooltips, Dolphin, window movement and fullscreen.
 - [ ] Run interaction and idle stability soaks.
 
+A direct `plasmashell` child starts under the validated KWin compositor but
+does not produce a visible desktop. Do not classify this as another buffer or
+GBM failure: the same compositor renders the native Wayland triangle, while
+the Plasma log reports missing session services and session management. The
+next Plasma step is a real lifecycle/bootstrap contract, not forced surface or
+renderer overrides.
+
 ## 5. Choose the production presentation topology from measurements
 
+- [ ] Qualify direct AHardwareBuffer -> SurfaceControl presentation as the
+  Android-side zero-copy candidate before wiring Weston into it.
 - [ ] Measure `Lorie -> Weston -> KWin` copies and latency.
 - [ ] Keep the nested route only if its performance is acceptable.
 - [ ] Otherwise implement an Android-Surface Weston backend and remove the

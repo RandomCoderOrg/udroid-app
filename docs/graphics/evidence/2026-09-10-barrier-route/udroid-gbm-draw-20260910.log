@@ -1,0 +1,81 @@
+[mode] writer=fullscreen-gradient-draw UDROID_GBM_PROBE_DRAW=1
+[stage] dlopen libgbm.so.1
+[stage] dlopen libEGL.so.1 and libGLESv2.so.2
+[stage] connect GBM Kumquat transport
+[stage] gbm_create_device
+gfxstream-gbm: transport type=5 peer_uid=10337 kernel_uid=10337 valid=1
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+gfxstream-gbm: Vulkan allocator initialized
+[gbm] backend=gfxstream socket_fd=3
+[stage] gbm_bo_create 720x720 XBGR8888 linear rendering
+KUMQUAT_GUEST host-allocation-send resource=4 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+[descriptor] format=0x34324258 extent=720x720 planes=1 stride=2880 offset=0 modifier=0x0 fd=8 size=2109440
+[stage] presenter ABI check
+[presenter] abi=2 required=2 icd=/opt/udroid-diag/sync-export-20260906/gfxstream/lib/libvulkan_gfxstream.so
+[stage] udroid_gfxstream_presenter_create
+[stage] eglGetPlatformDisplayEXT direct surfaceless
+[stage] eglInitialize direct surfaceless display
+WARNING: Some incorrect rendering might occur because the selected Vulkan device (Virtio-GPU GFXStream (Mali-G78)) doesn't support base Zink requirements: feats.features.fillModeNonSolid feats.features.shaderClipDistance 
+[stage] eglCreateContext and eglMakeCurrent surfaceless
+[egl] version=1.5 renderer=zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78) (Driver Unknown))
+[stage] eglCreateImageKHR from authoritative GBM descriptor
+MESA: info: udroid Zink ownership-trace from_handle_begin seq=1 threadToken=0x78984be878 pscreen=0x3000069670 templ=0x7ffbd029f0 target=2 format=198 bind=0xa flags=0x0 width=720 height=720 usage=0x2 whandle=0x7ffbd02ae0 type=2 handle=8 stride=2880 offset=0 format=198 modifier=0x0 plane=0
+KUMQUAT_GUEST ffi-import-call fd=11 size=2073600
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=4 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=4 resource=4
+KUMQUAT_GUEST ffi-import-return result=0 bo=4 resource=4
+KUMQUAT_GUEST host-allocation-send resource=4 allocationSize=0
+KUMQUAT_GUEST host-allocation-return result=0
+MESA: info: udroid Zink ownership-trace from_handle_result seq=2 threadToken=0x78984be878 pscreen=0x3000069670 pres=0x30001dcc40 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 queue=FOREIGN(4294967293) gfxQueue=0 layout=PREINITIALIZED exportable=1 dt=(nil) dt_idx=4294967295 dmabuf=1 linear=0 swapchain=0 modifier=0x0 modifier_count=1 created=1
+[stage] Weston-parity EGLImage renderbuffer attachment
+[egl] framebuffer_status=0x8cd5 expected=0x8cd5
+[stage] udroid_gfxstream_presenter_import after writer alias creation
+KUMQUAT_GUEST ffi-import-call fd=13 size=2109440
+KUMQUAT_GUEST import-send context=1 720x720 fourcc=0x34324241
+KUMQUAT_GUEST import-await-response
+KUMQUAT_GUEST import-response-count=1
+KUMQUAT_GUEST import-response resource=4 handle_type=0x2
+KUMQUAT_GUEST import-complete bo=5 resource=4
+KUMQUAT_GUEST ffi-import-return result=0 bo=5 resource=4
+KUMQUAT_GUEST host-allocation-send resource=4 allocationSize=2109440
+KUMQUAT_GUEST host-allocation-return result=0
+[ownership] writer_alias_created=1 presenter_imported=1 gpu_writer_used=0 descriptor_fd=8
+[stage] compile/link ES2 spatial-gradient shaders
+[shader] label=vertex handle=1 compile_status=1 info_length=0 info_written=0 info=(empty)
+[shader] label=fragment handle=2 compile_status=1 info_length=0 info_written=0 info=(empty)
+[program] handle=3 link_status=1 info_length=0 info_written=0 info=(empty)
+[stage] glDrawArrays full-screen spatial RGB gradient
+[draw] viewport=720x720 primitive=full-screen-triangle gradient=rgb gl_error=0x0
+[stage] eglCreateSyncKHR EGL_SYNC_NATIVE_FENCE_ANDROID
+MESA: info: udroid Zink ownership-trace image_barrier_exec seq=1 threadToken=0x78984be8d0 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 batch=0x30001148f0 batch_id=0 cmdbuf=0x3000126640 api=sync2 unsync=0 oldLayout=VK_IMAGE_LAYOUT_PREINITIALIZED newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL oldQueue=FOREIGN(4294967293) afterEmitQueue=IGNORED(4294967295) gfxQueue=0 queue_import=1 completed=0 usage_matches=1 exportable=1 dt=(nil) dt_idx=4294967295 flags=0x180 pipeline=0x400
+MESA: info: udroid Zink ownership-trace image_barrier_tracking seq=2 threadToken=0x78984be8d0 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 batch=0x30001148f0 batch_id=0 layout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL queue=IGNORED(4294967295) exportable=1 dt=(nil) dt_idx=4294967295 dt_layout_updated=0 dmabuf_exports_checked=1 found=0 inserted=1 queue_import=1
+MESA: info: udroid Zink ownership-trace barrier2_dispatch site=zink_screen_export_dmabuf_semaphore threadToken=0x78984be879 screen=0x3000069670 dev=0x30000884e0 tableCmdPipelineBarrier2=0x7896c0fbc0 rawCore=0x7896c0fbc0 rawKHR=0x7896c0fbc0 tableNull=0 rawCoreNull=0 rawKHRNull=0 tableEqCore=1 tableEqKHR=1 rawCoreSelected=1 haveKHRSynchronization2=1
+MESA: info: udroid Zink ownership-trace export_dmabuf_sem_begin seq=1 threadToken=0x78984be879 screen=0x3000069670 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 layout=COLOR_ATTACHMENT_OPTIMAL queue=IGNORED(4294967295) gfxQueue=0 exportable=1 dt=(nil) dt_idx=4294967295 is_aux=0
+MESA: info: udroid Zink ownership-trace export_dmabuf_sem_result seq=2 threadToken=0x78984be879 screen=0x3000069670 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 layout=COLOR_ATTACHMENT_OPTIMAL queue=IGNORED(4294967295) fd=14 exportedSyncFd=15 sem=0x3000ae90b0 importSemaphoreSuccess=1
+MESA: info: udroid Zink ownership-trace image_barrier_queue_import_sem seq=3 threadToken=0x78984be8d0 res=0x30001dcc40 child=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 batch=0x30001148f0 batch_id=0 sem=0x3000ae90b0 appended=1
+MESA: info: udroid Zink ownership-trace barrier2_dispatch site=zink_end_batch_dmabuf_release threadToken=0x78984be8d1 screen=0x3000069670 dev=0x30000884e0 tableCmdPipelineBarrier2=0x7896c0fbc0 rawCore=0x7896c0fbc0 rawKHR=0x7896c0fbc0 tableNull=0 rawCoreNull=0 rawKHRNull=0 tableEqCore=1 tableEqKHR=1 rawCoreSelected=1 haveKHRSynchronization2=1
+MESA: info: udroid Zink ownership-trace release_barrier seq=1 threadToken=0x78984be8d1 screen=0x3000069670 bs=0x30001148f0 batch_id=0 api=sync2 tableCmdPipelineBarrier2NonNull=1 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 oldLayout=COLOR_ATTACHMENT_OPTIMAL newLayout=COLOR_ATTACHMENT_OPTIMAL oldQueue=IGNORED(4294967295) srcQueue=gfx(0) dstQueue=FOREIGN(4294967293) exportable=1 dt=(nil) dt_idx=4294967295
+MESA: info: udroid Zink ownership-trace release_signal_sem seq=2 threadToken=0x78984be8d1 screen=0x3000069670 bs=0x30001148f0 batch_id=0 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 layout=COLOR_ATTACHMENT_OPTIMAL queue=FOREIGN(4294967293) sem=0x3000a7e1f0 appended=1
+MESA: info: udroid Zink ownership-trace submit_pre seq=3 threadToken=0x78969eba11 screen=0x3000069670 queue=0x30000659f0 bs=0x30001148f0 batch_id=1 numSubmitInfos=3 acquireWaits=0 fdWaits=1 cmdBuffers=2 signals=2 dmabufExports=1 hasWork=1 hasReordered=1 hasUnsync=0
+MESA: info: udroid Zink ownership-trace submit_post seq=4 threadToken=0x78969eba11 screen=0x3000069670 queue=0x30000659f0 bs=0x30001148f0 batch_id=1 result=VK_SUCCESS dmabufExports=1 signalSemaphores=1 fdWaitSemaphores=1
+MESA: info: udroid Zink ownership-trace import_dmabuf_sem_begin seq=3 threadToken=0x78969eb9b9 screen=0x3000069670 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 layout=COLOR_ATTACHMENT_OPTIMAL queue=FOREIGN(4294967293) gfxQueue=0 exportable=1 dt=(nil) dt_idx=4294967295 sem=0x3000a7e1f0
+MESA: info: udroid Zink ownership-trace import_dmabuf_sem_getfd seq=4 threadToken=0x78969eb9b9 screen=0x3000069670 res=0x30001dcc40 sem=0x3000a7e1f0 result=VK_SUCCESS syncFileFd=15
+MESA: info: udroid Zink ownership-trace import_dmabuf_sem_fd seq=5 threadToken=0x78969eb9b9 screen=0x3000069670 res=0x30001dcc40 sem=0x3000a7e1f0 syncFileFd=15 dmaBufFd=18 acquireSucceeded=1 isAux=0
+MESA: info: udroid Zink ownership-trace import_dmabuf_sem_ioctl seq=6 threadToken=0x78969eb9b9 screen=0x3000069670 res=0x30001dcc40 sem=0x3000a7e1f0 syncFileFd=15 dmaBufFd=18 ioctlRet=0 errno=0 failed=0
+MESA: info: udroid Zink ownership-trace submit_import_dmabuf_sync seq=5 threadToken=0x78969eba11 screen=0x3000069670 bs=0x30001148f0 batch_id=1 res=0x30001dcc40 obj=0x30001dce50 image=0x30001d73b0 bo=0x30001dd250 layout=COLOR_ATTACHMENT_OPTIMAL queue=FOREIGN(4294967293) sem=0x3000a7e1f0 importOk=0
+[stage] glFlush
+[stage] eglDupNativeFenceFDANDROID
+[stage] eglDestroySyncKHR
+[fence] acquire_fd=18 sequence=create-sync,glFlush,dup-fd,destroy-sync
+[stage] udroid_gfxstream_presenter_present consumes acquire fence
+[present] result=0 errno=0 acquire_consumed=18 presentation_fd=15 release_fd=18
+[stage] presentation fence
+[fence] name=presentation fence fd=15 poll=1 revents=0x1 errno=0
+[hold] keeping final frame alive 15 seconds
+[stage] release fence
+[fence] name=release fence fd=18 poll=1 revents=0x1 errno=0
+[pass] GBM/EGL spatial-gradient frame presented backend=gfxstream renderer=zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78) (Driver Unknown)) ownership=EGL-writer->external-presenter

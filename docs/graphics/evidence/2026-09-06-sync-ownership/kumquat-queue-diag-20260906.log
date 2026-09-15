@@ -1,0 +1,114 @@
+VK_BASE_VERSION_1_0 check failed: vkCreateInstance not found
+VK_BASE_VERSION_1_0 check failed: vkEnumerateInstanceExtensionProperties not found
+VK_BASE_VERSION_1_0 check failed: vkEnumerateInstanceLayerProperties not found
+[kumquat-blob] stage=create-request resource=2 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=2 ctx=1 blob_id=0
+[kumquat-blob] stage=create-request resource=4 ctx=1 mem=2 flags=0x1 blob_id=1 size=2097152
+[pending-blob-direct] stage=take-missing context=1 blob=1 pending=0
+[kumquat-blob] stage=create-accepted resource=4 ctx=1 blob_id=1
+[winsys-share] stage=register resource=4 dev=9 ino=238567
+[pending-blob-direct] stage=add context=1 blob=3 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=5 ctx=1 mem=2 flags=0x6 blob_id=3 size=2073600
+[pending-blob-direct] stage=take context=1 blob=3 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=5 context=1 blob=3 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=5 blob=3
+[blob-resource-direct] stage=export resource=5 blob=3 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=5 ctx=1 blob_id=3
+[winsys-share] stage=register resource=5 dev=9 ino=238572
+[winsys-share] stage=lookup dev=9 ino=238572 hit=Some(5)
+[winsys-import] stage=shared-attach resource=5 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238572 hit=Some(5)
+[winsys-import] stage=shared-attach resource=5 ctx=1
+[pending-blob-direct] stage=add context=1 blob=4 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=7 ctx=1 mem=2 flags=0x6 blob_id=4 size=2073600
+[pending-blob-direct] stage=take context=1 blob=4 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=7 context=1 blob=4 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=7 blob=4
+[blob-resource-direct] stage=export resource=7 blob=4 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=7 ctx=1 blob_id=4
+[winsys-share] stage=register resource=7 dev=9 ino=238574
+[winsys-share] stage=lookup dev=9 ino=238574 hit=Some(7)
+[winsys-import] stage=shared-attach resource=7 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238574 hit=Some(7)
+[winsys-import] stage=shared-attach resource=7 ctx=1
+[pending-blob-direct] stage=add context=1 blob=5 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=9 ctx=1 mem=2 flags=0x6 blob_id=5 size=2073600
+[pending-blob-direct] stage=take context=1 blob=5 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=9 context=1 blob=5 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=9 blob=5
+[blob-resource-direct] stage=export resource=9 blob=5 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=9 ctx=1 blob_id=5
+[winsys-share] stage=register resource=9 dev=9 ino=238576
+[winsys-share] stage=lookup dev=9 ino=238576 hit=Some(9)
+[winsys-import] stage=shared-attach resource=9 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238576 hit=Some(9)
+[winsys-import] stage=shared-attach resource=9 ctx=1
+[pending-blob-direct] stage=add context=1 blob=6 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=11 ctx=1 mem=2 flags=0x6 blob_id=6 size=2073600
+[pending-blob-direct] stage=take context=1 blob=6 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=11 context=1 blob=6 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=11 blob=6
+[blob-resource-direct] stage=export resource=11 blob=6 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=11 ctx=1 blob_id=6
+[winsys-share] stage=register resource=11 dev=9 ino=238578
+[winsys-share] stage=lookup dev=9 ino=238578 hit=Some(11)
+[winsys-import] stage=shared-attach resource=11 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238578 hit=Some(11)
+[winsys-import] stage=shared-attach resource=11 ctx=1
+[pending-blob-direct] stage=add context=1 blob=7 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=13 ctx=1 mem=2 flags=0x6 blob_id=7 size=2073600
+[pending-blob-direct] stage=take context=1 blob=7 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=13 context=1 blob=7 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=13 blob=7
+[blob-resource-direct] stage=export resource=13 blob=7 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=13 ctx=1 blob_id=7
+[winsys-share] stage=register resource=13 dev=9 ino=238580
+[winsys-share] stage=lookup dev=9 ino=238580 hit=Some(13)
+[winsys-import] stage=shared-attach resource=13 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238580 hit=Some(13)
+[winsys-import] stage=shared-attach resource=13 ctx=1
+[pending-blob-direct] stage=add context=1 blob=8 size=720x720 format=67 bind=0x2 pending=1
+[kumquat-blob] stage=create-request resource=15 ctx=1 mem=2 flags=0x6 blob_id=8 size=2073600
+[pending-blob-direct] stage=take context=1 blob=8 size=720x720 format=67 bind=0x2 pending=0
+[blob-resource-direct] stage=begin resource=15 context=1 blob=8 type=3 size=2073600 dimensions=720x720 format=67 bind=0x2 flags=0x6
+[blob-resource-direct] stage=create-3d-ok resource=15 blob=8
+[blob-resource-direct] stage=export resource=15 blob=8 descriptor=yes
+[kumquat-blob] stage=create-accepted resource=15 ctx=1 blob_id=8
+[winsys-share] stage=register resource=15 dev=9 ino=238582
+[winsys-share] stage=lookup dev=9 ino=238582 hit=Some(15)
+[winsys-import] stage=shared-attach resource=15 ctx=1
+[winsys-share] stage=lookup dev=9 ino=238582 hit=Some(15)
+[winsys-import] stage=shared-attach resource=15 ctx=1
+[kumquat-blob] stage=create-request resource=17 ctx=1 mem=2 flags=0x1 blob_id=9 size=2097152
+[pending-blob-direct] stage=take-missing context=1 blob=9 pending=0
+[kumquat-blob] stage=create-accepted resource=17 ctx=1 blob_id=9
+[winsys-share] stage=register resource=17 dev=9 ino=238584
+[kumquat-blob] stage=create-request resource=18 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=18 ctx=1 blob_id=0
+[kumquat-blob] stage=create-request resource=20 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=20 ctx=1 blob_id=0
+[kumquat-blob] stage=create-request resource=22 ctx=1 mem=2 flags=0x1 blob_id=0 size=1060864
+[pending-blob-direct] stage=take-missing context=1 blob=0 pending=0
+[kumquat-blob] stage=create-accepted resource=22 ctx=1 blob_id=0
+[kumquat-blob] stage=create-request resource=28 ctx=1 mem=2 flags=0x1 blob_id=16 size=2097152
+[pending-blob-direct] stage=take-missing context=1 blob=16 pending=0
+[kumquat-blob] stage=create-accepted resource=28 ctx=1 blob_id=16
+[winsys-share] stage=register resource=28 dev=9 ino=238590
+[kumquat-blob] stage=create-request resource=29 ctx=1 mem=2 flags=0x1 blob_id=18 size=2076672
+[pending-blob-direct] stage=take-missing context=1 blob=18 pending=0
+[kumquat-blob] stage=create-accepted resource=29 ctx=1 blob_id=18
+[winsys-share] stage=register resource=29 dev=9 ino=238594
+[winsys-share] stage=release resource=29 dev=9 ino=238594
+[winsys-share] stage=release resource=9 dev=9 ino=238576
+[winsys-share] stage=release resource=11 dev=9 ino=238578
+[winsys-share] stage=release resource=13 dev=9 ino=238580
+[winsys-share] stage=release resource=5 dev=9 ino=238572
+[winsys-share] stage=release resource=7 dev=9 ino=238574
+[winsys-share] stage=release resource=15 dev=9 ino=238582
+[winsys-share] stage=release resource=17 dev=9 ino=238584
+[winsys-share] stage=release resource=28 dev=9 ino=238590
+[winsys-share] stage=release resource=4 dev=9 ino=238567
+Terminated 

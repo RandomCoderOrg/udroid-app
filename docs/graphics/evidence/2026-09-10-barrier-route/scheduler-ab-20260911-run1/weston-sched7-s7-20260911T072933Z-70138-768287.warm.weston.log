@@ -1,0 +1,75 @@
+Date: 2026-09-11 UTC
+[07:29:34.646] weston 14.0.1
+               https://wayland.freedesktop.org
+               Bug reports to: https://gitlab.freedesktop.org/wayland/weston/issues/
+               Build: 14.0.1
+[07:29:34.646] Command line: /root/udroid-weston-socket-v1/frontend/weston --debug --backend=headless --renderer=gl --shell=desktop --config=/root/weston-repaint7-20260910.ini --gbm-allocator-socket=/tmp/kumquat-gpu-0 --gfxstream-presenter-icd=/opt/udroid-diag/sync-export-20260906/gfxstream/lib/libvulkan_gfxstream.so --socket=wayland-gfxstream-sched7-20260910-s7-20260911T072933Z-70138-768287 --width=720 --height=720 --idle-time=0 --log=/root/udroid-weston-socket-v1/weston-sched7-20260910-s7-20260911T072933Z-70138-768287.log -- /usr/bin/weston-simple-shm
+[07:29:34.646] OS: Linux, 6.1.157-android14-11-gbd23337e42e7-ab14791245, #1 SMP PREEMPT Wed Jan 28 05:34:14 UTC 2026, aarch64
+[07:29:34.646] Flight recorder: enabled
+[07:29:34.649] Using config file '/root/weston-repaint7-20260910.ini'
+[07:29:34.650] Output repaint window is 7 ms maximum.
+[07:29:34.650] Loading module '/root/udroid-weston-socket-v1/libweston/backend-headless/headless-backend-clock-20260910.so'
+[07:29:34.679] Loading module '/root/udroid-weston-contract/libweston/renderer-gl/gl-renderer.so'
+[07:29:34.734] warning: failed to query rendering device from EGL
+[07:29:34.744] Using external GBM allocator backend: gfxstream
+[07:29:34.744] EGL version: 1.5
+[07:29:34.745] EGL vendor: Mesa Project
+[07:29:34.745] EGL client APIs: OpenGL OpenGL_ES 
+[07:29:34.745] EGL features:
+               EGL Wayland extension: no
+               context priority: no
+               buffer age: no
+               partial update: yes
+               swap buffers with damage: no
+               configless context: yes
+               surfaceless context: yes
+               dmabuf support: modifiers
+[07:29:34.752] GL version: OpenGL ES 2.0 Mesa 25.0.7
+[07:29:34.752] GLSL version: OpenGL ES GLSL ES 1.0.16
+[07:29:34.752] GL vendor: Mesa
+[07:29:34.753] GL renderer: zink Vulkan 1.4(Virtio-GPU GFXStream (Mali-G78) (Driver Unknown))
+[07:29:34.762] GL ES 2.0 - renderer features:
+               read-back format: ARGB8888
+               glReadPixels supports y-flip: yes
+               glReadPixels supports PBO: yes
+               wl_shm 10 bpc formats: yes
+               wl_shm 16 bpc formats: no
+               wl_shm half-float formats: no
+               internal R and RG formats: yes
+               OES_EGL_image_external: yes
+[07:29:34.763] Using GL renderer
+[07:29:34.763] Registered plugin API 'weston_windowed_output_api_headless_v2' of size 16
+[07:29:34.763] Color manager: no-op
+                 protocol support: no
+[07:29:34.763] Output 'headless' attempts EOTF mode SDR and colorimetry mode default.
+[07:29:34.763] Output 'headless' using color profile: stock sRGB color profile
+[07:29:34.800] Direct gfxstream output enabled with 6 slots.
+[07:29:34.800] Output 'headless' enabled with head(s) headless
+[07:29:34.801] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: yes
+               cursor planes: no
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: yes
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC_RAW, id 4
+               presentation clock resolution: 0.000000001 s
+[07:29:34.801] Loading module '/usr/lib/aarch64-linux-gnu/weston/desktop-shell.so'
+[07:29:34.803] launching '/usr/local/libexec/weston-keyboard'
+[07:29:34.804] launching '/usr/local/libexec/weston-desktop-shell'
+[07:29:38.685] GL repaint stages at frame 120 (avg/max us): use-output=9/25 setup=20/126 draw=775/67606 create-sync=13187/83392 flush=7/17 post=5/54 total=6556
+[07:29:38.690] gfxstream output: presents=120 releases=120 present-us(avg/max)=1374/9268 release-signal-after-response-us(avg/max)=3517/19049 no-free-slot=0.
+[07:29:38.691] gfxstream cadence: inter-repaint-us(avg/max)=32494/131025 finish-interval-us(avg/max)=31757/110981 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=12790/89642.
+[07:29:38.691] gfxstream repaint: full-us(avg/max)=16580/86447 renderer-us(avg/max)=14012/85940 fence-us(avg/max)=1151/6384 remainder-us(avg/max)=41/95 thread-cpu/wall-window-us=410326/1989644.
+[07:29:38.692] gfxstream inter-present buckets (n=119): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/0/32/46/36/5.
+[07:29:42.075] GL repaint stages at frame 240 (avg/max us): use-output=8/25 setup=18/126 draw=443/67606 create-sync=12369/83392 flush=7/17 post=5/54 total=6093
+[07:29:42.080] gfxstream output: presents=240 releases=240 present-us(avg/max)=1385/9268 release-signal-after-response-us(avg/max)=3313/19049 no-free-slot=0.
+[07:29:42.080] gfxstream cadence: inter-repaint-us(avg/max)=30364/131025 finish-interval-us(avg/max)=29994/110981 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=12130/89642.
+[07:29:42.081] gfxstream repaint: full-us(avg/max)=15309/86447 renderer-us(avg/max)=12858/85940 fence-us(avg/max)=1026/6384 remainder-us(avg/max)=40/120 thread-cpu/wall-window-us=296422/1684733.
+[07:29:42.081] gfxstream inter-present buckets (n=239): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/2/79/96/55/7.
+[07:29:45.614] GL repaint stages at frame 360 (avg/max us): use-output=8/32 setup=18/126 draw=336/67606 create-sync=12248/83392 flush=7/90 post=5/80 total=5504
+[07:29:45.618] gfxstream output: presents=360 releases=360 present-us(avg/max)=1422/9268 release-signal-after-response-us(avg/max)=3271/19049 no-free-slot=0.
+[07:29:45.618] gfxstream cadence: inter-repaint-us(avg/max)=30074/131025 finish-interval-us(avg/max)=29825/110981 finish-late-us(avg/max)=0/0 finish-to-repaint-us(avg/max)=12088/89642.
+[07:29:45.619] gfxstream repaint: full-us(avg/max)=15111/86447 renderer-us(avg/max)=12630/85940 fence-us(avg/max)=1017/7956 remainder-us(avg/max)=40/161 thread-cpu/wall-window-us=307650/1765808.
+[07:29:45.619] gfxstream inter-present buckets (n=359): upper-bound-ms=8.3/16.7/25/33.3/50/>50 counts=0/2/125/134/89/9.

@@ -1,0 +1,63 @@
+Weston scene graph at 40791.286439473:
+
+Output 0 (headless):
+	position: (0, 0) -> (720, 720)
+	mode: 720x720@60.000Hz
+	scale: 1
+	repaint status: awaiting completion
+	Head 0 (headless): connected
+
+Layer 0 (pos 0xffffffff):
+	View 0 (role (null), PID 0, surface ID 0, desktop shell fade surface, 0x3000aa8bf0):
+		position: (0, 0) -> (720, 720)
+		[fully opaque]
+		outputs: 0 (headless) (primary)
+		solid-colour buffer
+			[R 0.000000, G 0.000000, B 0.000000, A 1.000000]
+			[2 references may use buffer content]
+			format: 0x34325258 XRGB8888
+			modifier: LINEAR (0x0)
+			width: 1, height: 1
+
+Layer 1 (pos 0xfffffffe):
+	[no views]
+
+Layer 2 (pos 0xdfffffff):
+	[no views]
+
+Layer 3 (pos 0xb0000000):
+	[no views]
+
+Layer 4 (pos 0x80000000):
+	View 0 (role (null), PID 12328, surface ID 15, panel for output headless, 0x3000ace300):
+		position: (0, 0) -> (720, 32)
+		[not opaque]
+		outputs: 0 (headless) (primary)
+		SHM buffer
+			[buffer has been released to client]
+			format: 0x34325241 ARGB8888
+			modifier: LINEAR (0x0)
+			width: 720, height: 32
+
+Layer 5 (pos 0x50000000):
+	View 0 (role xdg_toplevel, PID 12368, surface ID 3, top-level window 'simple-shm' of org.freedesktop.weston.simple-shm, 0x3000ab9da0):
+		position: (273, 286) -> (523, 536)
+		[fully opaque]
+		outputs: 0 (headless) (primary)
+		SHM buffer
+			[buffer has been released to client]
+			format: 0x34325258 XRGB8888
+			modifier: LINEAR (0x0)
+			width: 250, height: 250
+
+Layer 6 (pos 0x2):
+	View 0 (role (null), PID 12328, surface ID 16, background for output headless, 0x3000ace820):
+		position: (0, 0) -> (720, 720)
+		[fully opaque]
+		outputs: 0 (headless) (primary)
+		SHM buffer
+			[buffer has been released to client]
+			format: 0x34325241 ARGB8888
+			modifier: LINEAR (0x0)
+			width: 720, height: 720
+

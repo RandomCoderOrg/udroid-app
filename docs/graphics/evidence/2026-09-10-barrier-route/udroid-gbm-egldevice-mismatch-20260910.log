@@ -1,0 +1,17 @@
+[stage] dlopen libgbm.so.1
+[stage] dlopen libEGL.so.1 and libGLESv2.so.2
+[stage] connect GBM Kumquat transport
+[stage] gbm_create_device
+gfxstream-gbm: transport type=5 peer_uid=10337 kernel_uid=10337 valid=1
+MESA: info: virtgpu backend not enabling VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE
+gfxstream-gbm: Vulkan allocator initialized
+[gbm] backend=gfxstream socket_fd=3
+[stage] gbm_bo_create 720x720 XBGR8888 linear rendering
+KUMQUAT_GUEST host-allocation-send resource=4 allocationSize=2073600
+KUMQUAT_GUEST host-allocation-return result=0
+[descriptor] format=0x34324258 extent=720x720 planes=1 stride=2880 offset=0 modifier=0x0 fd=8 size=2109440
+[stage] presenter ABI check
+[presenter] abi=2 required=2 icd=/opt/udroid-diag/sync-export-20260906/gfxstream/lib/libvulkan_gfxstream.so
+[stage] udroid_gfxstream_presenter_create
+[stage] eglQueryDevicesEXT
+[fail] eglQueryDevicesEXT count=0 error=0x3000

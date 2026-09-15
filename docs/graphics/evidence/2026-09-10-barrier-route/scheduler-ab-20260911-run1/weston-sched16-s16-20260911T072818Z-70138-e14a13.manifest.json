@@ -1,0 +1,91 @@
+{
+  "arm_repaint_window_ms": 16,
+  "completed_utc": "2026-09-11T07:29:33.458+00:00",
+  "created_utc": "2026-09-11T07:28:18.729+00:00",
+  "errors": [],
+  "events": [
+    {
+      "event": "launch",
+      "local_adb_pid": 70143,
+      "monotonic": 0.394863708,
+      "utc": "2026-09-11T07:28:18.731+00:00"
+    },
+    {
+      "event": "warm_snapshot",
+      "launch_age": 12.315462499999999,
+      "monotonic": 12.709034041,
+      "report": {
+        "end": 8534,
+        "frames": 720,
+        "start": 7716,
+        "timestamp": "07:28:31.910"
+      },
+      "utc": "2026-09-11T07:28:31.045+00:00"
+    },
+    {
+      "activity": "org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity",
+      "event": "foreground_start",
+      "monotonic": 12.807432625,
+      "utc": "2026-09-11T07:28:31.144+00:00"
+    },
+    {
+      "enable_call_start": 12.952317375,
+      "enable_completion": 13.027323458,
+      "event": "measurement_start",
+      "monotonic": 13.027338416,
+      "utc": "2026-09-11T07:28:31.364+00:00"
+    },
+    {
+      "deadline": 73.027323458,
+      "deadline_overshoot": 0.0035220830000071146,
+      "disable_call_completion": 73.158559958,
+      "disable_call_start": 73.030845541,
+      "enabled_duration": 60.1312365,
+      "enabled_duration_to_disable_start": 60.00352208300001,
+      "event": "measurement_stop",
+      "monotonic": 73.158575458,
+      "utc": "2026-09-11T07:29:31.495+00:00"
+    },
+    {
+      "activity": "org.randomcoder.udroid.dev/org.randomcoder.udroid.gfxstream.GfxstreamPresenterProbeActivity",
+      "check_call_completion": 73.232913416,
+      "check_call_start": 73.159667916,
+      "completion_overshoot": 0.20558995800000446,
+      "event": "foreground_end",
+      "monotonic": 73.232916833,
+      "utc": "2026-09-11T07:29:31.569+00:00"
+    },
+    {
+      "event": "final_snapshot",
+      "monotonic": 73.492615083,
+      "report": {
+        "end": 25152,
+        "frames": 3120,
+        "start": 24319,
+        "timestamp": "07:29:32.770"
+      },
+      "utc": "2026-09-11T07:29:31.829+00:00"
+    },
+    {
+      "bytes": 753494,
+      "event": "post_window_capture",
+      "monotonic": 74.778386208,
+      "utc": "2026-09-11T07:29:33.115+00:00"
+    }
+  ],
+  "local_adb_pgid": 70143,
+  "local_adb_pid": 70143,
+  "local_cleanup": {
+    "returncode": 0
+  },
+  "remote_cleanup": {
+    "term": "SIGNALED_TERM",
+    "verified_gone": true
+  },
+  "remote_log": "/root/udroid-weston-socket-v1/weston-sched16-20260910-s16-20260911T072818Z-70138-e14a13.log",
+  "remote_pid_record": "/run/weston/weston-sched16-20260910-s16-20260911T072818Z-70138-e14a13.pid",
+  "run_label": "s16-20260911T072818Z-70138-e14a13",
+  "schema": 1,
+  "socket": "wayland-gfxstream-sched16-20260910-s16-20260911T072818Z-70138-e14a13",
+  "valid": true
+}
