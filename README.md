@@ -1,4 +1,4 @@
-# uDroid for Android
+# uDroid Android App
 
 [![Android CI](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml/badge.svg)](https://github.com/RandomCoderOrg/udroid-app/actions/workflows/android.yml)
 
