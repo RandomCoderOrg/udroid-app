@@ -31,6 +31,7 @@ kotlin {
 android {
     namespace = "org.randomcoder.udroid"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
     testBuildType = "probe"
 
     defaultConfig {
