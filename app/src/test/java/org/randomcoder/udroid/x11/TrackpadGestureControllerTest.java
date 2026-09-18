@@ -55,6 +55,19 @@ public final class TrackpadGestureControllerTest {
     }
 
     @Test
+    public void heldPaletteButtonLeavesTouchAsPointerMotionOnly() {
+        controller.setExternalMouseButtonHeld(true);
+        controller.handleDown(0, 0, 100, 200);
+        controller.handleMove(50, 1, 120, 190, 120, 190, 0, 500);
+        controller.handleUp(80, 0, 120, 190, 500);
+
+        assertEquals(
+                List.of("mouse 20.0 -10.0 0 false true"),
+                recording.events
+        );
+    }
+
+    @Test
     public void twoFingerTapEmitsRightClick() {
         controller.handleDown(0, 2, 10, 10);
         controller.handlePointerDown(20, 19, 30, 10, 2, 20, 10, 20);

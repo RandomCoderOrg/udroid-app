@@ -45,6 +45,7 @@ final class TrackpadGestureController {
     private float lastTapX;
     private float lastTapY;
     private float speed = 1f;
+    private boolean externalMouseButtonHeld;
 
     TrackpadGestureController(
             X11InputSink sink,
@@ -66,6 +67,10 @@ final class TrackpadGestureController {
 
     void setSpeed(float speed) {
         this.speed = Math.max(0.25f, Math.min(3f, speed));
+    }
+
+    void setExternalMouseButtonHeld(boolean held) {
+        externalMouseButtonHeld = held;
     }
 
     boolean onTouchEvent(MotionEvent event) {
@@ -143,14 +148,15 @@ final class TrackpadGestureController {
         lastCentroidX = x;
         lastCentroidY = y;
         maxPointerCount = 1;
-        longPressEligible = true;
+        longPressEligible = !externalMouseButtonHeld;
         setPointerInitialPosition(pointerId, x, y);
 
         long interval = eventTime - lastTapTimeMillis;
         float deltaX = x - lastTapX;
         float deltaY = y - lastTapY;
         doubleTapDragCandidate =
-                lastTapTimeMillis != Long.MIN_VALUE &&
+                !externalMouseButtonHeld &&
+                        lastTapTimeMillis != Long.MIN_VALUE &&
                         interval >= 0 &&
                         interval <= doubleTapTimeoutMillis &&
                         deltaX * deltaX + deltaY * deltaY <= doubleTapSlopSquared;
@@ -302,7 +308,9 @@ final class TrackpadGestureController {
         }
         clearPointer(pointerId);
 
-        if (dragActive) {
+        if (externalMouseButtonHeld) {
+            clearTapHistory();
+        } else if (dragActive) {
             sink.sendMouseEvent(0, 0, InputStub.BUTTON_LEFT, false, true);
             clearTapHistory();
         } else if (!tapCancelled &&
