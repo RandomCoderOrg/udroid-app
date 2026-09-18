@@ -61,6 +61,7 @@ import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.catalog.DistroVariant
 import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
+import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
@@ -87,6 +88,7 @@ fun LinuxSystemPage(
     scanMessage: String?,
     audioConfiguration: AudioConfiguration,
     audioConfigurationMessage: String?,
+    childProcessRestriction: CapabilityResult?,
     resetAvailable: Boolean,
     maintenanceInProgress: Boolean,
     maintenanceMessage: String?,
@@ -100,6 +102,7 @@ fun LinuxSystemPage(
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
+    onRefreshCapabilities: () -> Unit,
     onStartDesktop: () -> Unit,
     onStopTerminal: () -> Unit,
     onStopDesktop: () -> Unit,
@@ -110,6 +113,7 @@ fun LinuxSystemPage(
 ) {
     BackHandler(onBack = onBack)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
     var confirmation by remember(rootfs.name) {
         mutableStateOf<FilesystemConfirmation?>(null)
@@ -239,6 +243,34 @@ fun LinuxSystemPage(
                     enabled = desktopRunning,
                     onClick = onOpenDisplay,
                 )
+            }
+        }
+
+        childProcessRestriction?.let { restriction ->
+            item(key = "child-process-restriction") {
+                Surface(
+                    color = UdroidWarningSurface,
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Android may close Linux apps",
+                            color = UdroidWarning,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            restriction.detail,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (restriction.showDeveloperOptionsAction) {
+                            TextButton(onClick = openDeveloperOptions) {
+                                Text("Open Developer options")
+                            }
+                        }
+                    }
+                }
             }
         }
 
