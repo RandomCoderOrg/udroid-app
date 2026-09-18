@@ -899,7 +899,7 @@ internal fun AndroidStorageMountsCard(
             Text("Android storage", style = MaterialTheme.typography.titleMedium)
             Text(
                 if (hasFullAccess) {
-                    "Choose mounted internal, SD card, or USB storage"
+                    "Choose internal shared storage"
                 } else {
                     "Full file access is required before Linux can use shared storage"
                 },
@@ -946,7 +946,7 @@ internal fun AndroidStorageMountsCard(
         ) {
             if (volumes.isEmpty()) {
                 Text(
-                    "No mounted Android storage was detected.",
+                    "Internal shared storage was not detected.",
                     modifier = Modifier.padding(14.dp),
                     color = UdroidMuted,
                     style = MaterialTheme.typography.bodyMedium,

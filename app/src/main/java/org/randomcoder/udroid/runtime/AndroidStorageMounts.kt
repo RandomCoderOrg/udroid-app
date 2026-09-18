@@ -31,7 +31,7 @@ object AndroidStorageMounts {
         val manager = context.getSystemService(StorageManager::class.java)
         val volumes = manager.storageVolumes
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            return volumes.mapNotNull { volume ->
+            return volumes.filter { it.isPrimary }.mapNotNull { volume ->
                 volume.directory?.let { directory ->
                     AndroidStorageVolume(
                         label = volume.getDescription(context),
@@ -64,7 +64,8 @@ object AndroidStorageMounts {
                 primary = index == 0,
                 removable = volume?.isRemovable ?: index != 0,
             )
-        }.distinctBy(AndroidStorageVolume::hostPath)
+        }.filter(AndroidStorageVolume::primary)
+            .distinctBy(AndroidStorageVolume::hostPath)
     }
 
     fun hasFullAccess(context: Context): Boolean =
