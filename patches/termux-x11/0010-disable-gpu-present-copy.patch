@@ -1,0 +1,12 @@
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -848,6 +848,10 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+                               uint64_t *out_serial, void **out_dst_buffer) {
++    /* uDroid standard profile: use Xorg's copy path until GPU Present copies are reliable. */
++    gpuCopyAttempts++;
++    return FALSE;
++
+     LorieBuffer *srcBuffer, *dstBuffer;
+     LoriePixmapPriv *priv;
+     const LorieBuffer_Desc *desc, *dstDesc;
+     LorieGpuCopyEntry *entry;
