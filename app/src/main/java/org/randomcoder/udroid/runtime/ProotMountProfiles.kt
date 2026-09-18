@@ -104,18 +104,6 @@ object ProotMountProfileValidator {
             requireSafePath(mount.guestTarget, "Guest target")
         }
 
-        val enabledTargets =
-            buildList {
-                PROOT_DEFAULT_MOUNTS
-                    .filter { profile.isDefaultEnabled(it.id) }
-                    .forEach { add(it.guestTarget) }
-                profile.customMounts.filter(ProotCustomMount::enabled).forEach {
-                    add(it.guestTarget)
-                }
-            }
-        require(enabledTargets.distinct().size == enabledTargets.size) {
-            "Enabled mappings must use unique guest destinations"
-        }
         return profile
     }
 
@@ -172,17 +160,6 @@ object ProotMountResolver {
                 }
                 addAll(sessionMounts)
             }
-        val duplicateTarget =
-            resolved
-                .groupingBy(ResolvedProotMount::guestTarget)
-                .eachCount()
-                .entries
-                .firstOrNull { it.value > 1 }
-                ?.key
-        require(duplicateTarget == null) {
-            "$duplicateTarget is already mounted by an active session feature; disable that " +
-                "feature or choose another Linux path"
-        }
         return resolved
     }
 

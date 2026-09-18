@@ -146,6 +146,17 @@ fun ProotMountProfileDialog(
                     }
                 }
 
+                AndroidStorageMountsCard(
+                    enabled = true,
+                    mounts = draft.customMounts,
+                    onAdd = { mount ->
+                        draft = draft.copy(customMounts = draft.customMounts + mount)
+                        validationMessage =
+                            "${mount.hostSource} will be available at ${mount.guestTarget}"
+                    },
+                    onMessage = { validationMessage = it },
+                )
+
                 Column {
                     Text(
                         "Session mounts",

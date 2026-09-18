@@ -324,8 +324,18 @@ private fun LiveTerminal(
     val context = LocalContext.current
     val density = LocalDensity.current
     val modifiers = remember { TerminalModifierState() }
+    val preferences =
+        remember(context) {
+            context.applicationContext.getSharedPreferences(
+                TERMINAL_PREFERENCES,
+                Context.MODE_PRIVATE,
+            )
+        }
     val initialTextSize = remember(density) {
-        with(density) { 15.sp.toPx().roundToInt() }
+        preferences.getInt(
+            KEY_TEXT_SIZE_PX,
+            with(density) { 15.sp.toPx().roundToInt() },
+        ).coerceIn(MIN_TEXT_SIZE_PX.toInt(), MAX_TEXT_SIZE_PX.toInt())
     }
     val client =
         remember(session) {
@@ -333,6 +343,9 @@ private fun LiveTerminal(
                 context = context,
                 modifiers = modifiers,
                 initialTextSize = initialTextSize,
+                onTextSizeChanged = {
+                    preferences.edit().putInt(KEY_TEXT_SIZE_PX, it).apply()
+                },
             )
         }
     val terminalView =
@@ -449,6 +462,7 @@ private class UdroidTerminalViewClient(
     private val context: Context,
     private val modifiers: TerminalModifierState,
     initialTextSize: Int,
+    private val onTextSizeChanged: (Int) -> Unit,
 ) : TerminalViewClient {
     private var terminalView: TerminalView? = null
     private var textSize = initialTextSize.toFloat()
@@ -459,7 +473,9 @@ private class UdroidTerminalViewClient(
 
     override fun onScale(scale: Float): Float {
         textSize = (textSize * scale).coerceIn(MIN_TEXT_SIZE_PX, MAX_TEXT_SIZE_PX)
-        terminalView?.setTextSize(textSize.roundToInt())
+        val roundedTextSize = textSize.roundToInt()
+        terminalView?.setTextSize(roundedTextSize)
+        onTextSizeChanged(roundedTextSize)
         return 1f
     }
 
@@ -565,9 +581,9 @@ private class UdroidTerminalViewClient(
     ) {
         Log.e(tag, error.message, error)
     }
-
-    private companion object {
-        const val MIN_TEXT_SIZE_PX = 20f
-        const val MAX_TEXT_SIZE_PX = 64f
-    }
 }
+
+private const val TERMINAL_PREFERENCES = "terminal-view"
+private const val KEY_TEXT_SIZE_PX = "text-size-px"
+private const val MIN_TEXT_SIZE_PX = 20f
+private const val MAX_TEXT_SIZE_PX = 64f

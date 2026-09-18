@@ -1,6 +1,13 @@
 package org.randomcoder.udroid.ui
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +47,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,6 +70,8 @@ import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.gfxstream.GfxstreamGuestRuntime
 import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
+import org.randomcoder.udroid.runtime.AndroidStorageMounts
+import org.randomcoder.udroid.runtime.AndroidStorageVolume
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
 import org.randomcoder.udroid.runtime.ProotCustomMount
@@ -598,24 +610,16 @@ fun ProotMountConfigurationEditorPage(
             }
         }
 
-        item(key = "configuration-session-label") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Session mounts", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Added only while the owning feature is active",
-                        color = UdroidMuted,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                TextButton(onClick = ::requestSessionFeatures) {
-                    Text("Manage features")
-                }
-            }
-        }
-
-        item(key = "configuration-session-mounts") {
-            AutomaticSessionMounts()
+        item(key = "configuration-android-storage") {
+            AndroidStorageMountsCard(
+                enabled = editingEnabled,
+                mounts = draft.customMounts,
+                onAdd = { mount ->
+                    draft = draft.copy(customMounts = draft.customMounts + mount)
+                    message = "${mount.hostSource} will be available at ${mount.guestTarget}"
+                },
+                onMessage = { message = it },
+            )
         }
 
         item(key = "configuration-custom-label") {
@@ -678,6 +682,26 @@ fun ProotMountConfigurationEditorPage(
                     },
                 )
             }
+        }
+
+        item(key = "configuration-session-label") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Session mounts", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Added only while the owning feature is active",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(onClick = ::requestSessionFeatures) {
+                    Text("Manage features")
+                }
+            }
+        }
+
+        item(key = "configuration-session-mounts") {
+            AutomaticSessionMounts()
         }
 
         (message ?: externalMessage)?.let { visibleMessage ->
@@ -813,6 +837,187 @@ private fun ProotMountProfile.updateCustomMount(
     update: (ProotCustomMount) -> ProotCustomMount,
 ): ProotMountProfile =
     copy(customMounts = customMounts.map { if (it.id == id) update(it) else it })
+
+@Composable
+internal fun AndroidStorageMountsCard(
+    enabled: Boolean,
+    mounts: List<ProotCustomMount>,
+    onAdd: (ProotCustomMount) -> Unit,
+    onMessage: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    var refreshKey by remember { mutableIntStateOf(0) }
+    val hasFullAccess = remember(refreshKey) { AndroidStorageMounts.hasFullAccess(context) }
+    val volumes = remember(refreshKey) { AndroidStorageMounts.discover(context) }
+    DisposableEffect(context) {
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    ignoredContext: Context,
+                    ignoredIntent: Intent,
+                ) {
+                    refreshKey++
+                }
+            }
+        val filter =
+            IntentFilter().apply {
+                addAction(Intent.ACTION_MEDIA_MOUNTED)
+                addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+                addAction(Intent.ACTION_MEDIA_REMOVED)
+                addAction(Intent.ACTION_MEDIA_EJECT)
+                addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
+                addDataScheme("file")
+            }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+    val settingsLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            refreshKey++
+            onMessage(
+                if (AndroidStorageMounts.hasFullAccess(context)) {
+                    "Android storage access granted"
+                } else {
+                    "Android storage access was not granted"
+                },
+            )
+        }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            refreshKey++
+            onMessage(
+                if (AndroidStorageMounts.hasFullAccess(context)) {
+                    "Android storage access granted"
+                } else {
+                    "Android storage access was not granted"
+                },
+            )
+        }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column {
+            Text("Android storage", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (hasFullAccess) {
+                    "Choose internal shared storage"
+                } else {
+                    "Full file access is required before Linux can use shared storage"
+                },
+                color = UdroidMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!hasFullAccess) {
+                TextButton(
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = enabled,
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            runCatching {
+                                settingsLauncher.launch(AndroidStorageMounts.accessIntent(context))
+                            }.onFailure {
+                                onMessage("Open Android Settings and allow all files access for uDroid")
+                            }
+                        } else {
+                            permissionLauncher.launch(AndroidStorageMounts.legacyPermissions())
+                        }
+                    },
+                ) {
+                    Text("Allow access")
+                }
+            }
+        }
+
+        if (!hasFullAccess) {
+            Surface(color = UdroidWarningSurface, shape = MaterialTheme.shapes.medium) {
+                Text(
+                    "This permission lets uDroid read and write shared files, but Linux only " +
+                        "receives volumes you add below.",
+                    modifier = Modifier.padding(12.dp),
+                    color = UdroidWarning,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        Surface(
+            color = Color.Transparent,
+            border = BorderStroke(1.dp, UdroidLine),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            if (volumes.isEmpty()) {
+                Text(
+                    "Internal shared storage was not detected.",
+                    modifier = Modifier.padding(14.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                Column {
+                    volumes.forEachIndexed { index, volume ->
+                        AndroidStorageVolumeRow(
+                            volume = volume,
+                            enabled = enabled,
+                            hasFullAccess = hasFullAccess,
+                            mounts = mounts,
+                            onAdd = onAdd,
+                        )
+                        if (index != volumes.lastIndex) HorizontalDivider(color = UdroidLine)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidStorageVolumeRow(
+    volume: AndroidStorageVolume,
+    enabled: Boolean,
+    hasFullAccess: Boolean,
+    mounts: List<ProotCustomMount>,
+    onAdd: (ProotCustomMount) -> Unit,
+) {
+    val alreadyAdded = mounts.any { it.hostSource == volume.hostPath }
+    ListItem(
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = { Text(volume.label) },
+        supportingContent = {
+            Column {
+                Text(
+                    volume.hostPath,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    when {
+                        !volume.mounted -> "Not mounted"
+                        alreadyAdded -> "Already configured below; add another mapping if needed"
+                        !hasFullAccess -> "Access required"
+                        volume.state == android.os.Environment.MEDIA_MOUNTED_READ_ONLY -> "Read only"
+                        else -> "Mount inside Linux at ${volume.guestTarget}"
+                    },
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        trailingContent = {
+            TextButton(
+                enabled = enabled && hasFullAccess && volume.mounted,
+                onClick = {
+                    onAdd(
+                        ProotCustomMount(
+                            hostSource = volume.hostPath,
+                            guestTarget = volume.guestTarget,
+                        ),
+                    )
+                },
+            ) {
+                Text(if (alreadyAdded) "Add another" else "Add")
+            }
+        },
+    )
+}
 
 @Composable
 internal fun AutomaticSessionMounts() {

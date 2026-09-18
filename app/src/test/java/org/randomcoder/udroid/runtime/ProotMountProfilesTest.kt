@@ -52,7 +52,7 @@ class ProotMountProfilesTest {
     }
 
     @Test
-    fun `duplicate enabled guest destinations are rejected`() {
+    fun `duplicate enabled guest destinations preserve user order`() {
         val profile =
             ProotMountProfile(
                 customMounts =
@@ -65,9 +65,9 @@ class ProotMountProfilesTest {
                     ),
             )
 
-        val failure = runCatching { ProotMountProfileValidator.requireValid(profile) }.exceptionOrNull()
-
-        assertTrue(failure is IllegalArgumentException)
+        val mounts = ProotMountResolver.resolve(profile)
+        assertEquals(2, mounts.count { it.guestTarget == "/sys" })
+        assertEquals("/another/sys", mounts.last { it.guestTarget == "/sys" }.hostSource)
     }
 
     @Test
@@ -82,21 +82,20 @@ class ProotMountProfilesTest {
 
         assertEquals(customX11.guestTarget, ProotMountResolver.resolve(profile).last().guestTarget)
 
-        val failure =
-            runCatching {
-                ProotMountResolver.resolve(
-                    profile,
-                    sessionMounts =
-                        listOf(
-                            ResolvedProotMount(
-                                hostSource = "/data/local/automatic-x11",
-                                guestTarget = "/tmp/.X11-unix",
-                                origin = "runtime:x11",
-                            ),
+        val mounts =
+            ProotMountResolver.resolve(
+                profile,
+                sessionMounts =
+                    listOf(
+                        ResolvedProotMount(
+                            hostSource = "/data/local/automatic-x11",
+                            guestTarget = "/tmp/.X11-unix",
+                            origin = "runtime:x11",
                         ),
-                )
-            }.exceptionOrNull()
-        assertTrue(failure?.message?.contains("active session feature") == true)
+                    ),
+            )
+        assertEquals(2, mounts.count { it.guestTarget == "/tmp/.X11-unix" })
+        assertEquals("runtime:x11", mounts.last().origin)
     }
 
     @Test

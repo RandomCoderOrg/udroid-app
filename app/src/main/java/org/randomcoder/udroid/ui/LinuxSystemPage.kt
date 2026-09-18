@@ -140,6 +140,8 @@ fun LinuxSystemPage(
                 RuntimePhase.RUNNING,
                 RuntimePhase.STOPPING,
             )
+    val runtimeStopping =
+        snapshot.rootfsName == rootfs.name && snapshot.phase == RuntimePhase.STOPPING
     val desktopBlocksMaintenance =
         desktop.rootfsName == rootfs.name &&
             desktop.phase in
@@ -476,11 +478,19 @@ fun LinuxSystemPage(
                             if (runtimeBlocksMaintenance) {
                                 OutlinedButton(
                                     modifier = Modifier.weight(1f),
+                                    enabled = !runtimeStopping,
                                     onClick = onStopTerminal,
                                 ) {
-                                    Icon(Icons.Rounded.Stop, contentDescription = null)
+                                    if (runtimeStopping) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Icon(Icons.Rounded.Stop, contentDescription = null)
+                                    }
                                     Text(
-                                        "Stop terminal",
+                                        if (runtimeStopping) "Stopping…" else "Stop terminal",
                                         modifier = Modifier.padding(start = 6.dp),
                                     )
                                 }
