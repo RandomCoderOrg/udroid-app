@@ -51,6 +51,7 @@ public final class X11DisplayView extends SurfaceView
     private boolean imeHasCommittedText;
     private CharSequence composingText;
     private int pressedMouseButton = BUTTON_UNDEFINED;
+    private int paletteMouseButton = BUTTON_UNDEFINED;
     private int viewportLeft;
     private int viewportTop;
     private int viewportWidth;
@@ -313,7 +314,9 @@ public final class X11DisplayView extends SurfaceView
                         false,
                         false
                 );
-                inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
+                if (paletteMouseButton == BUTTON_UNDEFINED) {
+                    inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
+                }
                 return true;
             case MotionEvent.ACTION_MOVE:
                 mapToGuest(event.getX(0), event.getY(0), mappedPoint);
@@ -333,7 +336,9 @@ public final class X11DisplayView extends SurfaceView
                         false,
                         false
                 );
-                releaseTouchButton();
+                if (paletteMouseButton == BUTTON_UNDEFINED) {
+                    releaseTouchButton();
+                }
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -453,6 +458,26 @@ public final class X11DisplayView extends SurfaceView
         post(() -> inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT));
     }
 
+    public void setMouseButton(int button, boolean pressed) {
+        if (!rendererAttached || button < BUTTON_LEFT || button > BUTTON_RIGHT) return;
+        requestFocus();
+        inputSink.sendMouseEvent(0, 0, button, pressed, true);
+        if (pressed) {
+            paletteMouseButton = button;
+        } else if (paletteMouseButton == button) {
+            paletteMouseButton = BUTTON_UNDEFINED;
+        }
+        trackpadGestures.setExternalMouseButtonHeld(
+                paletteMouseButton != BUTTON_UNDEFINED
+        );
+    }
+
+    public void scrollMouse(float verticalDelta) {
+        if (!rendererAttached || verticalDelta == 0) return;
+        requestFocus();
+        inputSink.sendMouseWheelEvent(0, verticalDelta);
+    }
+
     private boolean handleMouseEvent(MotionEvent event) {
         mapToGuest(event.getX(), event.getY(), mappedPoint);
         inputSink.sendMouseEvent(
@@ -534,9 +559,11 @@ public final class X11DisplayView extends SurfaceView
 
     private void releaseAllInput() {
         trackpadGestures.cancel();
+        trackpadGestures.setExternalMouseButtonHeld(false);
         nativeTouches.cancel();
         inputSink.releaseAllInput();
         pressedMouseButton = BUTTON_UNDEFINED;
+        paletteMouseButton = BUTTON_UNDEFINED;
     }
 
     @Override
