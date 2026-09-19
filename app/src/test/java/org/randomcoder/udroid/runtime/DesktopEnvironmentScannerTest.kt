@@ -172,10 +172,60 @@ class DesktopEnvironmentScannerTest {
     }
 
     @Test
+    fun `desktop launch wraps the session with the selected graphics environment`() {
+        val desktop =
+            DesktopEnvironment(
+                id = "xfce",
+                name = "Xfce",
+                command = listOf("startxfce4"),
+                desktopFilePath = "/usr/share/xsessions/xfce.desktop",
+                kind = DesktopEnvironmentKind.XFCE,
+            )
+        val arguments =
+            ProotDesktopLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                environment = desktop,
+                configuration = DesktopConfiguration(desktop.id, false, false),
+                hasDbusRunSession = false,
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+            )
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "GALLIUM_DRIVER=llvmpipe",
+                "/bin/sh",
+            ),
+            arguments.subList(
+                arguments.lastIndexOf("/usr/bin/env"),
+                arguments.lastIndexOf("/usr/bin/env") + 4,
+            ),
+        )
+        assertEquals("startxfce4", arguments.last())
+    }
+
+    @Test
     fun `unknown stored graphics profile safely falls back to standard`() {
         assertEquals(
             DesktopGraphicsProfile.STANDARD,
             DesktopGraphicsProfile.fromStorage("future-driver"),
+        )
+    }
+
+    @Test
+    fun `environment graphics profiles survive storage`() {
+        assertEquals(
+            DesktopGraphicsProfile.SOFTWARE,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.SOFTWARE.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.ZINK,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.ZINK.storageValue),
         )
     }
 

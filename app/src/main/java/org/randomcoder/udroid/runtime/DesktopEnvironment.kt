@@ -37,6 +37,8 @@ enum class DesktopGraphicsProfile(
     val storageValue: String,
 ) {
     STANDARD("standard"),
+    SOFTWARE("software"),
+    ZINK("zink"),
     GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 
@@ -143,6 +145,11 @@ class DesktopConfigurationStore(context: Context) {
         }
         return configuration
     }
+
+    fun loadGraphicsProfile(rootfsName: String): DesktopGraphicsProfile =
+        DesktopGraphicsProfile.fromStorage(
+            preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
+        )
 
     fun remove(rootfsName: String) {
         val prefix = "$rootfsName:"

@@ -1017,14 +1017,12 @@ private fun DesktopSettingsPanel(
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
             )
-            if (GFXSTREAM_PROFILE_ENABLED) {
-                HorizontalDivider(color = UdroidLine)
-                GraphicsProfileSelector(
-                    selected = configuration.graphicsProfile,
-                    desktopRunning = desktopRunning,
-                    onSelected = onGraphicsProfileChanged,
-                )
-            }
+            HorizontalDivider(color = UdroidLine)
+            GraphicsProfileSelector(
+                selected = configuration.graphicsProfile,
+                desktopRunning = desktopRunning,
+                onSelected = onGraphicsProfileChanged,
+            )
         }
     }
 }
@@ -1035,7 +1033,6 @@ private fun GraphicsProfileSelector(
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
 ) {
-    val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
             "Graphics driver",
@@ -1044,25 +1041,47 @@ private fun GraphicsProfileSelector(
             style = MaterialTheme.typography.titleMedium,
         )
         GraphicsProfileRow(
-            title = "Standard",
-            detail = "Use the distribution’s default graphics driver",
+            title = "Automatic",
+            detail =
+                "Use the distribution’s default graphics driver." +
+                    if (desktopRunning) " Restart the desktop to apply." else "",
             selected = selected == DesktopGraphicsProfile.STANDARD,
             enabled = true,
             onClick = { onSelected(DesktopGraphicsProfile.STANDARD) },
         )
         GraphicsProfileRow(
-            title = "gfxstream (experimental)",
+            title = "Software",
             detail =
-                if (gfxstreamSupported) {
-                    "Use Android’s Vulkan driver." +
-                        if (desktopRunning) " Restart the desktop to apply." else ""
-                } else {
-                    "Available only on arm64 devices"
-                },
-            selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
-            enabled = gfxstreamSupported,
-            onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+                "Use Mesa llvmpipe on the CPU." +
+                    if (desktopRunning) " Restart the desktop to apply." else "",
+            selected = selected == DesktopGraphicsProfile.SOFTWARE,
+            enabled = true,
+            onClick = { onSelected(DesktopGraphicsProfile.SOFTWARE) },
         )
+        GraphicsProfileRow(
+            title = "Zink",
+            detail =
+                "Use OpenGL over a working Vulkan driver installed inside Linux." +
+                    if (desktopRunning) " Restart the desktop to apply." else "",
+            selected = selected == DesktopGraphicsProfile.ZINK,
+            enabled = true,
+            onClick = { onSelected(DesktopGraphicsProfile.ZINK) },
+        )
+        if (GFXSTREAM_PROFILE_ENABLED) {
+            val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
+            GraphicsProfileRow(
+                title = "gfxstream (experimental)",
+                detail =
+                    if (gfxstreamSupported) {
+                        "Use Android’s Vulkan driver"
+                    } else {
+                        "Available only on arm64 devices"
+                    },
+                selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
+                enabled = gfxstreamSupported,
+                onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+            )
+        }
     }
 }
 

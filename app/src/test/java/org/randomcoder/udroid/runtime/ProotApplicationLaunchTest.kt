@@ -77,4 +77,31 @@ class ProotApplicationLaunchTest {
             arguments.takeLast(3),
         )
     }
+
+    @Test
+    fun wrapsGraphicalApplicationsWithTheSelectedGraphicsEnvironment() {
+        val arguments =
+            ProotApplicationLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                guestWorkingDirectory = "/root",
+                applicationArguments = listOf("/usr/bin/glxinfo", "-B"),
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.ZINK),
+            )
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "MESA_LOADER_DRIVER_OVERRIDE=zink",
+                "GALLIUM_DRIVER=zink",
+                "LIBGL_KOPPER_DRI2=true",
+                "/usr/bin/glxinfo",
+                "-B",
+            ),
+            arguments.takeLast(6),
+        )
+    }
 }

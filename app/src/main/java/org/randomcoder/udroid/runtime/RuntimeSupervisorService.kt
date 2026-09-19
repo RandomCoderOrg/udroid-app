@@ -64,6 +64,7 @@ class RuntimeSupervisorService : Service() {
     private val applicationExecutor = Executors.newCachedThreadPool()
     private val x11Controller by lazy { X11ServerController(this, app.journal) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
+    private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
     private val audioController by lazy {
         AudioServerController(this, app.journal, applicationExecutor)
     }
@@ -453,6 +454,10 @@ class RuntimeSupervisorService : Service() {
                 val result =
                     runCatching {
                         val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
+                        val launchProfile =
+                            EnvironmentProotLaunchProfile.from(
+                                desktopConfigurationStore.loadGraphicsProfile(rootfsName),
+                            )
                         val launch =
                             ProotApplicationLaunchBuilder.create(
                                 context = this,
@@ -461,6 +466,7 @@ class RuntimeSupervisorService : Service() {
                                 x11SocketDirectory = socketDirectory,
                                 application = application,
                                 audioEndpoint = audioController.endpoint(),
+                                launchProfile = launchProfile,
                             )
                         val process =
                             ProcessBuilder(launch.command)
@@ -596,7 +602,12 @@ class RuntimeSupervisorService : Service() {
                     val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
                     val launchProfile =
                         when (request.configuration.graphicsProfile) {
-                            DesktopGraphicsProfile.STANDARD -> null
+                            DesktopGraphicsProfile.STANDARD,
+                            DesktopGraphicsProfile.SOFTWARE,
+                            DesktopGraphicsProfile.ZINK,
+                            -> EnvironmentProotLaunchProfile.from(
+                                request.configuration.graphicsProfile,
+                            )
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
