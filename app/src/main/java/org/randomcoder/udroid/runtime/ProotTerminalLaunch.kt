@@ -60,10 +60,10 @@ object ProotTerminalLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
-        val guestEnvironment =
-            ProotEnvironmentResolver.resolve(
-                ProotEnvironmentProfileStore(context).load(rootfs.name),
-            )
+        val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
+        val managedEnvironment =
+            ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
 
         val arguments =
             buildArguments(
@@ -77,6 +77,7 @@ object ProotTerminalLaunchBuilder {
                 launchProfile = launchProfile,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
+                managedEnvironment = managedEnvironment,
             )
         val environment =
             buildEnvironment(
@@ -107,6 +108,7 @@ object ProotTerminalLaunchBuilder {
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
+        managedEnvironment: List<String> = emptyList(),
     ): Array<String> =
         buildList {
             // TerminalSession passes this complete vector to execvp(), including argv[0].
@@ -136,7 +138,9 @@ object ProotTerminalLaunchBuilder {
                     add(guestShell)
                     if (guestShell.endsWith("bash")) add("--login")
                 }
-            addAll(launchProfile?.wrapGuestCommand(shellCommand) ?: shellCommand)
+            val overriddenCommand =
+                ProotEnvironmentResolver.applyManagedOverrides(shellCommand, managedEnvironment)
+            addAll(launchProfile?.wrapGuestCommand(overriddenCommand) ?: overriddenCommand)
         }.toTypedArray()
 
     internal fun buildEnvironment(

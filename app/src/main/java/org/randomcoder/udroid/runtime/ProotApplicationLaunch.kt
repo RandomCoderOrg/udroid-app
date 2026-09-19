@@ -39,10 +39,10 @@ object ProotApplicationLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
-        val guestEnvironment =
-            ProotEnvironmentResolver.resolve(
-                ProotEnvironmentProfileStore(context).load(rootfs.name),
-            )
+        val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
+        val managedEnvironment =
+            ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
         val prootArguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -56,6 +56,7 @@ object ProotApplicationLaunchBuilder {
                 launchProfile = launchProfile,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
+                managedEnvironment = managedEnvironment,
             )
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -96,6 +97,7 @@ object ProotApplicationLaunchBuilder {
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
+        managedEnvironment: List<String> = emptyList(),
     ): List<String> {
         require(applicationArguments.isNotEmpty())
         return buildList {
@@ -122,7 +124,12 @@ object ProotApplicationLaunchBuilder {
             add("XDG_CURRENT_DESKTOP=UDROID")
             add("GDK_BACKEND=x11")
             add("QT_QPA_PLATFORM=xcb")
-            addAll(launchProfile?.wrapGuestCommand(applicationArguments) ?: applicationArguments)
+            val overriddenCommand =
+                ProotEnvironmentResolver.applyManagedOverrides(
+                    applicationArguments,
+                    managedEnvironment,
+                )
+            addAll(launchProfile?.wrapGuestCommand(overriddenCommand) ?: overriddenCommand)
         }
     }
 

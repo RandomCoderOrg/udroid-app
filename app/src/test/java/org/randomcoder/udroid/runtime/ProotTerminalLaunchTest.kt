@@ -165,6 +165,34 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `managed override wins over the selected graphics profile`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+                managedEnvironment = listOf("GALLIUM_DRIVER=custom"),
+            ).toList()
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "GALLIUM_DRIVER=llvmpipe",
+                "/usr/bin/env",
+                "GALLIUM_DRIVER=custom",
+                "/bin/bash",
+                "--login",
+            ),
+            arguments.takeLast(7),
+        )
+    }
+
+    @Test
     fun `zink profile wraps the login shell environment`() {
         val arguments =
             ProotTerminalLaunchBuilder.buildArguments(

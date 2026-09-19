@@ -698,7 +698,10 @@ private fun EnvironmentProfilePanel(
     runtimeRunning: Boolean,
     onConfigure: () -> Unit,
 ) {
-    val changed = profile.defaultOverrides.size + profile.customVariables.size
+    val changed =
+        profile.defaultOverrides.size +
+            profile.managedOverrides.size +
+            profile.customVariables.size
     Surface(
         modifier = Modifier.clickable(onClick = onConfigure),
         color = Color.Transparent,

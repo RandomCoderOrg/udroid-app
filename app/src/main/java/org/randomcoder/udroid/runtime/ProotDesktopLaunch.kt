@@ -31,10 +31,10 @@ object ProotDesktopLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
-        val guestEnvironment =
-            ProotEnvironmentResolver.resolve(
-                ProotEnvironmentProfileStore(context).load(rootfs.name),
-            )
+        val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
+        val managedEnvironment =
+            ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -47,6 +47,7 @@ object ProotDesktopLaunchBuilder {
                 launchProfile = launchProfile,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
+                managedEnvironment = managedEnvironment,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -91,6 +92,7 @@ object ProotDesktopLaunchBuilder {
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
+        managedEnvironment: List<String> = emptyList(),
     ): List<String> =
         buildList {
             add(prootPath)
@@ -135,7 +137,9 @@ object ProotDesktopLaunchBuilder {
                     add("udroid-desktop")
                     addAll(environment.command)
                 }
-            addAll(launchProfile?.wrapGuestCommand(desktopCommand) ?: desktopCommand)
+            val overriddenCommand =
+                ProotEnvironmentResolver.applyManagedOverrides(desktopCommand, managedEnvironment)
+            addAll(launchProfile?.wrapGuestCommand(overriddenCommand) ?: overriddenCommand)
         }
 
     internal fun compositorScript(

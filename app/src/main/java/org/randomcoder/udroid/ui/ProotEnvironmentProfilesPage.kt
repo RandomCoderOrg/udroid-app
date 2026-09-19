@@ -47,17 +47,26 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_ENVIRONMENT_VARIABLES
 import org.randomcoder.udroid.runtime.PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES
+import org.randomcoder.udroid.runtime.DesktopConfiguration
+import org.randomcoder.udroid.runtime.DesktopEnvironment
+import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.ProotCustomEnvironmentVariable
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileValidator
+import org.randomcoder.udroid.runtime.ProotTerminalLaunchBuilder
+import java.io.File
 
 @Composable
 fun ProotEnvironmentProfilePage(
     systemId: String,
     systemTitle: String,
+    rootfsDirectory: File,
+    desktopEnvironment: DesktopEnvironment?,
+    desktopConfiguration: DesktopConfiguration,
     runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onBack: () -> Unit,
@@ -75,6 +84,14 @@ fun ProotEnvironmentProfilePage(
     var confirmDiscard by remember(systemId) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val dirty = draft != persistedProfile
+    val managedValues =
+        remember(rootfsDirectory, desktopEnvironment, desktopConfiguration) {
+            automaticManagedEnvironmentValues(
+                rootfsDirectory = rootfsDirectory,
+                desktopEnvironment = desktopEnvironment,
+                desktopConfiguration = desktopConfiguration,
+            )
+        }
 
     fun requestBack() {
         if (dirty) confirmDiscard = true else onBack()
@@ -285,13 +302,26 @@ fun ProotEnvironmentProfilePage(
         }
 
         item(key = "environment-managed-label") {
-            Column {
-                Text("Managed by uDroid", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Identity, display, audio, desktop, and graphics values follow app settings.",
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Managed by uDroid", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${draft.managedOverrides.size} overridden · Overrides apply last",
+                        color = UdroidMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                TextButton(
+                    enabled = draft.managedOverrides.isNotEmpty(),
+                    onClick = {
+                        draft = draft.copy(managedOverrides = emptyMap())
+                        message = null
+                    },
+                ) {
+                    Icon(Icons.Rounded.RestartAlt, contentDescription = null)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Reset all")
+                }
             }
         }
 
@@ -305,12 +335,34 @@ fun ProotEnvironmentProfilePage(
                     PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES
                         .sorted()
                         .forEachIndexed { index, name ->
-                            ListItem(
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = {
-                                    Text(name, fontFamily = FontFamily.Monospace)
+                            ManagedEnvironmentVariableEditor(
+                                name = name,
+                                automaticValue = managedValues.getValue(name),
+                                overrideValue = draft.managedOverrides[name],
+                                overridden = name in draft.managedOverrides,
+                                onOverride = {
+                                    draft =
+                                        draft.copy(
+                                            managedOverrides =
+                                                draft.managedOverrides +
+                                                    (name to managedValues.getValue(name).suggestedOverride),
+                                        )
+                                    message = null
                                 },
-                                supportingContent = { Text(managedVariableOwner(name)) },
+                                onChange = { value ->
+                                    draft =
+                                        draft.copy(
+                                            managedOverrides = draft.managedOverrides + (name to value),
+                                        )
+                                    message = null
+                                },
+                                onReset = {
+                                    draft =
+                                        draft.copy(
+                                            managedOverrides = draft.managedOverrides - name,
+                                        )
+                                    message = null
+                                },
                             )
                             if (index != PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES.size - 1) {
                                 HorizontalDivider(color = UdroidLine)
@@ -405,6 +457,53 @@ private fun CustomEnvironmentVariableEditor(
     }
 }
 
+@Composable
+private fun ManagedEnvironmentVariableEditor(
+    name: String,
+    automaticValue: ManagedEnvironmentValue,
+    overrideValue: String?,
+    overridden: Boolean,
+    onOverride: () -> Unit,
+    onChange: (String) -> Unit,
+    onReset: () -> Unit,
+) {
+    if (!overridden) {
+        ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = { Text(name, fontFamily = FontFamily.Monospace) },
+            supportingContent = {
+                Text(automaticValue.display, fontFamily = FontFamily.Monospace)
+            },
+            trailingContent = { TextButton(onClick = onOverride) { Text("Override") } },
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(name, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace)
+            TextButton(onClick = onReset) {
+                Icon(Icons.Rounded.RestartAlt, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text("Reset")
+            }
+        }
+        OutlinedTextField(
+            value = overrideValue.orEmpty(),
+            onValueChange = onChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Override value") },
+            supportingText = {
+                Text("uDroid: ${automaticValue.display}", fontFamily = FontFamily.Monospace)
+            },
+            singleLine = true,
+        )
+    }
+}
+
 private fun launchEffectText(
     runtimeRunning: Boolean,
     desktopRunning: Boolean,
@@ -422,11 +521,77 @@ private fun launchEffectText(
         else -> "New terminal, app, and desktop launches use saved changes."
     }
 
-private fun managedVariableOwner(name: String): String =
-    when (name) {
-        "HOME", "USER", "LOGNAME", "SHELL" -> "Linux identity"
-        "DISPLAY" -> "Display session"
-        "PULSE_SERVER", "PULSE_COOKIE" -> "Audio"
-        "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "DESKTOP_SESSION" -> "Desktop session"
-        else -> "Graphics"
+private data class ManagedEnvironmentValue(
+    val display: String,
+    val suggestedOverride: String,
+)
+
+private fun automaticManagedEnvironmentValues(
+    rootfsDirectory: File,
+    desktopEnvironment: DesktopEnvironment?,
+    desktopConfiguration: DesktopConfiguration,
+): Map<String, ManagedEnvironmentValue> {
+    val guestHome = if (File(rootfsDirectory, "root").isDirectory) "/root" else "/"
+    val guestShell = ProotTerminalLaunchBuilder.findGuestShell(rootfsDirectory) ?: "/bin/sh"
+    val desktopName = desktopEnvironment?.kind?.desktopName
+    val desktopId = desktopEnvironment?.id
+    val values =
+        PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES.associateWith {
+            ManagedEnvironmentValue("<unset>", "")
+        }.toMutableMap()
+
+    fun set(
+        name: String,
+        value: String,
+        display: String = value,
+    ) {
+        values[name] = ManagedEnvironmentValue(display, value)
     }
+
+    set("HOME", guestHome)
+    set("USER", "root")
+    set("LOGNAME", "root")
+    set(
+        "SHELL",
+        guestShell,
+        if (guestShell == "/bin/sh") "/bin/sh" else "terminal=$guestShell · apps/desktops=/bin/sh",
+    )
+    set("DISPLAY", ":0")
+    set("PULSE_SERVER", AudioEndpoint.GUEST_SERVER)
+    set(
+        "PULSE_COOKIE",
+        "${AudioEndpoint.GUEST_AUTH_DIRECTORY}/${AudioEndpoint.COOKIE_NAME}",
+    )
+    set("XDG_SESSION_TYPE", "x11", "desktop=x11")
+    set(
+        "XDG_CURRENT_DESKTOP",
+        desktopName ?: "UDROID",
+        "apps=UDROID · desktop=${desktopName ?: "<unset>"}",
+    )
+    if (desktopId != null) set("DESKTOP_SESSION", desktopId, "desktop=$desktopId")
+    set("GDK_BACKEND", "x11", "apps/desktops=x11")
+    set("QT_QPA_PLATFORM", "xcb", "apps/desktops=xcb")
+    if (desktopConfiguration.touchScaleEnabled) {
+        set("GDK_SCALE", "2", "desktop=2")
+        set("QT_SCALE_FACTOR", "2", "desktop=2")
+        set("XCURSOR_SIZE", "48", "desktop=48")
+    }
+
+    when (desktopConfiguration.graphicsProfile) {
+        DesktopGraphicsProfile.STANDARD -> Unit
+        DesktopGraphicsProfile.SOFTWARE -> {
+            set("LIBGL_ALWAYS_SOFTWARE", "1")
+            set("GALLIUM_DRIVER", "llvmpipe")
+        }
+        DesktopGraphicsProfile.ZINK -> {
+            set("MESA_LOADER_DRIVER_OVERRIDE", "zink")
+            set("GALLIUM_DRIVER", "zink")
+            set("LIBGL_KOPPER_DRI2", "true")
+        }
+        DesktopGraphicsProfile.VIRGL,
+        DesktopGraphicsProfile.VIRGL_ANGLE,
+        -> set("GALLIUM_DRIVER", "virpipe")
+        DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> Unit
+    }
+    return values
+}

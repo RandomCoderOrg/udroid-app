@@ -795,6 +795,12 @@ private fun ManagementPane(
                                 systemTitle =
                                     selectedDistro?.releaseName
                                         ?: installedSystemTitle(selectedRootfs.name),
+                                rootfsDirectory = selectedRootfs.directory,
+                                desktopEnvironment =
+                                    desktopEnvironments.firstOrNull {
+                                        it.id == desktopConfiguration.environmentId
+                                    },
+                                desktopConfiguration = desktopConfiguration,
                                 runtimeRunning =
                                     snapshot.rootfsName == selectedRootfs.name &&
                                         snapshot.phase == RuntimePhase.RUNNING,

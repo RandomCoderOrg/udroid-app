@@ -64,6 +64,7 @@ data class ProotCustomEnvironmentVariable(
 
 data class ProotEnvironmentProfile(
     val defaultOverrides: Map<String, String> = emptyMap(),
+    val managedOverrides: Map<String, String> = emptyMap(),
     val customVariables: List<ProotCustomEnvironmentVariable> = emptyList(),
 )
 
@@ -74,6 +75,10 @@ object ProotEnvironmentProfileValidator {
             "The profile contains an unknown default environment variable"
         }
         profile.defaultOverrides.values.forEach(::requireValidValue)
+        require(profile.managedOverrides.keys.all(PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES::contains)) {
+            "The profile contains an unknown uDroid-managed environment variable"
+        }
+        profile.managedOverrides.values.forEach(::requireValidValue)
 
         require(profile.customVariables.size <= MAX_CUSTOM_VARIABLES) {
             "An environment profile supports at most $MAX_CUSTOM_VARIABLES custom variables"
@@ -122,6 +127,21 @@ object ProotEnvironmentResolver {
             profile.customVariables.forEach { add("${it.name}=${it.value}") }
         }
     }
+
+    fun resolveManagedOverrides(
+        profile: ProotEnvironmentProfile = ProotEnvironmentProfile(),
+    ): List<String> {
+        ProotEnvironmentProfileValidator.requireValid(profile)
+        return PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES.mapNotNull { name ->
+            profile.managedOverrides[name]?.let { value -> "$name=$value" }
+        }
+    }
+
+    fun applyManagedOverrides(
+        command: List<String>,
+        overrides: List<String>,
+    ): List<String> =
+        if (overrides.isEmpty()) command else listOf("/usr/bin/env") + overrides + command
 }
 
 class ProotEnvironmentProfileStore(context: Context) {
@@ -206,6 +226,10 @@ internal object ProotEnvironmentProfileCodec {
                     JsonObject(profile.defaultOverrides.mapValues { JsonPrimitive(it.value) }),
                 )
                 put(
+                    "managed_overrides",
+                    JsonObject(profile.managedOverrides.mapValues { JsonPrimitive(it.value) }),
+                )
+                put(
                     "custom_variables",
                     JsonArray(
                         profile.customVariables.map { variable ->
@@ -237,6 +261,11 @@ internal object ProotEnvironmentProfileCodec {
                 ?.jsonObject
                 ?.mapValues { (_, entry) -> entry.jsonPrimitive.content }
                 .orEmpty()
+        val managedOverrides =
+            value["managed_overrides"]
+                ?.jsonObject
+                ?.mapValues { (_, entry) -> entry.jsonPrimitive.content }
+                .orEmpty()
         val customVariables =
             value["custom_variables"]
                 ?.jsonArray
@@ -251,6 +280,7 @@ internal object ProotEnvironmentProfileCodec {
         return ProotEnvironmentProfileValidator.requireValid(
             ProotEnvironmentProfile(
                 defaultOverrides = overrides,
+                managedOverrides = managedOverrides,
                 customVariables = customVariables,
             ),
         )

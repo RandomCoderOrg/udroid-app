@@ -23,6 +23,7 @@ class ProotEnvironmentProfilesTest {
         val profile =
             ProotEnvironmentProfile(
                 defaultOverrides = mapOf("LANG" to "en_IN.UTF-8"),
+                managedOverrides = mapOf("DISPLAY" to ":7", "GALLIUM_DRIVER" to "custom"),
                 customVariables =
                     listOf(
                         ProotCustomEnvironmentVariable("empty-id", "EMPTY", ""),
@@ -35,6 +36,10 @@ class ProotEnvironmentProfilesTest {
         val decoded = ProotEnvironmentProfileCodec.decode(ProotEnvironmentProfileCodec.encode(profile))
 
         assertEquals(profile, decoded)
+        assertEquals(
+            listOf("DISPLAY=:7", "GALLIUM_DRIVER=custom"),
+            ProotEnvironmentResolver.resolveManagedOverrides(decoded),
+        )
         assertEquals("EMPTY=", ProotEnvironmentResolver.resolve(decoded).first { it.startsWith("EMPTY=") })
         assertEquals(
             "GREETING=hello world",
@@ -66,6 +71,7 @@ class ProotEnvironmentProfilesTest {
                 ProotEnvironmentProfile(
                     customVariables = listOf(ProotCustomEnvironmentVariable("one", "DISPLAY", ":9")),
                 ),
+                ProotEnvironmentProfile(managedOverrides = mapOf("NOT_MANAGED" to "x")),
                 ProotEnvironmentProfile(
                     customVariables = listOf(ProotCustomEnvironmentVariable("one", "CUSTOM", "bad\u0000value")),
                 ),
@@ -76,6 +82,27 @@ class ProotEnvironmentProfilesTest {
                 ProotEnvironmentProfileValidator.requireValid(profile)
             }
         }
+    }
+
+    @Test
+    fun `managed overrides wrap commands without shell parsing`() {
+        assertEquals(
+            listOf("/usr/bin/env", "DISPLAY=:7", "GALLIUM_DRIVER=", "/bin/bash", "--login"),
+            ProotEnvironmentResolver.applyManagedOverrides(
+                command = listOf("/bin/bash", "--login"),
+                overrides = listOf("DISPLAY=:7", "GALLIUM_DRIVER="),
+            ),
+        )
+    }
+
+    @Test
+    fun `profiles saved before managed overrides remain readable`() {
+        val profile =
+            ProotEnvironmentProfileCodec.decode(
+                """{"format":"1","defaults_revision":1,"default_overrides":{},"custom_variables":[]}""",
+            )
+
+        assertEquals(emptyMap<String, String>(), profile.managedOverrides)
     }
 
     @Test
