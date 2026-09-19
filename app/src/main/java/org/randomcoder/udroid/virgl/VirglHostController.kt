@@ -7,6 +7,26 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
+import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
+
+internal enum class VirglHostBackend(
+    val label: String,
+    val socketName: String,
+    val logName: String,
+) {
+    NATIVE_GLES("Android OpenGL ES", "virgl-gles.sock", "virgl-gles.log"),
+    ANGLE_VULKAN("ANGLE Vulkan", "virgl-angle-vulkan.sock", "virgl-angle-vulkan.log"),
+    ;
+
+    companion object {
+        fun from(profile: DesktopGraphicsProfile): VirglHostBackend? =
+            when (profile) {
+                DesktopGraphicsProfile.VIRGL -> NATIVE_GLES
+                DesktopGraphicsProfile.VIRGL_ANGLE -> ANGLE_VULKAN
+                else -> null
+            }
+    }
+}
 
 internal data class VirglHostSnapshot(
     val state: String = "stopped",
@@ -14,13 +34,23 @@ internal data class VirglHostSnapshot(
 )
 
 internal object VirglHostLaunch {
-    fun arguments(socket: File): List<String> =
-        listOf("--no-fork", "--multi-clients", "--socket-path", socket.absolutePath)
+    fun arguments(
+        socket: File,
+        backend: VirglHostBackend,
+    ): List<String> =
+        buildList {
+            add("--no-fork")
+            add("--multi-clients")
+            if (backend == VirglHostBackend.ANGLE_VULKAN) add("--angle-vulkan")
+            add("--socket-path")
+            add(socket.absolutePath)
+        }
 
     fun environment(
         home: File,
         libraryDirectory: File,
         temporaryDirectory: File,
+        angleLibraryDirectory: File? = null,
     ): Map<String, String> =
         mapOf(
             "ANDROID_DATA" to "/data",
@@ -31,12 +61,18 @@ internal object VirglHostLaunch {
             "LD_LIBRARY_PATH" to libraryDirectory.absolutePath,
             "PATH" to "/system/bin",
             "TMPDIR" to temporaryDirectory.absolutePath,
-        )
+        ) +
+            if (angleLibraryDirectory == null) {
+                emptyMap()
+            } else {
+                mapOf("VTEST_ANGLE_LIBRARY_PATH" to angleLibraryDirectory.absolutePath)
+            }
 }
 
-/** Owns the single VirGL server shared by graphical processes in this supervisor. */
+/** Owns one backend-specific VirGL server shared by graphical processes. */
 internal class VirglHostController(
     context: Context,
+    val backend: VirglHostBackend,
     private val onUnexpectedExit: (VirglHostSnapshot) -> Unit = {},
 ) : AutoCloseable {
     private val appContext = context.applicationContext
@@ -49,8 +85,8 @@ internal class VirglHostController(
         File(appContext.noBackupFilesDir, "graphics").apply {
             check(mkdirs() || isDirectory) { "Could not prepare the private graphics directory" }
         }
-    private val socket = File(graphicsDirectory, "virgl.sock")
-    private val logFile = File(graphicsDirectory, "virgl.log")
+    private val socket = File(graphicsDirectory, backend.socketName)
+    private val logFile = File(graphicsDirectory, backend.logName)
 
     fun start(): File {
         synchronized(lock) {
@@ -61,13 +97,19 @@ internal class VirglHostController(
         }
         return try {
             val runtime = VirglHostRuntimeInstaller.install(appContext)
+            val angleRuntime =
+                if (backend == VirglHostBackend.ANGLE_VULKAN) {
+                    VirglAngleRuntimeInstaller.install(appContext)
+                } else {
+                    null
+                }
             socket.delete()
             logFile.delete()
             val launched =
                 ProcessBuilder(
                     AndroidExecutableCommand.create(
                         runtime.executable,
-                        *VirglHostLaunch.arguments(socket).toTypedArray(),
+                        *VirglHostLaunch.arguments(socket, backend).toTypedArray(),
                     ),
                 ).directory(graphicsDirectory)
                     .redirectErrorStream(true)
@@ -79,6 +121,7 @@ internal class VirglHostController(
                                 appContext.filesDir,
                                 runtime.libraryDirectory,
                                 appContext.cacheDir,
+                                angleRuntime?.libraryDirectory,
                             ),
                         )
                     }.start()
@@ -92,7 +135,8 @@ internal class VirglHostController(
             snapshot.set(
                 VirglHostSnapshot(
                     "running",
-                    "VirGL ${VirglHostRuntimeInstaller.VERSION} · socket ${socket.name}",
+                    "VirGL ${VirglHostRuntimeInstaller.VERSION} · ${backend.label} · " +
+                        "socket ${socket.name}",
                 ),
             )
             Log.i(LOG_TAG, "VirGL host ready; output: ${logFile.absolutePath}")

@@ -40,6 +40,7 @@ enum class DesktopGraphicsProfile(
     SOFTWARE("software"),
     ZINK("zink"),
     VIRGL("virgl"),
+    VIRGL_ANGLE("virgl-angle"),
     GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 

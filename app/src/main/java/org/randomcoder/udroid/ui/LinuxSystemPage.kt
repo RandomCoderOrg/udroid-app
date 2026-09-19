@@ -1089,6 +1089,16 @@ private fun GraphicsProfileSelector(
                 enabled = true,
                 onClick = { onSelected(DesktopGraphicsProfile.VIRGL) },
             )
+            GraphicsProfileRow(
+                title = "VirGL + ANGLE",
+                detail =
+                    "Use VirGL through ANGLE and Android Vulkan with a current Mesa " +
+                        "virpipe driver inside Linux." +
+                        if (desktopRunning) " Restart the desktop to apply." else "",
+                selected = selected == DesktopGraphicsProfile.VIRGL_ANGLE,
+                enabled = true,
+                onClick = { onSelected(DesktopGraphicsProfile.VIRGL_ANGLE) },
+            )
         }
         if (GFXSTREAM_PROFILE_ENABLED) {
             val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS

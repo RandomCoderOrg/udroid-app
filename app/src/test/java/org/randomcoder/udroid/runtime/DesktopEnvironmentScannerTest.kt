@@ -231,6 +231,10 @@ class DesktopEnvironmentScannerTest {
             DesktopGraphicsProfile.VIRGL,
             DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL.storageValue),
         )
+        assertEquals(
+            DesktopGraphicsProfile.VIRGL_ANGLE,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL_ANGLE.storageValue),
+        )
     }
 
     @Test

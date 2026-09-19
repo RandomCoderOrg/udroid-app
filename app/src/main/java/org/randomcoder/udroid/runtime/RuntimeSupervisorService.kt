@@ -41,6 +41,7 @@ import org.randomcoder.udroid.gfxstream.GfxstreamProotLaunchProfile
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.virgl.VirglHostController
+import org.randomcoder.udroid.virgl.VirglHostBackend
 import org.randomcoder.udroid.virgl.VirglHostSnapshot
 import org.randomcoder.udroid.virgl.VirglProotLaunchProfile
 import org.randomcoder.udroid.x11.X11ServerController
@@ -60,8 +61,8 @@ class RuntimeSupervisorService : Service() {
     private val ownedSession = AtomicReference<TerminalSession?>(null)
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
-    private val ownedVirglHost = AtomicReference<VirglHostController?>(null)
-    private val virglApplicationIds = ConcurrentHashMap.newKeySet<String>()
+    private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
+    private val virglApplicationBackends = ConcurrentHashMap<String, VirglHostBackend>()
     private val virglHostLock = Any()
     private val desktopLaunchToken = AtomicReference<String?>(null)
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
@@ -464,7 +465,9 @@ class RuntimeSupervisorService : Service() {
                         val profile = desktopConfigurationStore.loadGraphicsProfile(rootfsName)
                         val launchProfile =
                             when (profile) {
-                                DesktopGraphicsProfile.VIRGL -> virglLaunchProfile()
+                                DesktopGraphicsProfile.VIRGL,
+                                DesktopGraphicsProfile.VIRGL_ANGLE,
+                                -> virglLaunchProfile(profile)
                                 else -> EnvironmentProotLaunchProfile.from(profile)
                             }
                         val launch =
@@ -486,10 +489,11 @@ class RuntimeSupervisorService : Service() {
                                     environment().putAll(launch.environment)
                                 }.start()
                         applicationProcesses.put(application.id, process)?.destroy()
-                        if (profile == DesktopGraphicsProfile.VIRGL) {
-                            virglApplicationIds += application.id
+                        val virglBackend = VirglHostBackend.from(profile)
+                        if (virglBackend != null) {
+                            virglApplicationBackends[application.id] = virglBackend
                         } else {
-                            virglApplicationIds -= application.id
+                            virglApplicationBackends -= application.id
                         }
                         drainApplicationOutput(application, process)
                         app.journal.append(
@@ -622,7 +626,9 @@ class RuntimeSupervisorService : Service() {
                             -> EnvironmentProotLaunchProfile.from(
                                 request.configuration.graphicsProfile,
                             )
-                            DesktopGraphicsProfile.VIRGL -> virglLaunchProfile()
+                            DesktopGraphicsProfile.VIRGL,
+                            DesktopGraphicsProfile.VIRGL_ANGLE,
+                            -> virglLaunchProfile(request.configuration.graphicsProfile)
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
@@ -900,20 +906,25 @@ class RuntimeSupervisorService : Service() {
         ownedGfxstreamHost.getAndSet(null)?.close()
     }
 
-    private fun virglLaunchProfile(): VirglProotLaunchProfile =
+    private fun virglLaunchProfile(profile: DesktopGraphicsProfile): VirglProotLaunchProfile =
         synchronized(virglHostLock) {
-            ownedVirglHost.get()?.currentSocket()?.let(::VirglProotLaunchProfile)
+            val backend = checkNotNull(VirglHostBackend.from(profile))
+            val existing = ownedVirglHosts[backend]
+            existing?.currentSocket()?.let(::VirglProotLaunchProfile)
                 ?: run {
-                    ownedVirglHost.getAndSet(null)?.close()
-                    lateinit var host: VirglHostController
-                    host = VirglHostController(this) { failure ->
-                        handleVirglHostExit(host, failure)
+                    if (existing != null) {
+                        ownedVirglHosts.remove(backend, existing)
+                        existing.close()
                     }
-                    ownedVirglHost.set(host)
+                    lateinit var host: VirglHostController
+                    host = VirglHostController(this, backend) { failure ->
+                        handleVirglHostExit(backend, host, failure)
+                    }
+                    ownedVirglHosts[backend] = host
                     try {
                         VirglProotLaunchProfile(host.start())
                     } catch (error: Throwable) {
-                        ownedVirglHost.compareAndSet(host, null)
+                        ownedVirglHosts.remove(backend, host)
                         host.close()
                         throw error
                     }
@@ -922,15 +933,17 @@ class RuntimeSupervisorService : Service() {
 
     private fun closeVirglHost() {
         synchronized(virglHostLock) {
-            ownedVirglHost.getAndSet(null)?.close()
+            ownedVirglHosts.values.forEach(VirglHostController::close)
+            ownedVirglHosts.clear()
         }
     }
 
     private fun handleVirglHostExit(
+        backend: VirglHostBackend,
         host: VirglHostController,
         failure: VirglHostSnapshot,
     ) {
-        if (!ownedVirglHost.compareAndSet(host, null)) return
+        if (ownedVirglHosts[backend] !== host) return
         app.journal.append(
             component = "virgl",
             severity = "error",
@@ -939,15 +952,20 @@ class RuntimeSupervisorService : Service() {
             bootId = app.runtimeState.current().bootId,
         )
         mainHandler.post {
+            if (!ownedVirglHosts.remove(backend, host)) return@post
             ownedDesktop.get()?.takeIf {
-                it.graphicsProfile == DesktopGraphicsProfile.VIRGL
+                VirglHostBackend.from(it.graphicsProfile) == backend
             }?.let {
                 stopDesktopProcess(restarting = false)
             }
-            virglApplicationIds.toList().forEach { applicationId ->
-                applicationProcesses.remove(applicationId)?.destroy()
-            }
-            virglApplicationIds.clear()
+            virglApplicationBackends.entries
+                .filter { it.value == backend }
+                .map { it.key }
+                .forEach { applicationId ->
+                    if (virglApplicationBackends.remove(applicationId, backend)) {
+                        applicationProcesses.remove(applicationId)?.destroy()
+                    }
+                }
             host.close()
         }
     }
@@ -1441,7 +1459,7 @@ class RuntimeSupervisorService : Service() {
                     return@processWait
                 }
             if (applicationProcesses.remove(application.id, process)) {
-                virglApplicationIds -= application.id
+                virglApplicationBackends -= application.id
             }
             app.journal.append(
                 component = "linux-app",
@@ -1463,7 +1481,7 @@ class RuntimeSupervisorService : Service() {
             if (process.isAlive) process.destroy()
         }
         applicationProcesses.clear()
-        virglApplicationIds.clear()
+        virglApplicationBackends.clear()
     }
 
     private fun shellQuote(argument: String): String =

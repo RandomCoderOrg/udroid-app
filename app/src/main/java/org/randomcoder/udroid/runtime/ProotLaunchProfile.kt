@@ -32,6 +32,7 @@ internal class EnvironmentProotLaunchProfile private constructor(
                         ),
                     )
                 DesktopGraphicsProfile.VIRGL -> null
+                DesktopGraphicsProfile.VIRGL_ANGLE -> null
                 DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             }
     }

@@ -10,6 +10,10 @@ internal data class VirglHostRuntime(
     val libraryDirectory: File,
 )
 
+internal data class VirglAngleRuntime(
+    val libraryDirectory: File,
+)
+
 internal object VirglHostRuntimeInstaller {
     const val VERSION = "1.3.0-1"
     private val bundle =
@@ -38,4 +42,30 @@ internal object VirglHostRuntimeInstaller {
             libraryDirectory = File(directory, "lib"),
         )
     }
+}
+
+internal object VirglAngleRuntimeInstaller {
+    const val VERSION = "2.1.24923-f09a19ce-2"
+    private val bundle =
+        VerifiedRuntimeAssetBundle(
+            name = "VirGL ANGLE Vulkan backend",
+            assetDirectory = "virgl-angle-vulkan",
+            destinationPrefix = "virgl-angle-vulkan",
+            version = VERSION,
+            entries =
+                listOf(
+                    "lib/libEGL_angle.so",
+                    "lib/libGLESv1_CM_angle.so",
+                    "lib/libGLESv2_angle.so",
+                    "lib/libfeature_support_angle.so",
+                    "share/doc/copyright",
+                ),
+            metadataKeys = setOf("termux_packages_commit"),
+        )
+
+    fun install(context: Context): VirglAngleRuntime =
+        VirglAngleRuntime(
+            libraryDirectory =
+                File(VerifiedRuntimeAssetInstaller.install(context, bundle), "lib"),
+        )
 }

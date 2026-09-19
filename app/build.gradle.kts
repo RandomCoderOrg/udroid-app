@@ -168,6 +168,7 @@ val verifyGraphicsRuntimeAssets by
         inputs.dir(runtimeRoot.resolve("gfxstream-host"))
         inputs.dir(runtimeRoot.resolve("gfxstream-guest"))
         inputs.dir(runtimeRoot.resolve("virgl-host"))
+        inputs.dir(runtimeRoot.resolve("virgl-angle-vulkan"))
 
         doLast {
             fun ByteArray.containsSequence(needle: ByteArray): Boolean {
@@ -185,7 +186,13 @@ val verifyGraphicsRuntimeAssets by
                 return false
             }
 
-            val bundleNames = listOf("gfxstream-host", "gfxstream-guest", "virgl-host")
+            val bundleNames =
+                listOf(
+                    "gfxstream-host",
+                    "gfxstream-guest",
+                    "virgl-host",
+                    "virgl-angle-vulkan",
+                )
             val manifests =
                 bundleNames.associateWith { bundleName ->
                     val bundle = runtimeRoot.resolve(bundleName)
