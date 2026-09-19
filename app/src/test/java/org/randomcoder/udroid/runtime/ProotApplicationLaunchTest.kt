@@ -104,4 +104,30 @@ class ProotApplicationLaunchTest {
             arguments.takeLast(6),
         )
     }
+
+    @Test
+    fun `graphical application receives saved guest variables without shell parsing`() {
+        val arguments =
+            ProotApplicationLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                guestWorkingDirectory = "/root",
+                applicationArguments = listOf("/usr/bin/demo"),
+                guestEnvironment =
+                    ProotEnvironmentResolver.resolve(
+                        ProotEnvironmentProfile(
+                            customVariables =
+                                listOf(
+                                    ProotCustomEnvironmentVariable("custom", "APP_FLAGS", "one two=three"),
+                                ),
+                        ),
+                    ),
+            )
+
+        assertTrue("APP_FLAGS=one two=three" in arguments)
+        assertTrue(arguments.indexOf("APP_FLAGS=one two=three") < arguments.indexOf("DISPLAY=:0"))
+        assertEquals("/usr/bin/demo", arguments.last())
+    }
 }

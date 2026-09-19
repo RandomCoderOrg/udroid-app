@@ -463,13 +463,7 @@ class RuntimeSupervisorService : Service() {
                     runCatching {
                         val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
                         val profile = desktopConfigurationStore.loadGraphicsProfile(rootfsName)
-                        val launchProfile =
-                            when (profile) {
-                                DesktopGraphicsProfile.VIRGL,
-                                DesktopGraphicsProfile.VIRGL_ANGLE,
-                                -> virglLaunchProfile(profile)
-                                else -> EnvironmentProotLaunchProfile.from(profile)
-                            }
+                        val launchProfile = graphicsLaunchProfile(profile)
                         val launch =
                             ProotApplicationLaunchBuilder.create(
                                 context = this,
@@ -931,6 +925,15 @@ class RuntimeSupervisorService : Service() {
                 }
         }
 
+    private fun graphicsLaunchProfile(profile: DesktopGraphicsProfile): ProotLaunchProfile? =
+        when (profile) {
+            DesktopGraphicsProfile.VIRGL,
+            DesktopGraphicsProfile.VIRGL_ANGLE,
+            -> virglLaunchProfile(profile)
+            DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
+            else -> EnvironmentProotLaunchProfile.from(profile)
+        }
+
     private fun closeVirglHost() {
         synchronized(virglHostLock) {
             ownedVirglHosts.values.forEach(VirglHostController::close)
@@ -1152,6 +1155,7 @@ class RuntimeSupervisorService : Service() {
         runCatching {
             val runtime = ProotRuntimeInstaller.install(this)
             val rootfs = InstalledRootfsResolver.resolve(this, requestedRootfsName)
+            val graphicsProfile = desktopConfigurationStore.loadGraphicsProfile(rootfs.name)
             runCatching { audioController.apply(audioConfiguration, bootId) }
                 .onFailure { error ->
                     app.journal.append(
@@ -1170,6 +1174,7 @@ class RuntimeSupervisorService : Service() {
                 rootfs = rootfs,
                 x11SocketDirectory = x11SocketDirectory,
                 audioEndpoint = audioController.endpoint(),
+                launchProfile = graphicsLaunchProfile(graphicsProfile),
             )
         }.mapCatching { launch ->
             configureTerminalColors()

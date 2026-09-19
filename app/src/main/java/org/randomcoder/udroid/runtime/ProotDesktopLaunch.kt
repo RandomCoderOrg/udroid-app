@@ -31,6 +31,10 @@ object ProotDesktopLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
+        val guestEnvironment =
+            ProotEnvironmentResolver.resolve(
+                ProotEnvironmentProfileStore(context).load(rootfs.name),
+            )
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -42,6 +46,7 @@ object ProotDesktopLaunchBuilder {
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
                 mounts = mounts,
+                guestEnvironment = guestEnvironment,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -85,6 +90,7 @@ object ProotDesktopLaunchBuilder {
         launchProfile: ProotLaunchProfile? = null,
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
+        guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
     ): List<String> =
         buildList {
             add(prootPath)
@@ -101,8 +107,7 @@ object ProotDesktopLaunchBuilder {
             add("USER=root")
             add("LOGNAME=root")
             add("SHELL=/bin/sh")
-            add("LANG=C.UTF-8")
-            add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            addAll(guestEnvironment)
             add("DISPLAY=:0")
             if (audioAuthDirectory != null) {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")

@@ -210,6 +210,41 @@ class DesktopEnvironmentScannerTest {
     }
 
     @Test
+    fun `desktop receives saved guest variables before locked desktop variables`() {
+        val desktop =
+            DesktopEnvironment(
+                id = "xfce",
+                name = "Xfce",
+                command = listOf("startxfce4"),
+                desktopFilePath = "/usr/share/xsessions/xfce.desktop",
+                kind = DesktopEnvironmentKind.XFCE,
+            )
+        val arguments =
+            ProotDesktopLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                environment = desktop,
+                configuration = DesktopConfiguration(desktop.id, false, false),
+                hasDbusRunSession = false,
+                guestEnvironment =
+                    ProotEnvironmentResolver.resolve(
+                        ProotEnvironmentProfile(
+                            customVariables =
+                                listOf(ProotCustomEnvironmentVariable("custom", "GTK_THEME", "Adwaita dark")),
+                        ),
+                    ),
+            )
+
+        assertTrue(arguments.indexOf("GTK_THEME=Adwaita dark") < arguments.indexOf("DISPLAY=:0"))
+        assertTrue(
+            arguments.indexOf("GTK_THEME=Adwaita dark") <
+                arguments.indexOf("XDG_CURRENT_DESKTOP=XFCE"),
+        )
+    }
+
+    @Test
     fun `unknown stored graphics profile safely falls back to standard`() {
         assertEquals(
             DesktopGraphicsProfile.STANDARD,
