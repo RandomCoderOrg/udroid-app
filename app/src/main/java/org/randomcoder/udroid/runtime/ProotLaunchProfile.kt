@@ -31,6 +31,7 @@ internal class EnvironmentProotLaunchProfile private constructor(
                             "LIBGL_KOPPER_DRI2=true",
                         ),
                     )
+                DesktopGraphicsProfile.VIRGL -> null
                 DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             }
     }

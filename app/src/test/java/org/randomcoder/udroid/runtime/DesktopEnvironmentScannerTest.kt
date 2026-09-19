@@ -227,6 +227,10 @@ class DesktopEnvironmentScannerTest {
             DesktopGraphicsProfile.ZINK,
             DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.ZINK.storageValue),
         )
+        assertEquals(
+            DesktopGraphicsProfile.VIRGL,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL.storageValue),
+        )
     }
 
     @Test

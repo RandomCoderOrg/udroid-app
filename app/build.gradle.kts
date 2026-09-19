@@ -162,11 +162,12 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
-val verifyGfxstreamRuntimeAssets by
+val verifyGraphicsRuntimeAssets by
     tasks.registering {
         val runtimeRoot = file("src/main/assets/runtime/arm64-v8a")
         inputs.dir(runtimeRoot.resolve("gfxstream-host"))
         inputs.dir(runtimeRoot.resolve("gfxstream-guest"))
+        inputs.dir(runtimeRoot.resolve("virgl-host"))
 
         doLast {
             fun ByteArray.containsSequence(needle: ByteArray): Boolean {
@@ -184,7 +185,7 @@ val verifyGfxstreamRuntimeAssets by
                 return false
             }
 
-            val bundleNames = listOf("gfxstream-host", "gfxstream-guest")
+            val bundleNames = listOf("gfxstream-host", "gfxstream-guest", "virgl-host")
             val manifests =
                 bundleNames.associateWith { bundleName ->
                     val bundle = runtimeRoot.resolve(bundleName)
@@ -238,5 +239,5 @@ val verifyGfxstreamRuntimeAssets by
     }
 
 tasks.matching { it.name == "preBuild" }.configureEach {
-    dependsOn(verifyGfxstreamRuntimeAssets)
+    dependsOn(verifyGraphicsRuntimeAssets)
 }

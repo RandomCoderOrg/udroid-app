@@ -40,6 +40,9 @@ import org.randomcoder.udroid.gfxstream.GfxstreamHostSnapshot
 import org.randomcoder.udroid.gfxstream.GfxstreamProotLaunchProfile
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
+import org.randomcoder.udroid.virgl.VirglHostController
+import org.randomcoder.udroid.virgl.VirglHostSnapshot
+import org.randomcoder.udroid.virgl.VirglProotLaunchProfile
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
 import java.io.File
@@ -57,6 +60,9 @@ class RuntimeSupervisorService : Service() {
     private val ownedSession = AtomicReference<TerminalSession?>(null)
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
+    private val ownedVirglHost = AtomicReference<VirglHostController?>(null)
+    private val virglApplicationIds = ConcurrentHashMap.newKeySet<String>()
+    private val virglHostLock = Any()
     private val desktopLaunchToken = AtomicReference<String?>(null)
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
@@ -248,6 +254,7 @@ class RuntimeSupervisorService : Service() {
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
         closeGfxstreamHost()
+        closeVirglHost()
         stopApplicationProcesses()
         audioController.stop(app.runtimeState.current().bootId)
         applicationExecutor.shutdownNow()
@@ -454,10 +461,12 @@ class RuntimeSupervisorService : Service() {
                 val result =
                     runCatching {
                         val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
+                        val profile = desktopConfigurationStore.loadGraphicsProfile(rootfsName)
                         val launchProfile =
-                            EnvironmentProotLaunchProfile.from(
-                                desktopConfigurationStore.loadGraphicsProfile(rootfsName),
-                            )
+                            when (profile) {
+                                DesktopGraphicsProfile.VIRGL -> virglLaunchProfile()
+                                else -> EnvironmentProotLaunchProfile.from(profile)
+                            }
                         val launch =
                             ProotApplicationLaunchBuilder.create(
                                 context = this,
@@ -477,6 +486,11 @@ class RuntimeSupervisorService : Service() {
                                     environment().putAll(launch.environment)
                                 }.start()
                         applicationProcesses.put(application.id, process)?.destroy()
+                        if (profile == DesktopGraphicsProfile.VIRGL) {
+                            virglApplicationIds += application.id
+                        } else {
+                            virglApplicationIds -= application.id
+                        }
                         drainApplicationOutput(application, process)
                         app.journal.append(
                             component = "linux-app",
@@ -608,6 +622,7 @@ class RuntimeSupervisorService : Service() {
                             -> EnvironmentProotLaunchProfile.from(
                                 request.configuration.graphicsProfile,
                             )
+                            DesktopGraphicsProfile.VIRGL -> virglLaunchProfile()
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
@@ -672,6 +687,7 @@ class RuntimeSupervisorService : Service() {
                             rootfsName = request.rootfsName,
                             environment = request.environment,
                             gfxstreamHost = startingGfxstreamHost,
+                            graphicsProfile = request.configuration.graphicsProfile,
                             mounts = launch.mounts,
                         )
                     check(ownedDesktop.compareAndSet(null, owned)) {
@@ -882,6 +898,58 @@ class RuntimeSupervisorService : Service() {
 
     private fun closeGfxstreamHost() {
         ownedGfxstreamHost.getAndSet(null)?.close()
+    }
+
+    private fun virglLaunchProfile(): VirglProotLaunchProfile =
+        synchronized(virglHostLock) {
+            ownedVirglHost.get()?.currentSocket()?.let(::VirglProotLaunchProfile)
+                ?: run {
+                    ownedVirglHost.getAndSet(null)?.close()
+                    lateinit var host: VirglHostController
+                    host = VirglHostController(this) { failure ->
+                        handleVirglHostExit(host, failure)
+                    }
+                    ownedVirglHost.set(host)
+                    try {
+                        VirglProotLaunchProfile(host.start())
+                    } catch (error: Throwable) {
+                        ownedVirglHost.compareAndSet(host, null)
+                        host.close()
+                        throw error
+                    }
+                }
+        }
+
+    private fun closeVirglHost() {
+        synchronized(virglHostLock) {
+            ownedVirglHost.getAndSet(null)?.close()
+        }
+    }
+
+    private fun handleVirglHostExit(
+        host: VirglHostController,
+        failure: VirglHostSnapshot,
+    ) {
+        if (!ownedVirglHost.compareAndSet(host, null)) return
+        app.journal.append(
+            component = "virgl",
+            severity = "error",
+            event = "host_process_lost",
+            message = failure.detail,
+            bootId = app.runtimeState.current().bootId,
+        )
+        mainHandler.post {
+            ownedDesktop.get()?.takeIf {
+                it.graphicsProfile == DesktopGraphicsProfile.VIRGL
+            }?.let {
+                stopDesktopProcess(restarting = false)
+            }
+            virglApplicationIds.toList().forEach { applicationId ->
+                applicationProcesses.remove(applicationId)?.destroy()
+            }
+            virglApplicationIds.clear()
+            host.close()
+        }
     }
 
     private fun handleGfxstreamHostExit(
@@ -1193,6 +1261,7 @@ class RuntimeSupervisorService : Service() {
         val next =
             app.runtimeState.update { RuntimeStateMachine.afterProcessExit(it, exitCode) }
         stopApplicationProcesses()
+        closeVirglHost()
         x11Controller.stop(beforeExit.bootId)
         audioController.stop(beforeExit.bootId)
         publishState(next)
@@ -1216,6 +1285,7 @@ class RuntimeSupervisorService : Service() {
         pendingDesktopRestart.set(null)
         stopDesktopProcess(restarting = false)
         stopApplicationProcesses()
+        closeVirglHost()
         x11Controller.stop(current.bootId)
         audioController.stop(current.bootId)
         val stopping =
@@ -1370,7 +1440,9 @@ class RuntimeSupervisorService : Service() {
                     Thread.currentThread().interrupt()
                     return@processWait
                 }
-            applicationProcesses.remove(application.id, process)
+            if (applicationProcesses.remove(application.id, process)) {
+                virglApplicationIds -= application.id
+            }
             app.journal.append(
                 component = "linux-app",
                 severity = if (exitCode == 0) "info" else "warning",
@@ -1391,6 +1463,7 @@ class RuntimeSupervisorService : Service() {
             if (process.isAlive) process.destroy()
         }
         applicationProcesses.clear()
+        virglApplicationIds.clear()
     }
 
     private fun shellQuote(argument: String): String =
@@ -1571,6 +1644,7 @@ class RuntimeSupervisorService : Service() {
         val rootfsName: String,
         val environment: DesktopEnvironment,
         val gfxstreamHost: GfxstreamHostController?,
+        val graphicsProfile: DesktopGraphicsProfile,
         val mounts: List<ResolvedProotMount>,
     )
 }

@@ -39,6 +39,7 @@ enum class DesktopGraphicsProfile(
     STANDARD("standard"),
     SOFTWARE("software"),
     ZINK("zink"),
+    VIRGL("virgl"),
     GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 

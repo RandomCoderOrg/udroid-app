@@ -290,6 +290,26 @@ fun LinuxSystemPage(
             )
         }
 
+        item(key = "graphics-label") {
+            UdroidSectionLabel(
+                text = "Graphics",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "graphics-settings") {
+            Surface(
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, UdroidLine),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                GraphicsProfileSelector(
+                    selected = configuration.graphicsProfile,
+                    desktopRunning = desktopRunning,
+                    onSelected = onGraphicsProfileChanged,
+                )
+            }
+        }
+
         item(key = "desktop-label") {
             UdroidSectionLabel(
                 text = "Desktop session",
@@ -360,7 +380,6 @@ fun LinuxSystemPage(
                     desktopRunning = desktopRunning,
                     onCompositingChanged = onCompositingChanged,
                     onTouchScaleChanged = onTouchScaleChanged,
-                    onGraphicsProfileChanged = onGraphicsProfileChanged,
                 )
             }
             item(key = "desktop-controls") {
@@ -971,7 +990,6 @@ private fun DesktopSettingsPanel(
     desktopRunning: Boolean,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
-    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
 ) {
     val compositorSupport = environment.kind.compositorSupport
     val compositorConfigurable =
@@ -1017,12 +1035,6 @@ private fun DesktopSettingsPanel(
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
             )
-            HorizontalDivider(color = UdroidLine)
-            GraphicsProfileSelector(
-                selected = configuration.graphicsProfile,
-                desktopRunning = desktopRunning,
-                onSelected = onGraphicsProfileChanged,
-            )
         }
     }
 }
@@ -1067,6 +1079,17 @@ private fun GraphicsProfileSelector(
             enabled = true,
             onClick = { onSelected(DesktopGraphicsProfile.ZINK) },
         )
+        if ("arm64-v8a" in Build.SUPPORTED_ABIS) {
+            GraphicsProfileRow(
+                title = "VirGL",
+                detail =
+                    "Use Android OpenGL ES with a current Mesa virpipe driver inside Linux." +
+                        if (desktopRunning) " Restart the desktop to apply." else "",
+                selected = selected == DesktopGraphicsProfile.VIRGL,
+                enabled = true,
+                onClick = { onSelected(DesktopGraphicsProfile.VIRGL) },
+            )
+        }
         if (GFXSTREAM_PROFILE_ENABLED) {
             val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
             GraphicsProfileRow(
