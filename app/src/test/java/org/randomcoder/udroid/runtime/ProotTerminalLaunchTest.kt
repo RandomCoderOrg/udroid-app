@@ -140,6 +140,151 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `software profile wraps the login shell environment`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+            )
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "GALLIUM_DRIVER=llvmpipe",
+                "/bin/bash",
+                "--login",
+            ),
+            arguments.takeLast(5),
+        )
+    }
+
+    @Test
+    fun `managed override wins over the selected graphics profile`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+                managedEnvironment = listOf("GALLIUM_DRIVER=custom"),
+            ).toList()
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "GALLIUM_DRIVER=llvmpipe",
+                "/usr/bin/env",
+                "GALLIUM_DRIVER=custom",
+                "/bin/bash",
+                "--login",
+            ),
+            arguments.takeLast(7),
+        )
+    }
+
+    @Test
+    fun `zink profile wraps the login shell environment`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                launchProfile = EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.ZINK),
+            )
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "MESA_LOADER_DRIVER_OVERRIDE=zink",
+                "GALLIUM_DRIVER=zink",
+                "LIBGL_KOPPER_DRI2=true",
+                "/bin/bash",
+                "--login",
+            ),
+            arguments.takeLast(6),
+        )
+    }
+
+    @Test
+    fun `terminal receives saved guest variables before locked session and graphics variables`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestEnvironment =
+                    ProotEnvironmentResolver.resolve(
+                        ProotEnvironmentProfile(
+                            defaultOverrides = mapOf("TERM" to "screen-256color"),
+                            customVariables =
+                                listOf(
+                                    ProotCustomEnvironmentVariable("custom", "EDITOR", "code --wait"),
+                                ),
+                        ),
+                    ),
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+            )
+
+        assertTrue(arguments.indexOf("HOME=/root") < arguments.indexOf("TERM=screen-256color"))
+        assertTrue(arguments.indexOf("TERM=screen-256color") < arguments.indexOf("EDITOR=code --wait"))
+        assertTrue(arguments.indexOf("EDITOR=code --wait") < arguments.indexOf("DISPLAY=:0"))
+        assertTrue(arguments.indexOf("DISPLAY=:0") < arguments.lastIndexOf("/usr/bin/env"))
+    }
+
+    @Test
+    fun `profile bindings and wrapper apply to the complete login shell command`() {
+        val profile =
+            object : ProotLaunchProfile {
+                override fun addBindings(arguments: MutableList<String>) {
+                    arguments += "-b"
+                    arguments += "/data/virgl:/tmp/.virgl"
+                }
+
+                override fun wrapGuestCommand(command: List<String>): List<String> =
+                    listOf("/usr/bin/env", "GALLIUM_DRIVER=virpipe") + command
+            }
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestShell = "/bin/bash",
+                launchProfile = profile,
+            )
+
+        assertTrue("/data/virgl:/tmp/.virgl" in arguments)
+        assertTrue(
+            arguments.indexOf("/data/virgl:/tmp/.virgl") < arguments.indexOf("--cwd=/root"),
+        )
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "GALLIUM_DRIVER=virpipe",
+                "/bin/bash",
+                "--login",
+            ),
+            arguments.takeLast(4),
+        )
+    }
+
+    @Test
     fun `proot loader and temporary storage stay app private`() {
         val environment =
             ProotTerminalLaunchBuilder.buildEnvironment(

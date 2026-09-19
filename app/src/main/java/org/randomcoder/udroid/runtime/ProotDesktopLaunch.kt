@@ -31,6 +31,10 @@ object ProotDesktopLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
+        val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
+        val managedEnvironment =
+            ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -42,6 +46,8 @@ object ProotDesktopLaunchBuilder {
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
                 mounts = mounts,
+                guestEnvironment = guestEnvironment,
+                managedEnvironment = managedEnvironment,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -85,6 +91,8 @@ object ProotDesktopLaunchBuilder {
         launchProfile: ProotLaunchProfile? = null,
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
+        guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
+        managedEnvironment: List<String> = emptyList(),
     ): List<String> =
         buildList {
             add(prootPath)
@@ -101,8 +109,7 @@ object ProotDesktopLaunchBuilder {
             add("USER=root")
             add("LOGNAME=root")
             add("SHELL=/bin/sh")
-            add("LANG=C.UTF-8")
-            add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            addAll(guestEnvironment)
             add("DISPLAY=:0")
             if (audioAuthDirectory != null) {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
@@ -130,7 +137,9 @@ object ProotDesktopLaunchBuilder {
                     add("udroid-desktop")
                     addAll(environment.command)
                 }
-            addAll(launchProfile?.wrapGuestCommand(desktopCommand) ?: desktopCommand)
+            val overriddenCommand =
+                ProotEnvironmentResolver.applyManagedOverrides(desktopCommand, managedEnvironment)
+            addAll(launchProfile?.wrapGuestCommand(overriddenCommand) ?: overriddenCommand)
         }
 
     internal fun compositorScript(

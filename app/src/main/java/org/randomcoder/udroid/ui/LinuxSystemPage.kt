@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Refresh
@@ -69,6 +70,8 @@ import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
+import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
+import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -108,6 +111,7 @@ fun LinuxSystemPage(
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
     onConfigureMounts: () -> Unit,
+    onConfigureEnvironment: () -> Unit,
     onResetFilesystem: () -> Unit,
     onDeleteFilesystem: () -> Unit,
 ) {
@@ -115,12 +119,17 @@ fun LinuxSystemPage(
     val context = androidx.compose.ui.platform.LocalContext.current
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
+    val environmentProfileStore = remember(context) { ProotEnvironmentProfileStore(context) }
     var confirmation by remember(rootfs.name) {
         mutableStateOf<FilesystemConfirmation?>(null)
     }
     val mountProfile = remember(rootfs.name) {
         runCatching { mountProfileStore.load(rootfs.name) }
             .getOrDefault(ProotMountProfile())
+    }
+    val environmentProfile = remember(rootfs.name) {
+        runCatching { environmentProfileStore.load(rootfs.name) }
+            .getOrDefault(ProotEnvironmentProfile())
     }
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
@@ -290,6 +299,28 @@ fun LinuxSystemPage(
             )
         }
 
+        item(key = "graphics-label") {
+            UdroidSectionLabel(
+                text = "Graphics",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "graphics-settings") {
+            Surface(
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, UdroidLine),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                GraphicsProfileSelector(
+                    selected = configuration.graphicsProfile,
+                    runtimeRunning =
+                        runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
+                    desktopRunning = desktopRunning,
+                    onSelected = onGraphicsProfileChanged,
+                )
+            }
+        }
+
         item(key = "desktop-label") {
             UdroidSectionLabel(
                 text = "Desktop session",
@@ -360,7 +391,6 @@ fun LinuxSystemPage(
                     desktopRunning = desktopRunning,
                     onCompositingChanged = onCompositingChanged,
                     onTouchScaleChanged = onTouchScaleChanged,
-                    onGraphicsProfileChanged = onGraphicsProfileChanged,
                 )
             }
             item(key = "desktop-controls") {
@@ -455,6 +485,20 @@ fun LinuxSystemPage(
                 message = null,
                 onConfigure = onConfigureMounts,
                 onRetry = onOpenTerminal,
+            )
+        }
+
+        item(key = "environment-label") {
+            UdroidSectionLabel(
+                text = "Environment",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "environment-settings") {
+            EnvironmentProfilePanel(
+                profile = environmentProfile,
+                runtimeRunning = runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
+                onConfigure = onConfigureEnvironment,
             )
         }
 
@@ -646,6 +690,45 @@ fun LinuxSystemPage(
         )
     }
 
+}
+
+@Composable
+private fun EnvironmentProfilePanel(
+    profile: ProotEnvironmentProfile,
+    runtimeRunning: Boolean,
+    onConfigure: () -> Unit,
+) {
+    val changed =
+        profile.defaultOverrides.size +
+            profile.managedOverrides.size +
+            profile.customVariables.size
+    Surface(
+        modifier = Modifier.clickable(onClick = onConfigure),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = { Text("Environment variables") },
+            supportingContent = {
+                Text(
+                    buildString {
+                        append(if (changed == 0) "Defaults" else "$changed changed")
+                        append(" · New launches use changes")
+                        if (runtimeRunning) append(" · Restart Linux for the terminal")
+                    },
+                )
+            },
+            leadingContent = { Icon(Icons.Rounded.Code, contentDescription = null) },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Configure")
+                    Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                }
+            },
+        )
+    }
 }
 
 private enum class FilesystemConfirmation {
@@ -971,7 +1054,6 @@ private fun DesktopSettingsPanel(
     desktopRunning: Boolean,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
-    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
 ) {
     val compositorSupport = environment.kind.compositorSupport
     val compositorConfigurable =
@@ -1017,14 +1099,6 @@ private fun DesktopSettingsPanel(
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
             )
-            if (GFXSTREAM_PROFILE_ENABLED) {
-                HorizontalDivider(color = UdroidLine)
-                GraphicsProfileSelector(
-                    selected = configuration.graphicsProfile,
-                    desktopRunning = desktopRunning,
-                    onSelected = onGraphicsProfileChanged,
-                )
-            }
         }
     }
 }
@@ -1032,10 +1106,10 @@ private fun DesktopSettingsPanel(
 @Composable
 private fun GraphicsProfileSelector(
     selected: DesktopGraphicsProfile,
+    runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
 ) {
-    val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
             "Graphics driver",
@@ -1043,26 +1117,76 @@ private fun GraphicsProfileSelector(
             color = UdroidInk,
             style = MaterialTheme.typography.titleMedium,
         )
+        Text(
+            when {
+                runtimeRunning && desktopRunning ->
+                    "New apps use this choice. Restart Linux for the terminal and restart " +
+                        "the desktop for the current desktop session."
+                runtimeRunning ->
+                    "New apps use this choice. Restart Linux to update the terminal."
+                desktopRunning ->
+                    "New apps use this choice. Restart the desktop to update it."
+                else -> "New terminal, app, and desktop launches use this choice."
+            },
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            color = UdroidMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
         GraphicsProfileRow(
-            title = "Standard",
-            detail = "Use the distribution’s default graphics driver",
+            title = "Automatic",
+            detail = "Use the distribution’s default graphics driver.",
             selected = selected == DesktopGraphicsProfile.STANDARD,
             enabled = true,
             onClick = { onSelected(DesktopGraphicsProfile.STANDARD) },
         )
         GraphicsProfileRow(
-            title = "gfxstream (experimental)",
-            detail =
-                if (gfxstreamSupported) {
-                    "Use Android’s Vulkan driver." +
-                        if (desktopRunning) " Restart the desktop to apply." else ""
-                } else {
-                    "Available only on arm64 devices"
-                },
-            selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
-            enabled = gfxstreamSupported,
-            onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+            title = "Software",
+            detail = "Use Mesa llvmpipe on the CPU.",
+            selected = selected == DesktopGraphicsProfile.SOFTWARE,
+            enabled = true,
+            onClick = { onSelected(DesktopGraphicsProfile.SOFTWARE) },
         )
+        GraphicsProfileRow(
+            title = "Zink",
+            detail = "Use OpenGL over a working Vulkan driver installed inside Linux.",
+            selected = selected == DesktopGraphicsProfile.ZINK,
+            enabled = true,
+            onClick = { onSelected(DesktopGraphicsProfile.ZINK) },
+        )
+        if ("arm64-v8a" in Build.SUPPORTED_ABIS) {
+            GraphicsProfileRow(
+                title = "VirGL",
+                detail =
+                    "Use Android OpenGL ES with a current Mesa virpipe driver inside Linux.",
+                selected = selected == DesktopGraphicsProfile.VIRGL,
+                enabled = true,
+                onClick = { onSelected(DesktopGraphicsProfile.VIRGL) },
+            )
+            GraphicsProfileRow(
+                title = "VirGL + ANGLE",
+                detail =
+                    "Use VirGL through ANGLE and Android Vulkan with a current Mesa " +
+                        "virpipe driver inside Linux.",
+                selected = selected == DesktopGraphicsProfile.VIRGL_ANGLE,
+                enabled = true,
+                onClick = { onSelected(DesktopGraphicsProfile.VIRGL_ANGLE) },
+            )
+        }
+        if (GFXSTREAM_PROFILE_ENABLED) {
+            val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
+            GraphicsProfileRow(
+                title = "gfxstream (experimental)",
+                detail =
+                    if (gfxstreamSupported) {
+                        "Use Android’s Vulkan driver"
+                    } else {
+                        "Available only on arm64 devices"
+                    },
+                selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
+                enabled = gfxstreamSupported,
+                onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+            )
+        }
     }
 }
 

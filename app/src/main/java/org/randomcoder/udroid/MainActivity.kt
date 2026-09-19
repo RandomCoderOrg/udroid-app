@@ -60,6 +60,7 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileValidator
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -846,6 +847,9 @@ class MainActivity : ComponentActivity() {
                 ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
 
             if (resetWork == null) {
+                runCatching { ProotEnvironmentProfileStore(this@MainActivity).remove(rootfsName) }
+                    .exceptionOrNull()
+                    ?.let { cleanupWarnings += it.message ?: "environment profile" }
                 runCatching { app.mountProfiles.remove(rootfsName) }
                     .exceptionOrNull()
                     ?.let { cleanupWarnings += it.message ?: "mount profile" }

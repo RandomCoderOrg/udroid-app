@@ -39,6 +39,7 @@ fun workspaceJourney(
                     it == UdroidDestination.INSTALL ||
                     it == UdroidDestination.MOUNTS ||
                     it == UdroidDestination.MOUNT_EDITOR ||
+                    it == UdroidDestination.ENVIRONMENT ||
                     it == UdroidDestination.DESKTOP ||
                     (compactNavigation && it == UdroidDestination.DEVICE)
             }
@@ -63,5 +64,6 @@ val UdroidDestination.requiresInstalledLinux: Boolean
             this == UdroidDestination.SYSTEM ||
             this == UdroidDestination.MOUNTS ||
             this == UdroidDestination.MOUNT_EDITOR ||
+            this == UdroidDestination.ENVIRONMENT ||
             this == UdroidDestination.APPS ||
             this == UdroidDestination.DESKTOP
