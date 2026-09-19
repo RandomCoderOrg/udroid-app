@@ -126,6 +126,7 @@ enum class UdroidDestination(
     DISTROS("Linux", Icons.Rounded.Storage, Icons.Rounded.Storage),
     INSTALL("Install", Icons.Rounded.Storage, Icons.Rounded.Storage),
     SYSTEM("System", Icons.Rounded.Storage, Icons.Rounded.Storage),
+    ENVIRONMENT("Environment", Icons.Rounded.Code, Icons.Rounded.Code),
     MOUNTS("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     MOUNT_EDITOR("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     TERMINAL("Terminal", Icons.Rounded.Terminal, Icons.Rounded.Terminal),
@@ -160,7 +161,9 @@ private val UdroidDestination.navigationDepth: Int
             UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
             -> 1
-            UdroidDestination.MOUNTS -> 2
+            UdroidDestination.MOUNTS,
+            UdroidDestination.ENVIRONMENT,
+            -> 2
             UdroidDestination.MOUNT_EDITOR -> 3
             else -> 0
         }
@@ -251,6 +254,7 @@ fun UdroidApp(
             -> UdroidDestination.DISTROS
             UdroidDestination.MOUNTS,
             UdroidDestination.MOUNT_EDITOR,
+            UdroidDestination.ENVIRONMENT,
             -> UdroidDestination.DISTROS
             else -> activeDestination
         }
@@ -302,15 +306,17 @@ fun UdroidApp(
             val useRail = maxWidth >= 600.dp
             if (useRail) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    WorkspaceNavigationRail(
-                        selected = navigationDestination,
-                        destinations = requestedJourney.destinations,
-                        onSelected = onPrimaryDestinationSelected,
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxHeight().width(1.dp),
-                        color = UdroidLine,
-                    )
+                    if (activeDestination != UdroidDestination.ENVIRONMENT) {
+                        WorkspaceNavigationRail(
+                            selected = navigationDestination,
+                            destinations = requestedJourney.destinations,
+                            onSelected = onPrimaryDestinationSelected,
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxHeight().width(1.dp),
+                            color = UdroidLine,
+                        )
+                    }
                     ManagementPane(
                         modifier = Modifier.weight(1f),
                         destination = activeDestination,
@@ -478,17 +484,19 @@ fun UdroidApp(
                         onInstallUpdate = onInstallUpdate,
                         onOpenUpdateRelease = onOpenUpdateRelease,
                     )
-                    WorkspaceNavigationBar(
-                        selected = navigationDestination,
-                        destinations =
-                            workspaceJourney(
-                                requestedDestination = activeDestination,
-                                hasInstalledLinux = hasInstalledLinux,
-                                hasInstallation = installProgress != null,
-                                compactNavigation = true,
-                            ).destinations,
-                        onSelected = onPrimaryDestinationSelected,
-                    )
+                    if (activeDestination != UdroidDestination.ENVIRONMENT) {
+                        WorkspaceNavigationBar(
+                            selected = navigationDestination,
+                            destinations =
+                                workspaceJourney(
+                                    requestedDestination = activeDestination,
+                                    hasInstalledLinux = hasInstalledLinux,
+                                    hasInstallation = installProgress != null,
+                                    compactNavigation = true,
+                                ).destinations,
+                            onSelected = onPrimaryDestinationSelected,
+                        )
+                    }
                 }
             }
         }
@@ -770,6 +778,35 @@ private fun ManagementPane(
                             )
                         }
                     }
+                    UdroidDestination.ENVIRONMENT -> {
+                        val rootfsName = selectedSystemRootfsName ?: installedRootfsName
+                        val selectedRootfs =
+                            installedRootfses.firstOrNull { it.name == rootfsName }
+                        val selectedDistro =
+                            (catalogueState as? DistroCatalogState.Ready)
+                                ?.catalog
+                                ?.variants
+                                ?.firstOrNull { it.internalName == rootfsName }
+                        if (selectedRootfs == null) {
+                            onDestinationSelected(UdroidDestination.DISTROS)
+                        } else {
+                            ProotEnvironmentProfilePage(
+                                systemId = selectedRootfs.name,
+                                systemTitle =
+                                    selectedDistro?.releaseName
+                                        ?: installedSystemTitle(selectedRootfs.name),
+                                runtimeRunning =
+                                    snapshot.rootfsName == selectedRootfs.name &&
+                                        snapshot.phase == RuntimePhase.RUNNING,
+                                desktopRunning =
+                                    snapshot.desktop.rootfsName == selectedRootfs.name &&
+                                        snapshot.desktop.phase == DesktopSessionPhase.RUNNING,
+                                onBack = {
+                                    onDestinationSelected(UdroidDestination.SYSTEM)
+                                },
+                            )
+                        }
+                    }
                     UdroidDestination.DISTROS ->
                         selectedOciRepository?.let { repository ->
                             OciTagCataloguePage(
@@ -878,6 +915,9 @@ private fun ManagementPane(
                                 onRestartDesktop = onRestartDesktop,
                                 onConfigureMounts = {
                                     onSelectMountProfile(mountConfigurationSourceId)
+                                },
+                                onConfigureEnvironment = {
+                                    onDestinationSelected(UdroidDestination.ENVIRONMENT)
                                 },
                                 onResetFilesystem = {
                                     onResetRootfs(selectedRootfs.name, selectedDistro)
