@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import android.system.Os
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -15,6 +16,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
 import java.util.UUID
 
@@ -132,6 +134,41 @@ object ProotMountProfileValidator {
 
 object ProotMountResolver {
     fun resolve(
+        context: Context,
+        rootfs: File,
+        profile: ProotMountProfile,
+        sessionMounts: List<ResolvedProotMount> = emptyList(),
+    ): List<ResolvedProotMount> {
+        val customTargets =
+            profile.customMounts.filter(ProotCustomMount::enabled).mapTo(mutableSetOf()) {
+                it.guestTarget
+            }
+        val compatibilityMounts =
+            if (profile.isDefaultEnabled("android.proc")) {
+                prepareCompatibilityMounts(runtimeDirectory(context, rootfs).resolve("sysdata"))
+                    .filterNot { isShadowedByCustomTarget(it.guestTarget, customTargets) }
+            } else {
+                emptyList()
+            }
+        val selinuxMount =
+            prepareSelinuxMount(runtimeDirectory(context, rootfs).resolve("sysdata"))
+                ?.takeIf {
+                    profile.isDefaultEnabled("android.sys") &&
+                        !isShadowedByCustomTarget(it.guestTarget, customTargets)
+                }
+        val sharedMemoryMount =
+            prepareSharedMemoryMount(runtimeDirectory(context, rootfs).resolve("shm"))
+                .takeIf { !isShadowedByCustomTarget(it.guestTarget, customTargets) }
+        return resolve(
+            profile = profile,
+            sessionMounts =
+                sessionMounts +
+                    compatibilityMounts +
+                    listOfNotNull(selinuxMount, sharedMemoryMount),
+        )
+    }
+
+    fun resolve(
         profile: ProotMountProfile,
         sessionMounts: List<ResolvedProotMount> = emptyList(),
     ): List<ResolvedProotMount> {
@@ -162,6 +199,130 @@ object ProotMountResolver {
             }
         return resolved
     }
+
+    internal fun sharedMemoryMount(hostSource: String): ResolvedProotMount =
+        ResolvedProotMount(
+            hostSource = hostSource,
+            guestTarget = "/dev/shm",
+            origin = "runtime:shm",
+        )
+
+    private fun runtimeDirectory(
+        context: Context,
+        rootfs: File,
+    ): File {
+        require(SAFE_SYSTEM_ID.matches(rootfs.name)) { "Unsafe Linux system ID: ${rootfs.name}" }
+        return File(context.noBackupFilesDir, "proot/${rootfs.name}")
+    }
+
+    fun removeRuntime(
+        context: Context,
+        systemId: String,
+    ) {
+        require(SAFE_SYSTEM_ID.matches(systemId)) { "Unsafe Linux system ID: $systemId" }
+        val parent = File(context.noBackupFilesDir, "proot").toPath()
+        val target = parent.resolve(systemId)
+        if (Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)) {
+            RootfsTreeDeleter.delete(parent, systemId)
+        } else {
+            Files.deleteIfExists(target)
+        }
+    }
+
+    internal fun isShadowedByCustomTarget(
+        guestTarget: String,
+        customTargets: Set<String>,
+    ): Boolean {
+        val target = File(guestTarget).toPath().normalize().toString()
+        return customTargets.any { custom ->
+            val normalized = File(custom).toPath().normalize().toString()
+            normalized == "/" || target == normalized || target.startsWith("$normalized/")
+        }
+    }
+
+    private fun prepareSharedMemoryMount(directory: File): ResolvedProotMount {
+        directory.apply {
+            check(mkdirs() || isDirectory) {
+                "Could not prepare shared memory storage"
+            }
+            Os.chmod(absolutePath, 0x3ff) // 01777, matching a normal Linux /dev/shm.
+        }
+        return sharedMemoryMount(directory.absolutePath)
+    }
+
+    @Synchronized
+    internal fun prepareCompatibilityMounts(
+        directory: File,
+        readable: (String) -> Boolean = ::isReadable,
+    ): List<ResolvedProotMount> {
+        if (!prepareDirectory(directory)) return emptyList()
+        return COMPATIBILITY_FILES.mapNotNull { entry ->
+            if (readable(entry.guestTarget)) return@mapNotNull null
+            val source = File(directory, entry.name)
+            val staging = runCatching {
+                Files.createTempFile(directory.toPath(), ".compat-", ".tmp").toFile()
+            }.getOrNull() ?: return@mapNotNull null
+            try {
+                FileOutputStream(staging).use { output ->
+                    output.write(entry.contents.toByteArray(Charsets.UTF_8))
+                    output.fd.sync()
+                }
+                moveReplacing(staging, source)
+            } catch (_: Exception) {
+                return@mapNotNull null
+            } finally {
+                staging.delete()
+            }
+            if (!Files.isRegularFile(source.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                return@mapNotNull null
+            }
+            ResolvedProotMount(
+                hostSource = source.absolutePath,
+                guestTarget = entry.guestTarget,
+                origin = "runtime:compatibility",
+            )
+        }
+    }
+
+    private fun prepareSelinuxMount(directory: File): ResolvedProotMount? {
+        if (!prepareDirectory(directory)) return null
+        val empty = File(directory, "sys_empty")
+        if (Files.isSymbolicLink(empty.toPath()) || (empty.exists() && !empty.isDirectory)) {
+            if (!empty.delete()) return null
+        }
+        if (!empty.mkdirs() && !empty.isDirectory) return null
+        return ResolvedProotMount(
+            hostSource = empty.absolutePath,
+            guestTarget = "/sys/fs/selinux",
+            origin = "runtime:compatibility",
+        )
+    }
+
+    private fun prepareDirectory(directory: File): Boolean =
+        !Files.isSymbolicLink(directory.toPath()) && (directory.mkdirs() || directory.isDirectory)
+
+    private fun moveReplacing(
+        source: File,
+        target: File,
+    ) {
+        try {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }
+    }
+
+    private fun isReadable(path: String): Boolean =
+        runCatching { File(path).inputStream().use { it.read() } }.isSuccess
 
     fun defaults(
         x11SocketDirectory: String? = null,
@@ -211,6 +372,36 @@ object ProotMountResolver {
                 )
             }
         }
+
+    private data class CompatibilityFile(
+        val name: String,
+        val guestTarget: String,
+        val contents: String,
+    )
+
+    private val COMPATIBILITY_FILES =
+        listOf(
+            CompatibilityFile("loadavg", "/proc/loadavg", "0.00 0.00 0.00 1/1 1\n"),
+            CompatibilityFile("stat", "/proc/stat", "cpu  1 0 1 1 0 0 0 0 0 0\n"),
+            CompatibilityFile("uptime", "/proc/uptime", "0.00 0.00\n"),
+            CompatibilityFile(
+                "version",
+                "/proc/version",
+                "Linux version 5.4.0-udroid-faked (udroid@android)\n",
+            ),
+            CompatibilityFile("vmstat", "/proc/vmstat", "nr_free_pages 0\n"),
+            CompatibilityFile("cap_last_cap", "/proc/sys/kernel/cap_last_cap", "40\n"),
+            CompatibilityFile(
+                "inotify_max_user_watches",
+                "/proc/sys/fs/inotify/max_user_watches",
+                "4096\n",
+            ),
+            CompatibilityFile("overflowuid", "/proc/sys/kernel/overflowuid", "65534\n"),
+            CompatibilityFile("overflowgid", "/proc/sys/kernel/overflowgid", "65534\n"),
+            CompatibilityFile("pci_devices", "/proc/bus/pci/devices", ""),
+        )
+
+    private val SAFE_SYSTEM_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
 }
 
 class ProotMountProfileStore(context: Context) {

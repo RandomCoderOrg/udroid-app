@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
+import org.randomcoder.udroid.runtime.VirglServerMode
 
 internal enum class VirglHostBackend(
     val label: String,
@@ -16,13 +17,23 @@ internal enum class VirglHostBackend(
 ) {
     NATIVE_GLES("Android OpenGL ES", "virgl-gles.sock", "virgl-gles.log"),
     ANGLE_VULKAN("ANGLE Vulkan", "virgl-angle-vulkan.sock", "virgl-angle-vulkan.log"),
+    VENUS("Android Vulkan (Venus)", "venus.sock", "venus.log"),
     ;
+
+    fun resolveServerMode(requested: VirglServerMode): VirglServerMode =
+        if (this == VENUS) {
+            VirglServerMode.MULTI_CLIENT
+        } else {
+            requested.takeUnless { it == VirglServerMode.AUTOMATIC }
+                ?: VirglServerMode.COMPATIBILITY
+        }
 
     companion object {
         fun from(profile: DesktopGraphicsProfile): VirglHostBackend? =
             when (profile) {
                 DesktopGraphicsProfile.VIRGL -> NATIVE_GLES
                 DesktopGraphicsProfile.VIRGL_ANGLE -> ANGLE_VULKAN
+                DesktopGraphicsProfile.VENUS_EXPERIMENTAL -> VENUS
                 else -> null
             }
     }
@@ -37,11 +48,14 @@ internal object VirglHostLaunch {
     fun arguments(
         socket: File,
         backend: VirglHostBackend,
+        serverMode: VirglServerMode,
     ): List<String> =
         buildList {
+            val resolvedMode = backend.resolveServerMode(serverMode)
             add("--no-fork")
-            add("--multi-clients")
+            if (resolvedMode.multiClients) add("--multi-clients")
             if (backend == VirglHostBackend.ANGLE_VULKAN) add("--angle-vulkan")
+            if (backend == VirglHostBackend.VENUS) add("--venus")
             add("--socket-path")
             add(socket.absolutePath)
         }
@@ -49,6 +63,7 @@ internal object VirglHostLaunch {
     fun environment(
         home: File,
         libraryDirectory: File,
+        renderServerExecutable: File,
         temporaryDirectory: File,
         angleLibraryDirectory: File? = null,
     ): Map<String, String> =
@@ -60,7 +75,9 @@ internal object VirglHostLaunch {
             "HOME" to home.absolutePath,
             "LD_LIBRARY_PATH" to libraryDirectory.absolutePath,
             "PATH" to "/system/bin",
+            "RENDER_SERVER_EXEC_PATH" to renderServerExecutable.absolutePath,
             "TMPDIR" to temporaryDirectory.absolutePath,
+            "VIRGL_LOG_LEVEL" to "info",
         ) +
             if (angleLibraryDirectory == null) {
                 emptyMap()
@@ -73,6 +90,7 @@ internal object VirglHostLaunch {
 internal class VirglHostController(
     context: Context,
     val backend: VirglHostBackend,
+    val serverMode: VirglServerMode,
     private val onUnexpectedExit: (VirglHostSnapshot) -> Unit = {},
 ) : AutoCloseable {
     private val appContext = context.applicationContext
@@ -109,7 +127,7 @@ internal class VirglHostController(
                 ProcessBuilder(
                     AndroidExecutableCommand.create(
                         runtime.executable,
-                        *VirglHostLaunch.arguments(socket, backend).toTypedArray(),
+                        *VirglHostLaunch.arguments(socket, backend, serverMode).toTypedArray(),
                     ),
                 ).directory(graphicsDirectory)
                     .redirectErrorStream(true)
@@ -120,6 +138,7 @@ internal class VirglHostController(
                             VirglHostLaunch.environment(
                                 appContext.filesDir,
                                 runtime.libraryDirectory,
+                                runtime.renderServerExecutable,
                                 appContext.cacheDir,
                                 angleRuntime?.libraryDirectory,
                             ),
@@ -136,7 +155,7 @@ internal class VirglHostController(
                 VirglHostSnapshot(
                     "running",
                     "VirGL ${VirglHostRuntimeInstaller.VERSION} · ${backend.label} · " +
-                        "socket ${socket.name}",
+                        "${serverMode.storageValue} · socket ${socket.name}",
                 ),
             )
             Log.i(LOG_TAG, "VirGL host ready; output: ${logFile.absolutePath}")
@@ -153,7 +172,9 @@ internal class VirglHostController(
     }
 
     fun currentSocket(): File? =
-        socket.takeIf { snapshot.get().state == "running" && it.exists() }
+        socket.takeIf {
+            snapshot.get().state == "running" && process.get()?.isAlive == true && it.exists()
+        }
 
     fun current(): VirglHostSnapshot = snapshot.get()
 

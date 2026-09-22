@@ -24,6 +24,8 @@ object ProotDesktopLaunchBuilder {
         val guestHome = if (File(rootfs, "root").isDirectory) "/root" else "/"
         val mounts =
             ProotMountResolver.resolve(
+                context = context,
+                rootfs = rootfs,
                 profile = ProotMountProfileStore(context).load(rootfs.name),
                 sessionMounts =
                     ProotMountResolver.sessionMounts(
@@ -133,7 +135,7 @@ object ProotDesktopLaunchBuilder {
                     }
                     add("/bin/sh")
                     add("-lc")
-                    add(compositorScript(environment.kind, configuration.compositingEnabled))
+                    add(compositorScript(environment.kind, configuration.effectiveCompositingEnabled))
                     add("udroid-desktop")
                     addAll(environment.command)
                 }
@@ -148,14 +150,13 @@ object ProotDesktopLaunchBuilder {
     ): String {
         val value = enabled.toString()
         if (kind == DesktopEnvironmentKind.XFCE) {
-            return "\"\$@\" & desktop_pid=\$!; " +
-                "if command -v xfconf-query >/dev/null 2>&1; then " +
-                "sleep 1; attempt=0; " +
+            return "if command -v xfconf-query >/dev/null 2>&1; then " +
+                "attempt=0; " +
                 "while [ \"\$attempt\" -lt 5 ]; do " +
                 "xfconf-query -c xfwm4 -p /general/use_compositing " +
-                "-n -t bool -s $value >/dev/null 2>&1 || true; " +
+                "-n -t bool -s $value >/dev/null 2>&1 && break; " +
                 "attempt=\$((attempt + 1)); sleep 0.2; " +
-                "done; fi; wait \"\$desktop_pid\""
+                "done; fi; exec \"\$@\""
         }
         val configuration =
             when (kind) {

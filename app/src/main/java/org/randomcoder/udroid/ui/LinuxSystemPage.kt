@@ -76,6 +76,7 @@ import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
+import org.randomcoder.udroid.runtime.VirglServerMode
 import java.text.DateFormat
 import java.util.Date
 
@@ -103,6 +104,7 @@ fun LinuxSystemPage(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onRefreshCapabilities: () -> Unit,
@@ -313,10 +315,12 @@ fun LinuxSystemPage(
             ) {
                 GraphicsProfileSelector(
                     selected = configuration.graphicsProfile,
+                    virglServerMode = configuration.virglServerMode,
                     runtimeRunning =
                         runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
                     desktopRunning = desktopRunning,
                     onSelected = onGraphicsProfileChanged,
+                    onVirglServerModeSelected = onVirglServerModeChanged,
                 )
             }
         }
@@ -1057,13 +1061,14 @@ private fun DesktopSettingsPanel(
 ) {
     val compositorSupport = environment.kind.compositorSupport
     val compositorConfigurable =
-        compositorSupport == DesktopCompositorSupport.CONFIGURABLE
+        compositorSupport == DesktopCompositorSupport.CONFIGURABLE &&
+            configuration.supportsCompositedDesktop
     val compositorChecked =
         when (compositorSupport) {
             DesktopCompositorSupport.REQUIRED -> true
             DesktopCompositorSupport.EXTERNAL_OR_NONE -> false
             DesktopCompositorSupport.UNKNOWN -> configuration.compositingEnabled
-            DesktopCompositorSupport.CONFIGURABLE -> configuration.compositingEnabled
+            DesktopCompositorSupport.CONFIGURABLE -> configuration.effectiveCompositingEnabled
         }
     Surface(
         color = Color.Transparent,
@@ -1076,8 +1081,13 @@ private fun DesktopSettingsPanel(
                 detail =
                     when (compositorSupport) {
                         DesktopCompositorSupport.CONFIGURABLE ->
-                            "Turn off for lower latency, or turn on for effects and transparency." +
-                                if (desktopRunning) " Restart the desktop to apply." else ""
+                            if (configuration.supportsCompositedDesktop) {
+                                "Turn off for lower latency, or turn on for effects and transparency." +
+                                    if (desktopRunning) " Restart the desktop to apply." else ""
+                            } else {
+                                "Compatibility-mode VirGL requires compositing off. " +
+                                    "Use multi-client mode only with a matching patched Mesa."
+                            }
                         DesktopCompositorSupport.REQUIRED ->
                             "${environment.kind.desktopName} requires compositing"
                         DesktopCompositorSupport.EXTERNAL_OR_NONE ->
@@ -1106,9 +1116,11 @@ private fun DesktopSettingsPanel(
 @Composable
 private fun GraphicsProfileSelector(
     selected: DesktopGraphicsProfile,
+    virglServerMode: VirglServerMode = VirglServerMode.AUTOMATIC,
     runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeSelected: (VirglServerMode) -> Unit,
 ) {
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
@@ -1171,6 +1183,49 @@ private fun GraphicsProfileSelector(
                 enabled = true,
                 onClick = { onSelected(DesktopGraphicsProfile.VIRGL_ANGLE) },
             )
+            GraphicsProfileRow(
+                title = "Venus (experimental)",
+                detail =
+                    "Accelerate Vulkan apps through Android’s driver. OpenGL stays on software " +
+                        "rendering; X11 presentation uses Mesa’s copy path.",
+                selected = selected == DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+                enabled = true,
+                onClick = { onSelected(DesktopGraphicsProfile.VENUS_EXPERIMENTAL) },
+            )
+            if (selected == DesktopGraphicsProfile.VIRGL ||
+                selected == DesktopGraphicsProfile.VIRGL_ANGLE
+            ) {
+                HorizontalDivider(color = UdroidLine)
+                Text(
+                    "VirGL server mode",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    color = UdroidInk,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                GraphicsProfileRow(
+                    title = "Automatic",
+                    detail = "Use the compatible mode for distribution Mesa packages.",
+                    selected = virglServerMode == VirglServerMode.AUTOMATIC,
+                    enabled = true,
+                    onClick = { onVirglServerModeSelected(VirglServerMode.AUTOMATIC) },
+                )
+                GraphicsProfileRow(
+                    title = "Compatibility",
+                    detail = "Stable protocol for Ubuntu, Debian, Arch, and similar guests.",
+                    selected = virglServerMode == VirglServerMode.COMPATIBILITY,
+                    enabled = true,
+                    onClick = {
+                        onVirglServerModeSelected(VirglServerMode.COMPATIBILITY)
+                    },
+                )
+                GraphicsProfileRow(
+                    title = "Multi-client",
+                    detail = "Protocol 3 for patched Mesa; supports concurrent GL clients.",
+                    selected = virglServerMode == VirglServerMode.MULTI_CLIENT,
+                    enabled = true,
+                    onClick = { onVirglServerModeSelected(VirglServerMode.MULTI_CLIENT) },
+                )
+            }
         }
         if (GFXSTREAM_PROFILE_ENABLED) {
             val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS

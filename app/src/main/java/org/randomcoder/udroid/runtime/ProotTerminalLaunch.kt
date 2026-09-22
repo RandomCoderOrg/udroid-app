@@ -53,6 +53,8 @@ object ProotTerminalLaunchBuilder {
                 ?: error("The installed Linux image has no supported shell")
         val mounts =
             ProotMountResolver.resolve(
+                context = context,
+                rootfs = rootfs,
                 profile = ProotMountProfileStore(context).load(rootfs.name),
                 sessionMounts =
                     ProotMountResolver.sessionMounts(

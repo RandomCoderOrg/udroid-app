@@ -591,6 +591,10 @@ private fun automaticManagedEnvironmentValues(
         DesktopGraphicsProfile.VIRGL,
         DesktopGraphicsProfile.VIRGL_ANGLE,
         -> set("GALLIUM_DRIVER", "virpipe")
+        DesktopGraphicsProfile.VENUS_EXPERIMENTAL -> {
+            set("VN_DEBUG", "vtest")
+            set("MESA_VK_WSI_DEBUG", "sw")
+        }
         DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> Unit
     }
     return values

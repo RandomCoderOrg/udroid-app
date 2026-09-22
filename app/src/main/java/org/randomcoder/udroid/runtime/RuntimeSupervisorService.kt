@@ -463,7 +463,11 @@ class RuntimeSupervisorService : Service() {
                     runCatching {
                         val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
                         val profile = desktopConfigurationStore.loadGraphicsProfile(rootfsName)
-                        val launchProfile = graphicsLaunchProfile(profile)
+                        val launchProfile =
+                            graphicsLaunchProfile(
+                                profile,
+                                desktopConfigurationStore.loadVirglServerMode(rootfsName),
+                            )
                         val launch =
                             ProotApplicationLaunchBuilder.create(
                                 context = this,
@@ -594,7 +598,7 @@ class RuntimeSupervisorService : Service() {
                     "rootfs" to request.rootfsName,
                     "environment_id" to request.environment.id,
                     "display" to DISPLAY_NUMBER,
-                    "compositing" to request.configuration.compositingEnabled,
+                    "compositing" to request.configuration.effectiveCompositingEnabled,
                     "touch_scale" to request.configuration.touchScaleEnabled,
                     "graphics_profile" to request.configuration.graphicsProfile.storageValue,
                 ),
@@ -622,7 +626,12 @@ class RuntimeSupervisorService : Service() {
                             )
                             DesktopGraphicsProfile.VIRGL,
                             DesktopGraphicsProfile.VIRGL_ANGLE,
-                            -> virglLaunchProfile(request.configuration.graphicsProfile)
+                            DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+                            ->
+                                virglLaunchProfile(
+                                    request.configuration.graphicsProfile,
+                                    request.configuration.virglServerMode,
+                                )
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
@@ -900,23 +909,30 @@ class RuntimeSupervisorService : Service() {
         ownedGfxstreamHost.getAndSet(null)?.close()
     }
 
-    private fun virglLaunchProfile(profile: DesktopGraphicsProfile): VirglProotLaunchProfile =
+    private fun virglLaunchProfile(
+        profile: DesktopGraphicsProfile,
+        requestedMode: VirglServerMode,
+    ): VirglProotLaunchProfile =
         synchronized(virglHostLock) {
             val backend = checkNotNull(VirglHostBackend.from(profile))
+            val serverMode = backend.resolveServerMode(requestedMode)
             val existing = ownedVirglHosts[backend]
-            existing?.currentSocket()?.let(::VirglProotLaunchProfile)
+            existing
+                ?.takeIf { it.serverMode == serverMode }
+                ?.currentSocket()
+                ?.let { VirglProotLaunchProfile(it, backend) }
                 ?: run {
                     if (existing != null) {
                         ownedVirglHosts.remove(backend, existing)
                         existing.close()
                     }
                     lateinit var host: VirglHostController
-                    host = VirglHostController(this, backend) { failure ->
+                    host = VirglHostController(this, backend, serverMode) { failure ->
                         handleVirglHostExit(backend, host, failure)
                     }
                     ownedVirglHosts[backend] = host
                     try {
-                        VirglProotLaunchProfile(host.start())
+                        VirglProotLaunchProfile(host.start(), backend)
                     } catch (error: Throwable) {
                         ownedVirglHosts.remove(backend, host)
                         host.close()
@@ -925,11 +941,15 @@ class RuntimeSupervisorService : Service() {
                 }
         }
 
-    private fun graphicsLaunchProfile(profile: DesktopGraphicsProfile): ProotLaunchProfile? =
+    private fun graphicsLaunchProfile(
+        profile: DesktopGraphicsProfile,
+        virglServerMode: VirglServerMode,
+    ): ProotLaunchProfile? =
         when (profile) {
             DesktopGraphicsProfile.VIRGL,
             DesktopGraphicsProfile.VIRGL_ANGLE,
-            -> virglLaunchProfile(profile)
+            DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+            -> virglLaunchProfile(profile, virglServerMode)
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
         }
@@ -1156,6 +1176,7 @@ class RuntimeSupervisorService : Service() {
             val runtime = ProotRuntimeInstaller.install(this)
             val rootfs = InstalledRootfsResolver.resolve(this, requestedRootfsName)
             val graphicsProfile = desktopConfigurationStore.loadGraphicsProfile(rootfs.name)
+            val virglServerMode = desktopConfigurationStore.loadVirglServerMode(rootfs.name)
             runCatching { audioController.apply(audioConfiguration, bootId) }
                 .onFailure { error ->
                     app.journal.append(
@@ -1174,7 +1195,7 @@ class RuntimeSupervisorService : Service() {
                 rootfs = rootfs,
                 x11SocketDirectory = x11SocketDirectory,
                 audioEndpoint = audioController.endpoint(),
-                launchProfile = graphicsLaunchProfile(graphicsProfile),
+                launchProfile = graphicsLaunchProfile(graphicsProfile, virglServerMode),
             )
         }.mapCatching { launch ->
             configureTerminalColors()

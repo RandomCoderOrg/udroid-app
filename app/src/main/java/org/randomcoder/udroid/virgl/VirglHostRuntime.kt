@@ -7,6 +7,7 @@ import org.randomcoder.udroid.gfxstream.VerifiedRuntimeAssetInstaller
 
 internal data class VirglHostRuntime(
     val executable: File,
+    val renderServerExecutable: File,
     val libraryDirectory: File,
 )
 
@@ -15,7 +16,7 @@ internal data class VirglAngleRuntime(
 )
 
 internal object VirglHostRuntimeInstaller {
-    const val VERSION = "1.3.0-1"
+    const val VERSION = "1.3.0-1-venus2"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "VirGL host",
@@ -25,13 +26,18 @@ internal object VirglHostRuntimeInstaller {
             entries =
                 listOf(
                     "bin/virgl_test_server_android",
+                    "libexec/virgl_render_server",
                     "lib/libepoxy.so",
                     "lib/libvirglrenderer.so",
                     "share/doc/COPYING-gl4es",
                     "share/doc/COPYING-libepoxy",
                     "share/doc/COPYING-virglrenderer",
                 ),
-            executables = setOf("bin/virgl_test_server_android"),
+            executables =
+                setOf(
+                    "bin/virgl_test_server_android",
+                    "libexec/virgl_render_server",
+                ),
             metadataKeys = setOf("termux_packages_commit"),
         )
 
@@ -39,6 +45,7 @@ internal object VirglHostRuntimeInstaller {
         val directory = VerifiedRuntimeAssetInstaller.install(context, bundle)
         return VirglHostRuntime(
             executable = File(directory, "bin/virgl_test_server_android"),
+            renderServerExecutable = File(directory, "libexec/virgl_render_server"),
             libraryDirectory = File(directory, "lib"),
         )
     }

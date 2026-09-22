@@ -5,6 +5,7 @@ import org.randomcoder.udroid.runtime.ProotLaunchProfile
 
 internal data class VirglProotLaunchProfile(
     val socket: File,
+    val backend: VirglHostBackend = VirglHostBackend.NATIVE_GLES,
 ) : ProotLaunchProfile {
     init {
         require(socket.exists()) { "The VirGL socket is unavailable" }
@@ -20,8 +21,19 @@ internal data class VirglProotLaunchProfile(
             "/usr/bin/env",
             "-u",
             "LIBGL_ALWAYS_SOFTWARE",
-            "GALLIUM_DRIVER=virpipe",
-        ) + command
+        ) +
+            if (backend == VirglHostBackend.VENUS) {
+                listOf(
+                    "-u",
+                    "GALLIUM_DRIVER",
+                    "-u",
+                    "MESA_LOADER_DRIVER_OVERRIDE",
+                    "VN_DEBUG=vtest",
+                    "MESA_VK_WSI_DEBUG=sw",
+                ) + command
+            } else {
+                listOf("GALLIUM_DRIVER=virpipe") + command
+            }
 
     companion object {
         const val GUEST_SOCKET = "/tmp/.virgl_test"

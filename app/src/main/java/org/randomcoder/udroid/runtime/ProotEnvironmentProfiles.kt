@@ -54,6 +54,8 @@ val PROOT_LOCKED_ENVIRONMENT_VARIABLE_NAMES =
         "GALLIUM_DRIVER",
         "MESA_LOADER_DRIVER_OVERRIDE",
         "LIBGL_KOPPER_DRI2",
+        "VN_DEBUG",
+        "MESA_VK_WSI_DEBUG",
     )
 
 data class ProotCustomEnvironmentVariable(

@@ -111,8 +111,7 @@ class DesktopEnvironmentScannerTest {
         assertTrue(arguments.contains("GDK_SCALE=2"))
         val script = arguments[arguments.indexOf("-lc") + 1]
         assertTrue(script.contains("-s false"))
-        assertTrue(script.contains("sleep 1"))
-        assertTrue(script.contains("wait \"\$desktop_pid\""))
+        assertTrue(script.endsWith("exec \"\$@\""))
         assertEquals(desktop.command, arguments.takeLast(desktop.command.size))
         assertFalse(script.contains(desktop.command.last()))
     }
@@ -269,6 +268,40 @@ class DesktopEnvironmentScannerTest {
         assertEquals(
             DesktopGraphicsProfile.VIRGL_ANGLE,
             DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL_ANGLE.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+            DesktopGraphicsProfile.fromStorage(
+                DesktopGraphicsProfile.VENUS_EXPERIMENTAL.storageValue,
+            ),
+        )
+    }
+
+    @Test
+    fun `VirGL server modes survive storage and unknown values stay automatic`() {
+        VirglServerMode.entries.forEach { mode ->
+            assertEquals(mode, VirglServerMode.fromStorage(mode.storageValue))
+        }
+        assertEquals(VirglServerMode.AUTOMATIC, VirglServerMode.fromStorage("future-mode"))
+    }
+
+    @Test
+    fun `VirGL compatibility mode disables desktop compositing`() {
+        val compatible =
+            DesktopConfiguration(
+                environmentId = "xfce",
+                compositingEnabled = true,
+                touchScaleEnabled = false,
+                graphicsProfile = DesktopGraphicsProfile.VIRGL_ANGLE,
+            )
+        assertFalse(compatible.effectiveCompositingEnabled)
+        assertTrue(
+            compatible.copy(virglServerMode = VirglServerMode.MULTI_CLIENT)
+                .effectiveCompositingEnabled,
+        )
+        assertTrue(
+            compatible.copy(graphicsProfile = DesktopGraphicsProfile.VENUS_EXPERIMENTAL)
+                .effectiveCompositingEnabled,
         )
     }
 

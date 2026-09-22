@@ -63,9 +63,11 @@ import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileValidator
+import org.randomcoder.udroid.runtime.ProotMountResolver
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDarkCanvas
@@ -267,6 +269,7 @@ class MainActivity : ComponentActivity() {
                     onCompositingChanged = { updateCompositing(it) },
                     onTouchScaleChanged = { updateTouchScale(it) },
                     onGraphicsProfileChanged = { updateGraphicsProfile(it) },
+                    onVirglServerModeChanged = { updateVirglServerMode(it) },
                     onAudioOutputChanged = { updateAudioOutput(it) },
                     onMicrophoneChanged = { updateMicrophone(it) },
                     onStartDesktop = { startSelectedDesktop() },
@@ -840,6 +843,9 @@ class MainActivity : ComponentActivity() {
             runCatching { audioConfigurationStore.remove(rootfsName) }
                 .exceptionOrNull()
                 ?.let { cleanupWarnings += it.message ?: "audio settings" }
+            runCatching { ProotMountResolver.removeRuntime(this@MainActivity, rootfsName) }
+                .exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "runtime files" }
             runCatching {
                 LinuxApplicationShortcutPublisher(this@MainActivity)
                     .disableForRootfs(rootfsName)
@@ -1022,6 +1028,14 @@ class MainActivity : ComponentActivity() {
         saveDesktopConfiguration(
             rootfsName,
             desktopConfiguration.copy(graphicsProfile = profile),
+        )
+    }
+
+    private fun updateVirglServerMode(mode: VirglServerMode) {
+        val rootfsName = selectedSystemRootfsName ?: return
+        saveDesktopConfiguration(
+            rootfsName,
+            desktopConfiguration.copy(virglServerMode = mode),
         )
     }
 

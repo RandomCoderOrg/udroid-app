@@ -113,6 +113,7 @@ import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateState
 import java.time.Instant
@@ -217,6 +218,7 @@ fun UdroidApp(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -380,6 +382,7 @@ fun UdroidApp(
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
                         onGraphicsProfileChanged = onGraphicsProfileChanged,
+                        onVirglServerModeChanged = onVirglServerModeChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -465,6 +468,7 @@ fun UdroidApp(
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
                         onGraphicsProfileChanged = onGraphicsProfileChanged,
+                        onVirglServerModeChanged = onVirglServerModeChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -556,6 +560,7 @@ private fun ManagementPane(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -912,6 +917,7 @@ private fun ManagementPane(
                                 onCompositingChanged = onCompositingChanged,
                                 onTouchScaleChanged = onTouchScaleChanged,
                                 onGraphicsProfileChanged = onGraphicsProfileChanged,
+                                onVirglServerModeChanged = onVirglServerModeChanged,
                                 onAudioOutputChanged = onAudioOutputChanged,
                                 onMicrophoneChanged = onMicrophoneChanged,
                                 onRefreshCapabilities = onRefresh,

@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.randomcoder.udroid.runtime.VirglServerMode
 
 class VirglHostLaunchTest {
     @Test
@@ -18,6 +19,7 @@ class VirglHostLaunchTest {
             VirglHostLaunch.arguments(
                 File("/private/graphics/virgl-gles.sock"),
                 VirglHostBackend.NATIVE_GLES,
+                VirglServerMode.MULTI_CLIENT,
             ),
         )
     }
@@ -27,7 +29,6 @@ class VirglHostLaunchTest {
         assertEquals(
             listOf(
                 "--no-fork",
-                "--multi-clients",
                 "--angle-vulkan",
                 "--socket-path",
                 "/private/graphics/virgl-angle-vulkan.sock",
@@ -35,7 +36,38 @@ class VirglHostLaunchTest {
             VirglHostLaunch.arguments(
                 File("/private/graphics/virgl-angle-vulkan.sock"),
                 VirglHostBackend.ANGLE_VULKAN,
+                VirglServerMode.COMPATIBILITY,
             ),
+        )
+    }
+
+    @Test
+    fun `starts the Venus backend on its own socket`() {
+        assertEquals(
+            listOf(
+                "--no-fork",
+                "--multi-clients",
+                "--venus",
+                "--socket-path",
+                "/private/graphics/venus.sock",
+            ),
+            VirglHostLaunch.arguments(
+                File("/private/graphics/venus.sock"),
+                VirglHostBackend.VENUS,
+                VirglServerMode.COMPATIBILITY,
+            ),
+        )
+    }
+
+    @Test
+    fun `Venus always supports concurrent Vulkan clients`() {
+        assertEquals(
+            VirglServerMode.MULTI_CLIENT,
+            VirglHostBackend.VENUS.resolveServerMode(VirglServerMode.AUTOMATIC),
+        )
+        assertEquals(
+            VirglServerMode.MULTI_CLIENT,
+            VirglHostBackend.VENUS.resolveServerMode(VirglServerMode.COMPATIBILITY),
         )
     }
 
@@ -45,12 +77,18 @@ class VirglHostLaunchTest {
             VirglHostLaunch.environment(
                 home = File("/private/files"),
                 libraryDirectory = File("/private/lib"),
+                renderServerExecutable = File("/private/libexec/virgl_render_server"),
                 temporaryDirectory = File("/private/cache"),
             )
 
         assertEquals("/private/lib", environment["LD_LIBRARY_PATH"])
         assertEquals("/private/cache", environment["TMPDIR"])
         assertEquals("/system/bin", environment["PATH"])
+        assertEquals("info", environment["VIRGL_LOG_LEVEL"])
+        assertEquals(
+            "/private/libexec/virgl_render_server",
+            environment["RENDER_SERVER_EXEC_PATH"],
+        )
         assertEquals(null, environment["VTEST_ANGLE_LIBRARY_PATH"])
     }
 
@@ -60,6 +98,7 @@ class VirglHostLaunchTest {
             VirglHostLaunch.environment(
                 home = File("/private/files"),
                 libraryDirectory = File("/private/virgl-lib"),
+                renderServerExecutable = File("/private/libexec/virgl_render_server"),
                 temporaryDirectory = File("/private/cache"),
                 angleLibraryDirectory = File("/private/angle-vulkan-lib"),
             )
@@ -83,6 +122,12 @@ class VirglHostLaunchTest {
             VirglHostBackend.ANGLE_VULKAN,
             VirglHostBackend.from(
                 org.randomcoder.udroid.runtime.DesktopGraphicsProfile.VIRGL_ANGLE,
+            ),
+        )
+        assertEquals(
+            VirglHostBackend.VENUS,
+            VirglHostBackend.from(
+                org.randomcoder.udroid.runtime.DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
             ),
         )
         assertEquals(
@@ -115,6 +160,28 @@ class VirglHostLaunchTest {
                 "-B",
             ),
             profile.wrapGuestCommand(listOf("/usr/bin/glxinfo", "-B")),
+        )
+    }
+
+    @Test
+    fun `selects Venus vtest with the X11 copy presentation path`() {
+        val socket = Files.createTempFile("udroid-venus", ".sock").toFile()
+        val profile = VirglProotLaunchProfile(socket, VirglHostBackend.VENUS)
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "-u",
+                "LIBGL_ALWAYS_SOFTWARE",
+                "-u",
+                "GALLIUM_DRIVER",
+                "-u",
+                "MESA_LOADER_DRIVER_OVERRIDE",
+                "VN_DEBUG=vtest",
+                "MESA_VK_WSI_DEBUG=sw",
+                "/usr/bin/vkcube",
+            ),
+            profile.wrapGuestCommand(listOf("/usr/bin/vkcube")),
         )
     }
 }

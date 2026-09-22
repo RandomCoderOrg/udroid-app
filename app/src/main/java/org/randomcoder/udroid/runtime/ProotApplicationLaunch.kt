@@ -32,6 +32,8 @@ object ProotApplicationLaunchBuilder {
                 ?: guestHome
         val mounts =
             ProotMountResolver.resolve(
+                context = context,
+                rootfs = rootfs,
                 profile = ProotMountProfileStore(context).load(rootfs.name),
                 sessionMounts =
                     ProotMountResolver.sessionMounts(
