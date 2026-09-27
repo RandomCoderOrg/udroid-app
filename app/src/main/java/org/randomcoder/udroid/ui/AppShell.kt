@@ -843,13 +843,11 @@ private fun ManagementPane(
                             )
                         } ?: DistroCataloguePage(
                             state = catalogueState,
-                            ociState = ociCatalogueState,
                             installedRootfses = installedRootfses,
                             activeRootfsName = installedRootfsName,
                             installProgress = installProgress,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
-                            onSelectOciRepository = onSelectOciRepository,
                             onOpenInstalledSystem = onOpenInstalledSystem,
                             onOpenInstallation = onOpenInstallation,
                         )

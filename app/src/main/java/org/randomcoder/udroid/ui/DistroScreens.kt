@@ -76,7 +76,6 @@ import org.randomcoder.udroid.install.InstallProgress
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallerWorkRequest
 import org.randomcoder.udroid.install.OciInstallationSelection
-import org.randomcoder.udroid.oci.OciHubCatalogueState
 import org.randomcoder.udroid.oci.OciHubRepository
 import org.randomcoder.udroid.oci.OciHubTagPlatform
 import org.randomcoder.udroid.oci.OciHubTagsState
@@ -94,13 +93,11 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 fun DistroCataloguePage(
     state: DistroCatalogState,
-    ociState: OciHubCatalogueState,
     installedRootfses: List<InstalledRootfs>,
     activeRootfsName: String?,
     installProgress: InstallProgress?,
     onRetry: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
-    onSelectOciRepository: (OciHubRepository) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
     onOpenInstallation: (String) -> Unit,
 ) {
@@ -153,8 +150,6 @@ fun DistroCataloguePage(
 
         is DistroCatalogState.Ready -> {
             val catalogue = state.catalog
-            val ociReady = ociState as? OciHubCatalogueState.Ready
-            val ociRepositories = ociReady?.snapshot?.repositories.orEmpty()
             val installedNames =
                 remember(installedRootfses) {
                     installedRootfses.mapTo(mutableSetOf(), InstalledRootfs::name)
@@ -195,19 +190,6 @@ fun DistroCataloguePage(
                         }
                     }
                 }
-            val visibleOciRepositories by
-                remember(ociRepositories, searchQuery) {
-                    derivedStateOf {
-                        val terms = searchTerms(searchQuery)
-                        if (terms.isEmpty()) {
-                            ociRepositories
-                        } else {
-                            ociRepositories.filter { repository ->
-                                terms.all(repository.searchableText()::contains)
-                            }
-                        }
-                    }
-                }
             val terms = searchTerms(searchQuery)
             val visibleInstalled =
                 installedRootfses.filter { rootfs ->
@@ -232,9 +214,8 @@ fun DistroCataloguePage(
             val visibleCount =
                 visibleInstalled.size +
                     visibleVariants.size +
-                    visibleOciRepositories.size +
                     if (installationVisible == null) 0 else 1
-            val totalCount = catalogue.variants.size + ociRepositories.size
+            val totalCount = catalogue.variants.size
 
             LazyColumn(
                 modifier =
@@ -299,10 +280,7 @@ fun DistroCataloguePage(
                     )
                 }
 
-                if (
-                    visibleCount == 0 &&
-                    ociState !is OciHubCatalogueState.Loading
-                ) {
+                if (visibleCount == 0) {
                     item(key = "empty-search") {
                         Surface(
                             color = UdroidRaised,
@@ -384,61 +362,6 @@ fun DistroCataloguePage(
                             active = false,
                             onSelect = { onPreviewInstall(distro) },
                         )
-                    }
-                }
-
-                if (
-                    searchQuery.isBlank() ||
-                    visibleOciRepositories.isNotEmpty() ||
-                    ociState !is OciHubCatalogueState.Ready
-                ) {
-                    item(key = "oci-source") {
-                        UdroidSectionLabel(
-                            text = "More official images",
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-                when (ociState) {
-                    OciHubCatalogueState.Loading -> {
-                        item(key = "oci-loading") {
-                            InlineCatalogueStatus(
-                                loading = true,
-                                title = "Finding more Linux systems",
-                                detail = "Systems listed above are still available",
-                            )
-                        }
-                    }
-
-                    is OciHubCatalogueState.Failed -> {
-                        item(key = "oci-failed") {
-                            InlineCatalogueStatus(
-                                loading = false,
-                                title = "Can’t load more Linux systems",
-                                detail = ociState.message,
-                                actionLabel = "Retry",
-                                onAction = onRetry,
-                            )
-                        }
-                    }
-
-                    is OciHubCatalogueState.Ready -> {
-                        items(
-                            items = visibleOciRepositories,
-                            key = { "oci:${it.name}" },
-                            contentType = { "oci-repository-card" },
-                        ) { repository ->
-                            val installed =
-                                installedNames.any {
-                                    it.startsWith("oci-${repository.name}-")
-                                }
-                            OciRepositoryCard(
-                                repository = repository,
-                                architecture = ociState.platform.displayArchitecture(),
-                                installed = installed,
-                                onSelect = { onSelectOciRepository(repository) },
-                            )
-                        }
                     }
                 }
 
@@ -601,60 +524,6 @@ private fun InstalledRootfsCard(
                     Text("Open", color = UdroidForest, style = MaterialTheme.typography.labelLarge)
                     Icon(Icons.Rounded.ChevronRight, contentDescription = "Open ${rootfs.name}")
                 }
-            },
-        )
-    }
-}
-
-@Composable
-private fun OciRepositoryCard(
-    repository: OciHubRepository,
-    architecture: String,
-    installed: Boolean,
-    onSelect: () -> Unit,
-) {
-    val title = OciInstallationSelection.displayName(repository)
-    OutlinedCard(
-        onClick = onSelect,
-        modifier = Modifier.fillMaxWidth(),
-        colors =
-            CardDefaults.outlinedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        ListItem(
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            leadingContent = { OciRepositoryMark(repository) },
-            headlineContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    if (installed) {
-                        Spacer(Modifier.size(8.dp))
-                        UdroidStatusBadge(
-                            label = "Installed",
-                            color = UdroidForest,
-                            background = UdroidSoftGreen,
-                        )
-                    }
-                }
-            },
-            supportingContent = {
-                Text(
-                    "Official image · $architecture · Choose version",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            },
-            trailingContent = {
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = "Choose a $title version",
-                    tint = UdroidFaint,
-                )
             },
         )
     }
@@ -970,14 +839,6 @@ private fun searchTerms(query: String): List<String> =
         .lowercase(Locale.US)
         .split(Regex("\\s+"))
         .filter(String::isNotBlank)
-
-private fun OciHubRepository.searchableText(): String =
-    listOf(
-        name,
-        OciInstallationSelection.displayName(this),
-        description,
-        "official container image docker hub OCI",
-    ).joinToString(" ").lowercase(Locale.US)
 
 private fun OciPlatform.displayArchitecture(): String =
     when (architecture) {

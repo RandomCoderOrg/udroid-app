@@ -44,13 +44,11 @@ import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
-import org.randomcoder.udroid.oci.OciHubCatalogRepository
 import org.randomcoder.udroid.oci.OciHubCatalogueState
 import org.randomcoder.udroid.oci.OciHubRepository
 import org.randomcoder.udroid.oci.OciHubTagPlatform
 import org.randomcoder.udroid.oci.OciHubTagRepository
 import org.randomcoder.udroid.oci.OciHubTagsState
-import org.randomcoder.udroid.oci.OciPlatform
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
@@ -139,15 +137,12 @@ class MainActivity : ComponentActivity() {
     private var pendingMicrophoneRootfsName: String? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
-    private var ociCatalogueLoadGeneration = 0L
     private var ociTagsLoadGeneration = 0L
-    private var restoredOciRepositoryName: String? = null
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
     private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
-    private val ociHubCatalogueRepository by lazy { OciHubCatalogRepository(this) }
     private val ociHubTagRepository by lazy { OciHubTagRepository(this) }
     private val distroArchiveSizeStore by lazy { DistroArchiveSizeStore(this) }
 
@@ -211,7 +206,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        restoredOciRepositoryName = savedInstanceState?.getString(STATE_OCI_REPOSITORY)
         applySystemBars(UdroidDestination.HOME)
         setContent {
             UdroidTheme {
@@ -253,7 +247,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
-                    onReloadCatalogue = { loadCatalogue(forceOciRefresh = true) },
+                    onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
                     onSelectOciRepository = { selectOciRepository(it) },
                     onRetryOciTags = {
@@ -325,13 +319,6 @@ class MainActivity : ComponentActivity() {
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        selectedOciRepository?.name?.let {
-            outState.putString(STATE_OCI_REPOSITORY, it)
-        }
-        super.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -488,7 +475,7 @@ class MainActivity : ComponentActivity() {
         launchPendingDesktop()
     }
 
-    private fun loadCatalogue(forceOciRefresh: Boolean = false) {
+    private fun loadCatalogue() {
         catalogueState = DistroCatalogState.Loading
         lifecycleScope.launch {
             catalogueState =
@@ -504,50 +491,6 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                 )
-        }
-        loadOciCatalogue(forceRefresh = forceOciRefresh)
-    }
-
-    private fun loadOciCatalogue(forceRefresh: Boolean) {
-        val generation = ++ociCatalogueLoadGeneration
-        ociCatalogueState = OciHubCatalogueState.Loading
-        lifecycleScope.launch {
-            val platform =
-                runCatching {
-                    OciPlatform.fromAndroidAbis(Build.SUPPORTED_ABIS.toList())
-                }.getOrElse {
-                    if (generation == ociCatalogueLoadGeneration) {
-                        ociCatalogueState =
-                            OciHubCatalogueState.Failed(
-                                it.message ?: "This phone architecture is not supported",
-                            )
-                    }
-                    return@launch
-                }
-            val result =
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        ociHubCatalogueRepository.load(forceRefresh = forceRefresh)
-                    }
-                }
-            if (generation != ociCatalogueLoadGeneration) return@launch
-            ociCatalogueState =
-                result.fold(
-                    onSuccess = { OciHubCatalogueState.Ready(it, platform) },
-                    onFailure = {
-                        OciHubCatalogueState.Failed(
-                            it.message ?: "Official image catalogue could not be read",
-                        )
-                    },
-                )
-            val restoreName = restoredOciRepositoryName
-            if (restoreName != null && result.isSuccess) {
-                restoredOciRepositoryName = null
-                result.getOrThrow()
-                    .repositories
-                    .firstOrNull { it.name == restoreName }
-                    ?.let(::selectOciRepository)
-            }
         }
     }
 
@@ -1491,7 +1434,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val NOTIFICATION_PERMISSION_REQUEST = 101
-        const val STATE_OCI_REPOSITORY = "oci-repository"
         const val MAX_INSTALLATION_NAME_LENGTH = 96
         val VARIATION_SUFFIX = Regex("-v[2-9][0-9]*$")
     }
