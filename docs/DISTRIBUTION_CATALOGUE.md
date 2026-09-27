@@ -41,21 +41,6 @@ was marked broken on Android 15 and newer. An image is not shown merely because
 an archive exists; its architecture, checksum, extraction layout, and PRoot
 startup must be understood first.
 
-## Official container images
-
-The same searchable list also includes active operating-system repositories
-from Docker Hub's official `library` namespace. Selecting one opens a version
-page containing only tags that publish an image for the phone's OCI platform.
-The review page records the selected platform, compressed size, tag, and
-immutable manifest digest before installation begins.
-
-Container images follow a separate verified OCI pipeline; they are not passed
-to Docker, containerd, or a daemon. uDroid resolves the manifest, downloads and
-verifies each referenced blob, applies ordered filesystem layers and OCI
-whiteouts in app-private staging storage, adds Android/PRoot compatibility
-files, executes the standard rootfs health probe, and only then activates the
-installation. See [OCI image architecture](OCI_IMAGES.md).
-
 ## Visual identity
 
 Distribution marks are packaged VectorDrawables derived from the Simple Icons

@@ -39,6 +39,7 @@ object OciInstallationSelection {
                     "[ready] ${formatBytes(tag.compressedBytes)} compressed",
                 ),
             previewOnly = false,
+            totalBytes = tag.compressedBytes,
         )
     }
 

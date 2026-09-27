@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.audio.AudioConfigurationStore
+import org.randomcoder.udroid.catalog.DistroArchiveSizeStore
 import org.randomcoder.udroid.catalog.DistroCatalogRepository
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
@@ -43,13 +44,11 @@ import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutPublisher
 import org.randomcoder.udroid.linuxapps.LinuxApplicationsState
-import org.randomcoder.udroid.oci.OciHubCatalogRepository
 import org.randomcoder.udroid.oci.OciHubCatalogueState
 import org.randomcoder.udroid.oci.OciHubRepository
 import org.randomcoder.udroid.oci.OciHubTagPlatform
 import org.randomcoder.udroid.oci.OciHubTagRepository
 import org.randomcoder.udroid.oci.OciHubTagsState
-import org.randomcoder.udroid.oci.OciPlatform
 import org.randomcoder.udroid.runtime.CapabilityProbe
 import org.randomcoder.udroid.runtime.CapabilityResult
 import org.randomcoder.udroid.runtime.DesktopCompositorSupport
@@ -67,6 +66,7 @@ import org.randomcoder.udroid.runtime.ProotMountResolver
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.RootfsStorageUsage
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
@@ -116,6 +116,9 @@ class MainActivity : ComponentActivity() {
     private var selectedSystemRootfsName by mutableStateOf<String?>(null)
     private var rootfsMaintenanceName by mutableStateOf<String?>(null)
     private var rootfsMaintenanceMessage by mutableStateOf<String?>(null)
+    private var rootfsOccupiedBytes by mutableStateOf<Long?>(null)
+    private var rootfsStorageLoading by mutableStateOf(false)
+    private var rootfsStorageName: String? = null
     private var desktopEnvironments by mutableStateOf<List<DesktopEnvironment>>(emptyList())
     private var desktopConfiguration by
         mutableStateOf(DesktopConfiguration(null, compositingEnabled = false, touchScaleEnabled = true))
@@ -134,16 +137,14 @@ class MainActivity : ComponentActivity() {
     private var pendingMicrophoneRootfsName: String? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
-    private var ociCatalogueLoadGeneration = 0L
     private var ociTagsLoadGeneration = 0L
-    private var restoredOciRepositoryName: String? = null
     private var showInstallTerminal by mutableStateOf(false)
     private var runtimeService by mutableStateOf<RuntimeSupervisorService?>(null)
     private var runtimeServiceBound = false
     private val desktopConfigurationStore by lazy { DesktopConfigurationStore(this) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
-    private val ociHubCatalogueRepository by lazy { OciHubCatalogRepository(this) }
     private val ociHubTagRepository by lazy { OciHubTagRepository(this) }
+    private val distroArchiveSizeStore by lazy { DistroArchiveSizeStore(this) }
 
     private val microphonePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -205,7 +206,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        restoredOciRepositoryName = savedInstanceState?.getString(STATE_OCI_REPOSITORY)
         applySystemBars(UdroidDestination.HOME)
         setContent {
             UdroidTheme {
@@ -226,6 +226,8 @@ class MainActivity : ComponentActivity() {
                     selectedSystemRootfsName = selectedSystemRootfsName,
                     rootfsMaintenanceName = rootfsMaintenanceName,
                     rootfsMaintenanceMessage = rootfsMaintenanceMessage,
+                    rootfsOccupiedBytes = rootfsOccupiedBytes,
+                    rootfsStorageLoading = rootfsStorageLoading,
                     desktopEnvironments = desktopEnvironments,
                     desktopConfiguration = desktopConfiguration,
                     desktopScanLoading = desktopScanLoading,
@@ -245,7 +247,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onStop = { RuntimeSupervisorService.stop(this) },
                     onRefresh = { refreshAll() },
-                    onReloadCatalogue = { loadCatalogue(forceOciRefresh = true) },
+                    onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
                     onSelectOciRepository = { selectOciRepository(it) },
                     onRetryOciTags = {
@@ -256,6 +258,7 @@ class MainActivity : ComponentActivity() {
                     onBackFromOciRepository = { closeOciRepository() },
                     onSelectOciTag = { repository, tag -> selectOciTag(repository, tag) },
                     onOpenInstalledSystem = { openSystemDetails(it) },
+                    onOpenInstallation = { openInstallationDetails(it) },
                     onOpenRootfsTerminal = { openRootfsTerminal(it) },
                     onOpenRootfsApps = { openRootfsApps(it) },
                     onResetRootfs = { rootfsName, fallback ->
@@ -314,20 +317,15 @@ class MainActivity : ComponentActivity() {
         refreshAll()
         loadCatalogue()
         handleUpdateIntent(intent)
+        handleInstallerIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        selectedOciRepository?.name?.let {
-            outState.putString(STATE_OCI_REPOSITORY, it)
-        }
-        super.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleUpdateIntent(intent)
+        handleInstallerIntent(intent)
         handleShortcutIntent(intent)
     }
 
@@ -433,9 +431,15 @@ class MainActivity : ComponentActivity() {
                         }.getOrNull() != null
                     }
                 }.toSet()
-        if (selectedSystemRootfsName !in installedRootfses.map(InstalledRootfs::name)) {
+        if (
+            selectedSystemRootfsName !in installedRootfses.map(InstalledRootfs::name) &&
+            selectedSystemRootfsName != installProgress?.installationName
+        ) {
             selectedSystemRootfsName = installedRootfsName
         }
+        selectedSystemRootfsName
+            ?.let { name -> installedRootfses.firstOrNull { it.name == name } }
+            ?.let(::loadRootfsStorageUsageIfNeeded)
         installProgress
             ?.takeIf { progress ->
                 progress.stage == InstallStage.READY &&
@@ -471,7 +475,7 @@ class MainActivity : ComponentActivity() {
         launchPendingDesktop()
     }
 
-    private fun loadCatalogue(forceOciRefresh: Boolean = false) {
+    private fun loadCatalogue() {
         catalogueState = DistroCatalogState.Loading
         lifecycleScope.launch {
             catalogueState =
@@ -488,50 +492,6 @@ class MainActivity : ComponentActivity() {
                     },
                 )
         }
-        loadOciCatalogue(forceRefresh = forceOciRefresh)
-    }
-
-    private fun loadOciCatalogue(forceRefresh: Boolean) {
-        val generation = ++ociCatalogueLoadGeneration
-        ociCatalogueState = OciHubCatalogueState.Loading
-        lifecycleScope.launch {
-            val platform =
-                runCatching {
-                    OciPlatform.fromAndroidAbis(Build.SUPPORTED_ABIS.toList())
-                }.getOrElse {
-                    if (generation == ociCatalogueLoadGeneration) {
-                        ociCatalogueState =
-                            OciHubCatalogueState.Failed(
-                                it.message ?: "This phone architecture is not supported",
-                            )
-                    }
-                    return@launch
-                }
-            val result =
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        ociHubCatalogueRepository.load(forceRefresh = forceRefresh)
-                    }
-                }
-            if (generation != ociCatalogueLoadGeneration) return@launch
-            ociCatalogueState =
-                result.fold(
-                    onSuccess = { OciHubCatalogueState.Ready(it, platform) },
-                    onFailure = {
-                        OciHubCatalogueState.Failed(
-                            it.message ?: "Official image catalogue could not be read",
-                        )
-                    },
-                )
-            val restoreName = restoredOciRepositoryName
-            if (restoreName != null && result.isSuccess) {
-                restoredOciRepositoryName = null
-                result.getOrThrow()
-                    .repositories
-                    .firstOrNull { it.name == restoreName }
-                    ?.let(::selectOciRepository)
-            }
-        }
     }
 
     private fun selectDistro(distro: DistroVariant) {
@@ -542,7 +502,9 @@ class MainActivity : ComponentActivity() {
         }
         showInstallTerminal = false
         installProgress = app.installState.save(InstallationSelection.initial(distro))
-        selectDestination(UdroidDestination.INSTALL)
+        selectedSystemRootfsName = distro.internalName
+        selectDestination(UdroidDestination.SYSTEM)
+        resolveArchiveSize(installProgress!!, distro)
     }
 
     private fun selectOciRepository(
@@ -617,7 +579,8 @@ class MainActivity : ComponentActivity() {
                     displayArchitecture = displayArchitecture,
                 ),
             )
-        selectDestination(UdroidDestination.INSTALL)
+        selectedSystemRootfsName = installationName
+        selectDestination(UdroidDestination.SYSTEM)
     }
 
     private fun startSelectedDownload() {
@@ -655,7 +618,50 @@ class MainActivity : ComponentActivity() {
         selectedSystemRootfsName = rootfsName
         rootfsMaintenanceMessage = null
         loadAudioConfiguration(rootfsName)
+        installedRootfses.firstOrNull { it.name == rootfsName }?.let(::loadRootfsStorageUsageIfNeeded)
         selectDestination(UdroidDestination.SYSTEM)
+    }
+
+    private fun openInstallationDetails(installationName: String) {
+        if (installProgress?.installationName != installationName) return
+        selectedSystemRootfsName = installationName
+        selectDestination(UdroidDestination.SYSTEM)
+    }
+
+    private fun resolveArchiveSize(
+        preview: InstallProgress,
+        distro: DistroVariant,
+    ) {
+        lifecycleScope.launch {
+            val bytes =
+                runCatching {
+                    withContext(Dispatchers.IO) { distroArchiveSizeStore.resolve(distro) }
+                }.getOrDefault(0L)
+            val current = app.installState.current()
+            if (
+                current?.operationId == preview.operationId &&
+                current.stage == InstallStage.READY
+            ) {
+                installProgress = app.installState.save(current.copy(totalBytes = bytes))
+            }
+        }
+    }
+
+    private fun loadRootfsStorageUsageIfNeeded(rootfs: InstalledRootfs) {
+        if (rootfsStorageName == rootfs.name) return
+        rootfsStorageName = rootfs.name
+        rootfsOccupiedBytes = null
+        rootfsStorageLoading = true
+        lifecycleScope.launch {
+            val bytes =
+                runCatching {
+                    withContext(Dispatchers.IO) { RootfsStorageUsage.calculate(rootfs.directory) }
+                }.getOrNull()
+            if (rootfsStorageName == rootfs.name) {
+                rootfsOccupiedBytes = bytes
+                rootfsStorageLoading = false
+            }
+        }
     }
 
     private fun deleteRootfs(rootfsName: String) {
@@ -764,7 +770,8 @@ class MainActivity : ComponentActivity() {
                     installProgress = progress
                     showInstallTerminal = false
                     rootfsMaintenanceMessage = null
-                    selectDestination(UdroidDestination.INSTALL)
+                    selectedSystemRootfsName = progress.installationName
+                    selectDestination(UdroidDestination.SYSTEM)
                 },
                 onFailure = {
                     runCatching {
@@ -898,9 +905,12 @@ class MainActivity : ComponentActivity() {
             rootfsMaintenanceName = null
             rootfsMaintenanceMessage = null
             selectedSystemRootfsName = null
+            rootfsStorageName = null
+            rootfsOccupiedBytes = null
             refreshFromDisk()
             if (resetWork != null) {
-                selectDestination(UdroidDestination.INSTALL)
+                selectedSystemRootfsName = resetWork.installationName
+                selectDestination(UdroidDestination.SYSTEM)
                 ensureNotificationPermission()
                 InstallerService.start(this@MainActivity, resetWork.work)
             } else {
@@ -1387,6 +1397,16 @@ class MainActivity : ComponentActivity() {
         refreshFromDisk()
     }
 
+    private fun handleInstallerIntent(intent: Intent?) {
+        if (intent?.action != InstallerService.ACTION_SHOW_INSTALLATION) return
+        selectedSystemRootfsName =
+            intent.getStringExtra(InstallerService.EXTRA_INSTALLATION_NAME)
+                ?: app.installState.current()?.installationName
+        intent.action = null
+        refreshFromDisk()
+        selectDestination(UdroidDestination.SYSTEM)
+    }
+
     private fun installDownloadedUpdate() {
         when (val result = AppUpdateInstaller.install(this, updateState)) {
             UpdateInstallResult.Submitted -> {
@@ -1414,7 +1434,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val NOTIFICATION_PERMISSION_REQUEST = 101
-        const val STATE_OCI_REPOSITORY = "oci-repository"
         const val MAX_INSTALLATION_NAME_LENGTH = 96
         val VARIATION_SUFFIX = Regex("-v[2-9][0-9]*$")
     }

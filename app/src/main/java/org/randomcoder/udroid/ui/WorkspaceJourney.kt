@@ -28,7 +28,9 @@ fun workspaceJourney(
         when {
             !hasInstalledLinux && requestedDestination.requiresInstalledLinux ->
                 UdroidDestination.DISTROS
-            requestedDestination == UdroidDestination.INSTALL && !hasInstallation ->
+            requestedDestination == UdroidDestination.SYSTEM &&
+                !hasInstalledLinux &&
+                !hasInstallation ->
                 UdroidDestination.DISTROS
             else -> requestedDestination
         }
@@ -36,7 +38,6 @@ fun workspaceJourney(
         if (hasInstalledLinux) {
             UdroidDestination.entries.filterNot {
                 it == UdroidDestination.SYSTEM ||
-                    it == UdroidDestination.INSTALL ||
                     it == UdroidDestination.MOUNTS ||
                     it == UdroidDestination.MOUNT_EDITOR ||
                     it == UdroidDestination.ENVIRONMENT ||
@@ -61,7 +62,6 @@ fun workspaceJourney(
 val UdroidDestination.requiresInstalledLinux: Boolean
     get() =
         this == UdroidDestination.TERMINAL ||
-            this == UdroidDestination.SYSTEM ||
             this == UdroidDestination.MOUNTS ||
             this == UdroidDestination.MOUNT_EDITOR ||
             this == UdroidDestination.ENVIRONMENT ||

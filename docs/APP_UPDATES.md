@@ -49,7 +49,8 @@ Redirects may remain on HTTPS but cannot downgrade to cleartext HTTP.
 
 Android updates must use the same signing certificate as the installed app.
 Tagged CI builds therefore fail closed unless the four update-signing secrets
-listed in the README are configured. Normal branch and pull-request builds can
+listed in [Development](DEVELOPMENT.md) are configured. Normal branch and
+pull-request builds can
 continue using Android's local debug key because they are not published as
 updates.
 
