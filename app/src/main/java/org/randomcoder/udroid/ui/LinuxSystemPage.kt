@@ -97,6 +97,8 @@ fun LinuxSystemPage(
     resetAvailable: Boolean,
     maintenanceInProgress: Boolean,
     maintenanceMessage: String?,
+    occupiedBytes: Long?,
+    storageLoading: Boolean,
     onBack: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenApps: () -> Unit,
@@ -462,7 +464,14 @@ fun LinuxSystemPage(
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Column {
-                    FactRow("Storage", rootfs.directory.name)
+                    FactRow(
+                        "Space used",
+                        when {
+                            storageLoading -> "Calculating…"
+                            occupiedBytes != null -> formatCompactBytes(occupiedBytes)
+                            else -> "Unavailable"
+                        },
+                    )
                     HorizontalDivider(color = UdroidLine)
                     FactRow(
                         "Installed",

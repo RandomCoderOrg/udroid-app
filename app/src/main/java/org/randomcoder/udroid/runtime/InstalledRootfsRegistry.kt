@@ -4,6 +4,12 @@ import android.content.Context
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 data class InstalledRootfs(
     val name: String,
@@ -113,4 +119,46 @@ internal object InstalledRootfsDiscovery {
                 compareByDescending<InstalledRootfs> { it.readyAtEpochMs }
                     .thenBy { it.name },
             ).toList()
+}
+
+internal object RootfsStorageUsage {
+    fun calculate(rootfs: File): Long =
+        calculateWithAndroidDu(rootfs) ?: calculateWithFileTree(rootfs)
+
+    private fun calculateWithAndroidDu(rootfs: File): Long? {
+        val du = File("/system/bin/du").takeIf(File::canExecute) ?: return null
+        val process =
+            ProcessBuilder(du.absolutePath, "-sk", rootfs.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+        val output = process.inputStream.bufferedReader().use { it.readLines() }
+        process.waitFor()
+        return output
+            .asReversed()
+            .firstNotNullOfOrNull { line ->
+                line.trimStart().takeWhile { !it.isWhitespace() }.toLongOrNull()
+            }?.times(1024L)
+    }
+
+    private fun calculateWithFileTree(rootfs: File): Long {
+        var total = 0L
+        Files.walkFileTree(
+            rootfs.toPath(),
+            object : SimpleFileVisitor<Path>() {
+                override fun visitFile(
+                    file: Path,
+                    attrs: BasicFileAttributes,
+                ): FileVisitResult {
+                    if (attrs.isRegularFile) total += attrs.size()
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun visitFileFailed(
+                    file: Path,
+                    exc: IOException,
+                ): FileVisitResult = FileVisitResult.CONTINUE
+            },
+        )
+        return total
+    }
 }

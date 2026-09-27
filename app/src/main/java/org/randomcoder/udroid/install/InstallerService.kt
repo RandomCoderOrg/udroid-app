@@ -697,7 +697,12 @@ class InstallerService : Service() {
             PendingIntent.getActivity(
                 this,
                 0,
-                Intent(this, MainActivity::class.java),
+                Intent(this, MainActivity::class.java)
+                    .setAction(ACTION_SHOW_INSTALLATION)
+                    .putExtra(
+                        EXTRA_INSTALLATION_NAME,
+                        app.installState.current()?.installationName,
+                    ),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         val pauseIntent =
@@ -1133,6 +1138,9 @@ class InstallerService : Service() {
 
     companion object {
         const val ACTION_STATE_CHANGED = "org.randomcoder.udroid.action.INSTALL_STATE_CHANGED"
+        const val ACTION_SHOW_INSTALLATION =
+            "org.randomcoder.udroid.action.SHOW_INSTALLATION"
+        const val EXTRA_INSTALLATION_NAME = "installation-name"
         const val EXTRA_STAGE = "stage"
         const val EXTRA_PERCENTAGE = "percentage"
 

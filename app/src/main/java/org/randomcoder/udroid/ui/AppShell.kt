@@ -129,7 +129,6 @@ enum class UdroidDestination(
 ) {
     HOME("Home", Icons.Rounded.Home, Icons.Rounded.Home),
     DISTROS("Linux", Icons.Rounded.Storage, Icons.Rounded.Storage),
-    INSTALL("Install", Icons.Rounded.Storage, Icons.Rounded.Storage),
     SYSTEM("System", Icons.Rounded.Storage, Icons.Rounded.Storage),
     ENVIRONMENT("Environment", Icons.Rounded.Code, Icons.Rounded.Code),
     MOUNTS("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
@@ -163,7 +162,6 @@ internal fun navigationMotion(
 private val UdroidDestination.navigationDepth: Int
     get() =
         when (this) {
-            UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
             -> 1
             UdroidDestination.MOUNTS,
@@ -191,6 +189,8 @@ fun UdroidApp(
     selectedSystemRootfsName: String?,
     rootfsMaintenanceName: String?,
     rootfsMaintenanceMessage: String?,
+    rootfsOccupiedBytes: Long?,
+    rootfsStorageLoading: Boolean,
     desktopEnvironments: List<DesktopEnvironment>,
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
@@ -213,6 +213,7 @@ fun UdroidApp(
     onBackFromOciRepository: () -> Unit,
     onSelectOciTag: (OciHubRepository, OciHubTagPlatform) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
+    onOpenInstallation: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
     onResetRootfs: (String, DistroVariant?) -> Unit,
@@ -255,7 +256,6 @@ fun UdroidApp(
     val activeDestination = requestedJourney.destination
     val navigationDestination =
         when (activeDestination) {
-            UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
             -> UdroidDestination.DISTROS
             UdroidDestination.MOUNTS,
@@ -341,6 +341,8 @@ fun UdroidApp(
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
+                        rootfsOccupiedBytes = rootfsOccupiedBytes,
+                        rootfsStorageLoading = rootfsStorageLoading,
                         desktopEnvironments = desktopEnvironments,
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
@@ -364,6 +366,7 @@ fun UdroidApp(
                         onBackFromOciRepository = onBackFromOciRepository,
                         onSelectOciTag = onSelectOciTag,
                         onOpenInstalledSystem = onOpenInstalledSystem,
+                        onOpenInstallation = onOpenInstallation,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
                         onSelectMountProfile = { systemId ->
@@ -427,6 +430,8 @@ fun UdroidApp(
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
+                        rootfsOccupiedBytes = rootfsOccupiedBytes,
+                        rootfsStorageLoading = rootfsStorageLoading,
                         desktopEnvironments = desktopEnvironments,
                         desktopConfiguration = desktopConfiguration,
                         desktopScanLoading = desktopScanLoading,
@@ -450,6 +455,7 @@ fun UdroidApp(
                         onBackFromOciRepository = onBackFromOciRepository,
                         onSelectOciTag = onSelectOciTag,
                         onOpenInstalledSystem = onOpenInstalledSystem,
+                        onOpenInstallation = onOpenInstallation,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
                         onSelectMountProfile = { systemId ->
@@ -529,6 +535,8 @@ private fun ManagementPane(
     selectedSystemRootfsName: String?,
     rootfsMaintenanceName: String?,
     rootfsMaintenanceMessage: String?,
+    rootfsOccupiedBytes: Long?,
+    rootfsStorageLoading: Boolean,
     desktopEnvironments: List<DesktopEnvironment>,
     desktopConfiguration: DesktopConfiguration,
     desktopScanLoading: Boolean,
@@ -552,6 +560,7 @@ private fun ManagementPane(
     onBackFromOciRepository: () -> Unit,
     onSelectOciTag: (OciHubRepository, OciHubTagPlatform) -> Unit,
     onOpenInstalledSystem: (String) -> Unit,
+    onOpenInstallation: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
     onSelectMountProfile: (String) -> Unit,
@@ -837,26 +846,13 @@ private fun ManagementPane(
                             ociState = ociCatalogueState,
                             installedRootfses = installedRootfses,
                             activeRootfsName = installedRootfsName,
+                            installProgress = installProgress,
                             onRetry = onReloadCatalogue,
                             onPreviewInstall = onPreviewInstall,
                             onSelectOciRepository = onSelectOciRepository,
                             onOpenInstalledSystem = onOpenInstalledSystem,
+                            onOpenInstallation = onOpenInstallation,
                         )
-                    UdroidDestination.INSTALL ->
-                        installProgress?.let {
-                            InstallExperiencePage(
-                                progress = it,
-                                showTerminal = showInstallTerminal,
-                                onToggleTerminal = onToggleInstallTerminal,
-                                onBack = onCloseInstall,
-                                onOpenTerminal = {
-                                    onOpenRootfsTerminal(it.installationName)
-                                },
-                                onStartDownload = onStartDownload,
-                                onPauseDownload = onPauseDownload,
-                                onRetryDownload = onRetryDownload,
-                            )
-                        }
                     UdroidDestination.SYSTEM -> {
                         val rootfsName = selectedSystemRootfsName ?: installedRootfsName
                         val selectedRootfs =
@@ -866,7 +862,22 @@ private fun ManagementPane(
                                 ?.catalog
                                 ?.variants
                                 ?.firstOrNull { it.internalName == rootfsName }
-                        if (selectedRootfs == null) {
+                        val selectedInstallation =
+                            installProgress?.takeIf { it.installationName == rootfsName }
+                        if (selectedRootfs == null && selectedInstallation != null) {
+                            InstallExperiencePage(
+                                progress = selectedInstallation,
+                                showTerminal = showInstallTerminal,
+                                onToggleTerminal = onToggleInstallTerminal,
+                                onBack = onCloseInstall,
+                                onOpenTerminal = {
+                                    onOpenRootfsTerminal(selectedInstallation.installationName)
+                                },
+                                onStartDownload = onStartDownload,
+                                onPauseDownload = onPauseDownload,
+                                onRetryDownload = onRetryDownload,
+                            )
+                        } else if (selectedRootfs == null) {
                             onDestinationSelected(UdroidDestination.DISTROS)
                         } else {
                             val context = LocalContext.current
@@ -905,6 +916,8 @@ private fun ManagementPane(
                                             rootfsMaintenanceName == null ||
                                                 rootfsMaintenanceName == selectedRootfs.name
                                         },
+                                occupiedBytes = rootfsOccupiedBytes,
+                                storageLoading = rootfsStorageLoading,
                                 onBack = {
                                     onDestinationSelected(UdroidDestination.DISTROS)
                                 },

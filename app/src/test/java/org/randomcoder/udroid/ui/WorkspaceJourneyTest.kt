@@ -45,7 +45,6 @@ class WorkspaceJourneyTest {
         assertTrue(journey.destinations.contains(UdroidDestination.TERMINAL))
         assertTrue(journey.destinations.contains(UdroidDestination.APPS))
         assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
-        assertFalse(journey.destinations.contains(UdroidDestination.INSTALL))
         assertFalse(journey.destinations.contains(UdroidDestination.DESKTOP))
         assertFalse(journey.destinations.contains(UdroidDestination.ENVIRONMENT))
     }
@@ -106,26 +105,40 @@ class WorkspaceJourneyTest {
     }
 
     @Test
-    fun `installation is a nested route and never a navigation tab`() {
+    fun `suite detail is a nested route and never a navigation tab`() {
         val journey =
             workspaceJourney(
-                requestedDestination = UdroidDestination.INSTALL,
+                requestedDestination = UdroidDestination.SYSTEM,
                 hasInstalledLinux = true,
                 hasInstallation = true,
                 compactNavigation = true,
             )
 
-        assertEquals(UdroidDestination.INSTALL, journey.destination)
-        assertFalse(journey.destinations.contains(UdroidDestination.INSTALL))
+        assertEquals(UdroidDestination.SYSTEM, journey.destination)
+        assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
         assertTrue(journey.destinations.contains(UdroidDestination.DISTROS))
     }
 
     @Test
-    fun `stale installation route returns to the Linux catalogue`() {
+    fun `suite detail keeps an active installation on its persistent page`() {
         val journey =
             workspaceJourney(
-                requestedDestination = UdroidDestination.INSTALL,
-                hasInstalledLinux = true,
+                requestedDestination = UdroidDestination.SYSTEM,
+                hasInstalledLinux = false,
+                hasInstallation = true,
+                compactNavigation = true,
+            )
+
+        assertEquals(UdroidDestination.SYSTEM, journey.destination)
+        assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
+    }
+
+    @Test
+    fun `suite detail without a system or installation returns to catalogue`() {
+        val journey =
+            workspaceJourney(
+                requestedDestination = UdroidDestination.SYSTEM,
+                hasInstalledLinux = false,
                 hasInstallation = false,
                 compactNavigation = true,
             )
@@ -138,10 +151,6 @@ class WorkspaceJourneyTest {
         assertEquals(
             NavigationMotion.FORWARD,
             navigationMotion(UdroidDestination.DISTROS, UdroidDestination.SYSTEM),
-        )
-        assertEquals(
-            NavigationMotion.FORWARD,
-            navigationMotion(UdroidDestination.DISTROS, UdroidDestination.INSTALL),
         )
         assertEquals(
             NavigationMotion.BACK,
