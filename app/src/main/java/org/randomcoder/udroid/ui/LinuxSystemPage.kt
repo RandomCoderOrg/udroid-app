@@ -1,6 +1,5 @@
 package org.randomcoder.udroid.ui
 
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -68,6 +67,8 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
+import org.randomcoder.udroid.runtime.GraphicsProfileCompatibilityProbe
+import org.randomcoder.udroid.runtime.GraphicsProfileSupport
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
@@ -119,6 +120,10 @@ fun LinuxSystemPage(
 ) {
     BackHandler(onBack = onBack)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val graphicsProfileSupport =
+        remember(rootfs.directory.absolutePath) {
+            GraphicsProfileCompatibilityProbe.run(context, rootfs.directory)
+        }
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
     val environmentProfileStore = remember(context) { ProotEnvironmentProfileStore(context) }
@@ -316,6 +321,7 @@ fun LinuxSystemPage(
                 GraphicsProfileSelector(
                     selected = configuration.graphicsProfile,
                     virglServerMode = configuration.virglServerMode,
+                    support = graphicsProfileSupport,
                     runtimeRunning =
                         runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
                     desktopRunning = desktopRunning,
@@ -1117,6 +1123,7 @@ private fun DesktopSettingsPanel(
 private fun GraphicsProfileSelector(
     selected: DesktopGraphicsProfile,
     virglServerMode: VirglServerMode = VirglServerMode.AUTOMATIC,
+    support: Map<DesktopGraphicsProfile, GraphicsProfileSupport>,
     runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
@@ -1144,105 +1151,122 @@ private fun GraphicsProfileSelector(
             color = UdroidMuted,
             style = MaterialTheme.typography.bodySmall,
         )
-        GraphicsProfileRow(
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.STANDARD,
             title = "Automatic",
             detail = "Use the distribution’s default graphics driver.",
-            selected = selected == DesktopGraphicsProfile.STANDARD,
-            enabled = true,
-            onClick = { onSelected(DesktopGraphicsProfile.STANDARD) },
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
         )
-        GraphicsProfileRow(
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.SOFTWARE,
             title = "Software",
             detail = "Use Mesa llvmpipe on the CPU.",
-            selected = selected == DesktopGraphicsProfile.SOFTWARE,
-            enabled = true,
-            onClick = { onSelected(DesktopGraphicsProfile.SOFTWARE) },
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
         )
-        GraphicsProfileRow(
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.ZINK,
             title = "Zink",
             detail = "Use OpenGL over a working Vulkan driver installed inside Linux.",
-            selected = selected == DesktopGraphicsProfile.ZINK,
-            enabled = true,
-            onClick = { onSelected(DesktopGraphicsProfile.ZINK) },
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
         )
-        if ("arm64-v8a" in Build.SUPPORTED_ABIS) {
-            GraphicsProfileRow(
-                title = "VirGL",
-                detail =
-                    "Use Android OpenGL ES with a current Mesa virpipe driver inside Linux.",
-                selected = selected == DesktopGraphicsProfile.VIRGL,
-                enabled = true,
-                onClick = { onSelected(DesktopGraphicsProfile.VIRGL) },
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VIRGL,
+            title = "VirGL",
+            detail = "Use Android OpenGL ES with a current Mesa virpipe driver inside Linux.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VIRGL_ANGLE,
+            title = "VirGL + ANGLE",
+            detail =
+                "Use VirGL through ANGLE and Android Vulkan with a current Mesa " +
+                    "virpipe driver inside Linux.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+            title = "Venus (experimental)",
+            detail =
+                "Accelerate Vulkan apps through Android’s driver. OpenGL stays on software " +
+                    "rendering; X11 presentation uses Mesa’s copy path.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        if ((selected == DesktopGraphicsProfile.VIRGL ||
+                selected == DesktopGraphicsProfile.VIRGL_ANGLE) &&
+            support[selected]?.available == true
+        ) {
+            HorizontalDivider(color = UdroidLine)
+            Text(
+                "VirGL server mode",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                color = UdroidInk,
+                style = MaterialTheme.typography.titleSmall,
             )
             GraphicsProfileRow(
-                title = "VirGL + ANGLE",
-                detail =
-                    "Use VirGL through ANGLE and Android Vulkan with a current Mesa " +
-                        "virpipe driver inside Linux.",
-                selected = selected == DesktopGraphicsProfile.VIRGL_ANGLE,
+                title = "Automatic",
+                detail = "Use the compatible mode for distribution Mesa packages.",
+                selected = virglServerMode == VirglServerMode.AUTOMATIC,
                 enabled = true,
-                onClick = { onSelected(DesktopGraphicsProfile.VIRGL_ANGLE) },
+                onClick = { onVirglServerModeSelected(VirglServerMode.AUTOMATIC) },
             )
             GraphicsProfileRow(
-                title = "Venus (experimental)",
-                detail =
-                    "Accelerate Vulkan apps through Android’s driver. OpenGL stays on software " +
-                        "rendering; X11 presentation uses Mesa’s copy path.",
-                selected = selected == DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+                title = "Compatibility",
+                detail = "Stable protocol for Ubuntu, Debian, Arch, and similar guests.",
+                selected = virglServerMode == VirglServerMode.COMPATIBILITY,
                 enabled = true,
-                onClick = { onSelected(DesktopGraphicsProfile.VENUS_EXPERIMENTAL) },
+                onClick = { onVirglServerModeSelected(VirglServerMode.COMPATIBILITY) },
             )
-            if (selected == DesktopGraphicsProfile.VIRGL ||
-                selected == DesktopGraphicsProfile.VIRGL_ANGLE
-            ) {
-                HorizontalDivider(color = UdroidLine)
-                Text(
-                    "VirGL server mode",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    color = UdroidInk,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                GraphicsProfileRow(
-                    title = "Automatic",
-                    detail = "Use the compatible mode for distribution Mesa packages.",
-                    selected = virglServerMode == VirglServerMode.AUTOMATIC,
-                    enabled = true,
-                    onClick = { onVirglServerModeSelected(VirglServerMode.AUTOMATIC) },
-                )
-                GraphicsProfileRow(
-                    title = "Compatibility",
-                    detail = "Stable protocol for Ubuntu, Debian, Arch, and similar guests.",
-                    selected = virglServerMode == VirglServerMode.COMPATIBILITY,
-                    enabled = true,
-                    onClick = {
-                        onVirglServerModeSelected(VirglServerMode.COMPATIBILITY)
-                    },
-                )
-                GraphicsProfileRow(
-                    title = "Multi-client",
-                    detail = "Protocol 3 for patched Mesa; supports concurrent GL clients.",
-                    selected = virglServerMode == VirglServerMode.MULTI_CLIENT,
-                    enabled = true,
-                    onClick = { onVirglServerModeSelected(VirglServerMode.MULTI_CLIENT) },
-                )
-            }
+            GraphicsProfileRow(
+                title = "Multi-client",
+                detail = "Protocol 3 for patched Mesa; supports concurrent GL clients.",
+                selected = virglServerMode == VirglServerMode.MULTI_CLIENT,
+                enabled = true,
+                onClick = { onVirglServerModeSelected(VirglServerMode.MULTI_CLIENT) },
+            )
         }
         if (GFXSTREAM_PROFILE_ENABLED) {
-            val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
-            GraphicsProfileRow(
+            GraphicsProfileOption(
+                profile = DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
                 title = "gfxstream (experimental)",
-                detail =
-                    if (gfxstreamSupported) {
-                        "Use Android’s Vulkan driver"
-                    } else {
-                        "Available only on arm64 devices"
-                    },
-                selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
-                enabled = gfxstreamSupported,
-                onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+                detail = "Use Android’s Vulkan driver.",
+                selected = selected,
+                support = support,
+                onSelected = onSelected,
             )
         }
     }
+}
+
+@Composable
+private fun GraphicsProfileOption(
+    profile: DesktopGraphicsProfile,
+    title: String,
+    detail: String,
+    selected: DesktopGraphicsProfile,
+    support: Map<DesktopGraphicsProfile, GraphicsProfileSupport>,
+    onSelected: (DesktopGraphicsProfile) -> Unit,
+) {
+    val profileSupport = support[profile] ?: GraphicsProfileSupport(false, "Compatibility unknown")
+    if (!profileSupport.available && selected != profile) return
+    GraphicsProfileRow(
+        title = title,
+        detail = profileSupport.reason ?: detail,
+        selected = selected == profile,
+        enabled = profileSupport.available,
+        onClick = { onSelected(profile) },
+    )
 }
 
 @Composable

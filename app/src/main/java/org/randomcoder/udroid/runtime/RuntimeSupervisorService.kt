@@ -955,8 +955,12 @@ class RuntimeSupervisorService : Service() {
         profile: DesktopGraphicsProfile,
         virglServerMode: VirglServerMode,
         rootfs: File,
-    ): ProotLaunchProfile? =
-        when (profile) {
+    ): ProotLaunchProfile? {
+        val support = checkNotNull(GraphicsProfileCompatibilityProbe.run(this, rootfs)[profile])
+        check(support.available) {
+            support.reason ?: "The selected graphics driver is unavailable"
+        }
+        return when (profile) {
             DesktopGraphicsProfile.VIRGL,
             DesktopGraphicsProfile.VIRGL_ANGLE,
             DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
@@ -964,6 +968,7 @@ class RuntimeSupervisorService : Service() {
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
         }
+    }
 
     private fun closeVirglHost() {
         synchronized(virglHostLock) {
