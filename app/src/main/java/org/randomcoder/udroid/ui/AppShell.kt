@@ -276,6 +276,7 @@ fun UdroidApp(
                             .windowInsetsPadding(WindowInsets.safeDrawing),
                     snapshot = snapshot,
                     service = runtimeService,
+                    installedRootfses = installedRootfses,
                     onStart = onStart,
                     onStop = onStop,
                     onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
