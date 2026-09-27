@@ -2,9 +2,13 @@ package org.randomcoder.udroid.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -835,6 +839,10 @@ private fun ManagementPane(
                                 scanMessage = desktopScanMessage,
                                 audioConfiguration = audioConfiguration,
                                 audioConfigurationMessage = audioConfigurationMessage,
+                                childProcessRestriction =
+                                    capabilities.firstOrNull {
+                                        it.linuxProcessRestrictionActive
+                                    },
                                 resetAvailable =
                                     selectedRootfs.name in resettableRootfsNames ||
                                         selectedDistro != null,
@@ -864,6 +872,7 @@ private fun ManagementPane(
                                 onGraphicsProfileChanged = onGraphicsProfileChanged,
                                 onAudioOutputChanged = onAudioOutputChanged,
                                 onMicrophoneChanged = onMicrophoneChanged,
+                                onRefreshCapabilities = onRefresh,
                                 onStartDesktop = onStartDesktop,
                                 onStopTerminal = onStop,
                                 onStopDesktop = onStopDesktop,
@@ -1242,6 +1251,7 @@ private fun DevicePage(
     capabilities: List<CapabilityResult>,
     onRefresh: () -> Unit,
 ) {
+    val openDeveloperOptions = rememberDeveloperOptionsAction(onRefresh)
     LazyColumn(
         modifier =
             Modifier
@@ -1266,14 +1276,20 @@ private fun DevicePage(
             )
         }
         items(capabilities) { capability ->
-            CapabilityRow(capability)
+            CapabilityRow(
+                capability = capability,
+                onOpenDeveloperOptions = openDeveloperOptions,
+            )
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
 @Composable
-private fun CapabilityRow(capability: CapabilityResult) {
+private fun CapabilityRow(
+    capability: CapabilityResult,
+    onOpenDeveloperOptions: () -> Unit,
+) {
     val (icon, tint, label) =
         when (capability.status) {
             CapabilityStatus.PASS ->
@@ -1284,6 +1300,8 @@ private fun CapabilityRow(capability: CapabilityResult) {
                     if (capability.required) MaterialTheme.colorScheme.error else UdroidWarning,
                     if (capability.required) "Required" else "Unavailable",
                 )
+            CapabilityStatus.WARNING ->
+                Triple(Icons.Rounded.ErrorOutline, UdroidWarning, "Review")
             CapabilityStatus.INFO ->
                 Triple(Icons.Rounded.Info, MaterialTheme.colorScheme.tertiary, "Detected")
         }
@@ -1301,7 +1319,16 @@ private fun CapabilityRow(capability: CapabilityResult) {
             Text(capability.name, style = MaterialTheme.typography.titleMedium)
         },
         supportingContent = {
-            Text(capability.detail, style = MaterialTheme.typography.bodySmall)
+            Column {
+                Text(capability.detail, style = MaterialTheme.typography.bodySmall)
+                if (capability.showDeveloperOptionsAction) {
+                    TextButton(
+                        onClick = onOpenDeveloperOptions,
+                    ) {
+                        Text("Open Developer options")
+                    }
+                }
+            }
         },
         trailingContent = {
             Text(
@@ -1311,6 +1338,26 @@ private fun CapabilityRow(capability: CapabilityResult) {
             )
         },
     )
+}
+
+@Composable
+internal fun rememberDeveloperOptionsAction(onReturn: () -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            onReturn()
+        }
+    return {
+        runCatching {
+            launcher.launch(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+        }.onFailure {
+            Toast.makeText(
+                context,
+                "Developer options are unavailable on this device",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 }
 
 @Composable

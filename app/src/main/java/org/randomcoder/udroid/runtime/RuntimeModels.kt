@@ -23,6 +23,7 @@ data class RuntimeSnapshot(
 enum class CapabilityStatus {
     PASS,
     FAIL,
+    WARNING,
     INFO,
 }
 
@@ -31,4 +32,6 @@ data class CapabilityResult(
     val status: CapabilityStatus,
     val detail: String,
     val required: Boolean,
+    val showDeveloperOptionsAction: Boolean = false,
+    val linuxProcessRestrictionActive: Boolean = false,
 )

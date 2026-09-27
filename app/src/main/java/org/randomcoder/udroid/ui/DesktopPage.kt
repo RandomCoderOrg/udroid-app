@@ -2,18 +2,22 @@ package org.randomcoder.udroid.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Mouse
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,10 +29,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -51,15 +57,18 @@ fun DesktopPage(
     var controlsExpanded by remember {
         mutableStateOf(!settings.startControlsCollapsed)
     }
+    var inputPaletteVisible by rememberSaveable { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var displayView by remember { mutableStateOf<X11DisplayView?>(null) }
     BackHandler {
         if (showSettings) {
             showSettings = false
+        } else if (inputPaletteVisible) {
+            inputPaletteVisible = false
         } else {
             onExit()
         }
     }
-    var displayView by remember { mutableStateOf<X11DisplayView?>(null) }
     var status by remember { mutableStateOf("Waiting for the supervised X11 renderer") }
     val updateSettings: (X11Settings) -> Unit = { updated ->
         settings = settingsStore.save(updated)
@@ -96,6 +105,11 @@ fun DesktopPage(
         }
     }
 
+    val palettePrimary = MaterialTheme.colorScheme.primaryContainer.toArgb()
+    val paletteSurface = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
+    val paletteText = MaterialTheme.colorScheme.onSurface.toArgb()
+    val paletteOutline = MaterialTheme.colorScheme.outline.toArgb()
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Black,
@@ -104,8 +118,10 @@ fun DesktopPage(
             if (controlsExpanded) {
                 DesktopControlBar(
                     status = status,
+                    inputPaletteVisible = inputPaletteVisible,
                     onExit = onExit,
                     onKeyboard = { displayView?.showKeyboard() },
+                    onInputPalette = { inputPaletteVisible = !inputPaletteVisible },
                     onSettings = { showSettings = true },
                     onCollapse = { controlsExpanded = false },
                 )
@@ -115,19 +131,32 @@ fun DesktopPage(
                     onExpand = { controlsExpanded = true },
                 )
             }
-            AndroidView(
-                factory = { context ->
-                    X11DisplayView(context).also {
-                        it.applySettings(settings)
-                        displayView = it
-                    }
-                },
-                update = { it.applySettings(settings) },
+            Box(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .weight(1f),
-            )
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        X11DesktopHostView(context).also {
+                            it.displayView.applySettings(settings)
+                            displayView = it.displayView
+                        }
+                    },
+                    update = {
+                        it.displayView.applySettings(settings)
+                        it.setPaletteVisible(inputPaletteVisible)
+                        it.setPaletteColors(
+                            primaryContainer = palettePrimary,
+                            surfaceContainer = paletteSurface,
+                            onSurface = paletteText,
+                            outline = paletteOutline,
+                        )
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 
@@ -143,8 +172,10 @@ fun DesktopPage(
 @Composable
 private fun DesktopControlBar(
     status: String,
+    inputPaletteVisible: Boolean,
     onExit: () -> Unit,
     onKeyboard: () -> Unit,
+    onInputPalette: () -> Unit,
     onSettings: () -> Unit,
     onCollapse: () -> Unit,
 ) {
@@ -186,6 +217,23 @@ private fun DesktopControlBar(
                 imageVector = Icons.Rounded.Keyboard,
                 contentDescription = "Show keyboard",
                 tint = UdroidTerminalText,
+            )
+        }
+        IconButton(onClick = onInputPalette) {
+            Icon(
+                imageVector = Icons.Rounded.Mouse,
+                contentDescription =
+                    if (inputPaletteVisible) {
+                        "Hide mouse controls"
+                    } else {
+                        "Show mouse controls"
+                    },
+                tint =
+                    if (inputPaletteVisible) {
+                        UdroidTerminalGreen
+                    } else {
+                        UdroidTerminalText
+                    },
             )
         }
         IconButton(onClick = onSettings) {
