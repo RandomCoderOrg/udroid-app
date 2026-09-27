@@ -48,7 +48,10 @@ data class OciInstallEvent(
     val resumed: Boolean = false,
 )
 
-class OciRootfsInstaller(private val context: Context) {
+class OciRootfsInstaller(
+    private val context: Context,
+    private val onCommand: (List<String>) -> Unit = {},
+) {
     fun install(
         request: OciRootfsInstallRequest,
         onEvent: (OciInstallEvent) -> Unit = {},
@@ -129,7 +132,7 @@ class OciRootfsInstaller(private val context: Context) {
                     "Applying ${pull.layers.size} verified filesystem layer(s)",
                 ),
             )
-            OciLayerRootfsAssembler(context, runtime).assemble(
+            OciLayerRootfsAssembler(context, runtime, onCommand = onCommand).assemble(
                 layers = pull.layers,
                 destination = staging,
             ) { index, count, completed, total ->
@@ -157,7 +160,7 @@ class OciRootfsInstaller(private val context: Context) {
                     "Running the first-boot health probe",
                 ),
             )
-            ProotRootfsHealthCheck(context, runtime).check(staging)
+            ProotRootfsHealthCheck(context, runtime, onCommand).check(staging)
 
             writeMarker(
                 File(staging, RootfsInstallationPipeline.READY_MARKER),

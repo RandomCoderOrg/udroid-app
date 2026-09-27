@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
+import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.VirglServerMode
 
 internal enum class VirglHostBackend(
@@ -91,6 +92,8 @@ internal class VirglHostController(
     context: Context,
     val backend: VirglHostBackend,
     val serverMode: VirglServerMode,
+    private val journal: EventJournal,
+    private val bootId: String?,
     private val onUnexpectedExit: (VirglHostSnapshot) -> Unit = {},
 ) : AutoCloseable {
     private val appContext = context.applicationContext
@@ -123,13 +126,20 @@ internal class VirglHostController(
                 }
             socket.delete()
             logFile.delete()
+            val command =
+                AndroidExecutableCommand.create(
+                    runtime.executable,
+                    *VirglHostLaunch.arguments(socket, backend, serverMode).toTypedArray(),
+                )
+            journal.appendCommand(
+                component = "virgl",
+                command = command,
+                bootId = bootId,
+                fields = mapOf("working_directory" to graphicsDirectory.absolutePath),
+            )
             val launched =
-                ProcessBuilder(
-                    AndroidExecutableCommand.create(
-                        runtime.executable,
-                        *VirglHostLaunch.arguments(socket, backend, serverMode).toTypedArray(),
-                    ),
-                ).directory(graphicsDirectory)
+                ProcessBuilder(command)
+                    .directory(graphicsDirectory)
                     .redirectErrorStream(true)
                     .redirectOutput(logFile)
                     .apply {

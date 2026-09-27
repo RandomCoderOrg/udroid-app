@@ -421,9 +421,16 @@ class RuntimeSupervisorService : Service() {
             return
         }
         if (application.terminal) {
+            val arguments = listOf(application.executable) + application.arguments
             val command =
-                (listOf(application.executable) + application.arguments)
+                arguments
                     .joinToString(" ", transform = ::shellQuote)
+            app.journal.appendCommand(
+                component = "linux-app",
+                command = arguments,
+                bootId = snapshot.bootId,
+                fields = mapOf("desktop_id" to application.id, "transport" to "terminal"),
+            )
             writeToTerminal("$command\n")
             app.journal.append(
                 component = "linux-app",
@@ -480,6 +487,16 @@ class RuntimeSupervisorService : Service() {
                                 audioEndpoint = audioController.endpoint(),
                                 launchProfile = launchProfile,
                             )
+                        app.journal.appendCommand(
+                            component = "linux-app",
+                            command = launch.command,
+                            bootId = snapshot.bootId,
+                            fields =
+                                mapOf(
+                                    "desktop_id" to application.id,
+                                    "working_directory" to launch.workingDirectory.absolutePath,
+                                ),
+                        )
                         val process =
                             ProcessBuilder(launch.command)
                                 .directory(launch.workingDirectory)
@@ -638,7 +655,11 @@ class RuntimeSupervisorService : Service() {
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
-                                    GfxstreamHostController(this) { failure ->
+                                    GfxstreamHostController(
+                                        this,
+                                        app.journal,
+                                        runtime.bootId,
+                                    ) { failure ->
                                         handleGfxstreamHostExit(host, failure)
                                     }
                                 check(ownedGfxstreamHost.compareAndSet(null, host)) {
@@ -671,6 +692,16 @@ class RuntimeSupervisorService : Service() {
                         File(cacheDir, "desktop-process-$launchToken.pid").apply {
                             delete()
                         }
+                    app.journal.appendCommand(
+                        component = "desktop",
+                        command = launch.command,
+                        bootId = runtime.bootId,
+                        fields =
+                            mapOf(
+                                "environment_id" to request.environment.id,
+                                "working_directory" to launch.workingDirectory.absolutePath,
+                            ),
+                    )
                     val process =
                         ProcessBuilder(wrapWithPidFile(launch.command, pidFile))
                             .directory(launch.workingDirectory)
@@ -937,9 +968,16 @@ class RuntimeSupervisorService : Service() {
                         existing.close()
                     }
                     lateinit var host: VirglHostController
-                    host = VirglHostController(this, backend, serverMode) { failure ->
-                        handleVirglHostExit(backend, host, failure)
-                    }
+                    host =
+                        VirglHostController(
+                            this,
+                            backend,
+                            serverMode,
+                            app.journal,
+                            app.runtimeState.current().bootId,
+                        ) { failure ->
+                            handleVirglHostExit(backend, host, failure)
+                        }
                     ownedVirglHosts[backend] = host
                     try {
                         VirglProotLaunchProfile(host.start(), backend, guestRuntime)
@@ -1215,6 +1253,16 @@ class RuntimeSupervisorService : Service() {
             )
         }.mapCatching { launch ->
             configureTerminalColors()
+            app.journal.appendCommand(
+                component = "terminal",
+                command = launch.arguments.toList(),
+                bootId = bootId,
+                fields =
+                    mapOf(
+                        "rootfs" to launch.rootfs.name,
+                        "working_directory" to launch.workingDirectory,
+                    ),
+            )
             val session =
                 TerminalSession(
                     launch.executable,

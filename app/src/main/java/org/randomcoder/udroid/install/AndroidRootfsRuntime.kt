@@ -88,6 +88,7 @@ class ProotTarExtractor(
     private val stripComponents: Int = 0,
     private val excludeOciWhiteouts: Boolean = false,
     private val onDiagnostic: (String) -> Unit = {},
+    private val onCommand: (List<String>) -> Unit = {},
 ) : RootfsExtractor {
     override fun extract(
         archive: File,
@@ -136,6 +137,7 @@ class ProotTarExtractor(
             File(context.cacheDir, "proot").apply {
                 check(mkdirs() || isDirectory) { "Could not create PRoot temporary storage" }
             }
+        onCommand(command)
         val process =
             ProcessBuilder(command)
                 .directory(context.filesDir)
@@ -392,6 +394,7 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
 class ProotRootfsHealthCheck(
     private val context: Context,
     private val runtime: ProotRuntime,
+    private val onCommand: (List<String>) -> Unit = {},
 ) : RootfsHealthCheck {
     override fun check(rootfs: File) {
         val shell =
@@ -402,22 +405,23 @@ class ProotRootfsHealthCheck(
         check(File(rootfs, "usr/bin/env").let { it.isFile || it.isSymbolicLink() }) {
             "Extracted rootfs has no /usr/bin/env"
         }
-        val process =
-            ProcessBuilder(
-                AndroidExecutableCommand.create(
-                    runtime.executable,
-                    *buildArguments(
-                        rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
-                        shellPath = "/${shell.relativeTo(rootfs).path}",
-                        mounts =
-                            ProotMountResolver.resolve(
-                                context = context,
-                                rootfs = rootfs,
-                                profile = ProotMountProfile(),
-                            ),
-                    ),
+        val command =
+            AndroidExecutableCommand.create(
+                runtime.executable,
+                *buildArguments(
+                    rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
+                    shellPath = "/${shell.relativeTo(rootfs).path}",
+                    mounts =
+                        ProotMountResolver.resolve(
+                            context = context,
+                            rootfs = rootfs,
+                            profile = ProotMountProfile(),
+                        ),
                 ),
-            ).apply {
+            )
+        onCommand(command)
+        val process =
+            ProcessBuilder(command).apply {
                 directory(context.filesDir)
                 redirectErrorStream(true)
                 environment().remove("LD_PRELOAD")

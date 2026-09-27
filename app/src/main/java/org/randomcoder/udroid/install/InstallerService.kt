@@ -371,7 +371,9 @@ class InstallerService : Service() {
         val progress = OciForegroundProgress(work)
         try {
             val result =
-                OciRootfsInstaller(this).install(
+                OciRootfsInstaller(this) { command ->
+                    app.journal.appendCommand("installer", command, work.operationId)
+                }.install(
                     request =
                         OciRootfsInstallRequest(
                             reference = work.reference,
@@ -469,9 +471,15 @@ class InstallerService : Service() {
                                 bootId = operationId,
                             )
                         },
+                        onCommand = { command ->
+                            app.journal.appendCommand("installer", command, operationId)
+                        },
                     ),
                 configurator = AndroidRootfsConfigurator(),
-                healthCheck = ProotRootfsHealthCheck(this, prootRuntime),
+                healthCheck =
+                    ProotRootfsHealthCheck(this, prootRuntime) { command ->
+                        app.journal.appendCommand("installer", command, operationId)
+                    },
             )
         val result =
             pipeline.execute(

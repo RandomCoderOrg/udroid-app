@@ -58,7 +58,11 @@ class GfxstreamPresenterProbeActivity : Activity() {
             )
         if (externalProducer) {
             hostController =
-                GfxstreamHostController(this).also {
+                GfxstreamHostController(
+                    this,
+                    (application as UdroidApplication).journal,
+                    PROBE_BOOT_ID,
+                ).also {
                     it.startAsync(
                         presenter.transportSocketFile(),
                         contractTrace = contractTrace,

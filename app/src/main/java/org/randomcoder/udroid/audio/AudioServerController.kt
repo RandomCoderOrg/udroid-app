@@ -103,6 +103,12 @@ class AudioServerController(
                     "--dl-search-path=${runtime.moduleDirectory.absolutePath}",
                     "--file=${configurationFile.absolutePath}",
                 )
+            journal.appendCommand(
+                component = "audio",
+                command = command,
+                bootId = bootId,
+                fields = mapOf("working_directory" to appContext.filesDir.absolutePath),
+            )
             val process =
                 ProcessBuilder(command)
                     .directory(appContext.filesDir)

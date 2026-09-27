@@ -2,6 +2,7 @@ package org.randomcoder.udroid.gfxstream
 
 import android.content.Context
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
+import org.randomcoder.udroid.runtime.EventJournal
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,6 +61,8 @@ internal object GfxstreamHostLaunch {
 /** Owns one optional gfxstream host process for a selected runtime consumer. */
 class GfxstreamHostController(
     context: Context,
+    private val journal: EventJournal,
+    private val bootId: String?,
     private val onUnexpectedExit: (GfxstreamHostSnapshot) -> Unit = {},
 ) : AutoCloseable {
     private val appContext = context.applicationContext
@@ -106,6 +109,12 @@ class GfxstreamHostController(
                     runtime.executable,
                     *GfxstreamHostLaunch.arguments(gpuSocket, presenterSocket).toTypedArray(),
                 )
+            journal.appendCommand(
+                component = "gfxstream",
+                command = command,
+                bootId = bootId,
+                fields = mapOf("working_directory" to graphicsDirectory.absolutePath),
+            )
             val launched =
                 ProcessBuilder(command)
                     .directory(graphicsDirectory)
