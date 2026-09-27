@@ -319,12 +319,18 @@ class RuntimeSupervisorService : Service() {
                             .firstOrNull { it.name == rootfsName }
                             ?.directory
                             ?: error("Linux system $rootfsName is not installed or is not ready")
+                    val graphicsProfile =
+                        desktopConfigurationStore.loadGraphicsProfile(rootfs.name)
+                    val virglServerMode =
+                        desktopConfigurationStore.loadVirglServerMode(rootfs.name)
                     ProotTerminalLaunchBuilder.create(
                         context = this,
                         runtime = ProotRuntimeInstaller.install(this),
                         rootfs = rootfs,
                         x11SocketDirectory = x11SocketDirectory,
                         audioEndpoint = audioEndpoint,
+                        launchProfile =
+                            graphicsLaunchProfile(graphicsProfile, virglServerMode, rootfs),
                     )
                 }
             mainHandler.post {
