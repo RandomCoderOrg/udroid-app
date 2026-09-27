@@ -15,8 +15,12 @@ internal data class VirglAngleRuntime(
     val libraryDirectory: File,
 )
 
+internal data class VenusGuestRuntime(
+    val directory: File,
+)
+
 internal object VirglHostRuntimeInstaller {
-    const val VERSION = "1.3.0-1-venus2"
+    const val VERSION = "1.3.0-6"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "VirGL host",
@@ -75,4 +79,53 @@ internal object VirglAngleRuntimeInstaller {
             libraryDirectory =
                 File(VerifiedRuntimeAssetInstaller.install(context, bundle), "lib"),
         )
+}
+
+internal object VenusGuestRuntimeInstaller {
+    const val GUEST_DIRECTORY = "/opt/udroid/venus-mesa"
+    const val VERSION = "26.1.5-jammy"
+    private val bundle =
+        VerifiedRuntimeAssetBundle(
+            name = "Venus Mesa runtime for Ubuntu 22.04 and 24.04",
+            assetDirectory = "venus-mesa",
+            destinationPrefix = "venus-mesa",
+            version = VERSION,
+            entries =
+                listOf(
+                    "lib/dri/zink_dri.so",
+                    "lib/libEGL_mesa.so.0",
+                    "lib/libGLX_mesa.so.0",
+                    "lib/libgallium-26.1.5.so",
+                    "lib/libvulkan_virtio.so",
+                    "share/doc/license.rst",
+                    "share/drirc.d/00-mesa-defaults.conf",
+                    "share/glvnd/egl_vendor.d/50_mesa.json",
+                    "share/vulkan/icd.d/virtio_icd.aarch64.json",
+                ),
+            metadataKeys = setOf("mesa_commit"),
+        )
+
+    fun install(
+        context: Context,
+        rootfs: File,
+    ): VenusGuestRuntime? {
+        if (!requiresBundledMesa(rootfs)) return null
+        val directory = VerifiedRuntimeAssetInstaller.install(context, bundle)
+        return VenusGuestRuntime(directory)
+    }
+
+    internal fun requiresBundledMesa(rootfs: File): Boolean {
+        val values =
+            runCatching {
+                File(rootfs, "etc/os-release").useLines { lines ->
+                    lines
+                        .mapNotNull { line ->
+                            line.split('=', limit = 2).takeIf { it.size == 2 }
+                        }.associate { (key, value) ->
+                            key to value.removeSurrounding("\"").removeSurrounding("'")
+                        }
+                }
+            }.getOrNull() ?: return false
+        return values["ID"] == "ubuntu" && values["VERSION_ID"] in setOf("22.04", "24.04")
+    }
 }

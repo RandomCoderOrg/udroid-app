@@ -44,6 +44,7 @@ import org.randomcoder.udroid.virgl.VirglHostController
 import org.randomcoder.udroid.virgl.VirglHostBackend
 import org.randomcoder.udroid.virgl.VirglHostSnapshot
 import org.randomcoder.udroid.virgl.VirglProotLaunchProfile
+import org.randomcoder.udroid.virgl.VenusGuestRuntimeInstaller
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
 import java.io.File
@@ -467,6 +468,7 @@ class RuntimeSupervisorService : Service() {
                             graphicsLaunchProfile(
                                 profile,
                                 desktopConfigurationStore.loadVirglServerMode(rootfsName),
+                                rootfs,
                             )
                         val launch =
                             ProotApplicationLaunchBuilder.create(
@@ -631,6 +633,7 @@ class RuntimeSupervisorService : Service() {
                                 virglLaunchProfile(
                                     request.configuration.graphicsProfile,
                                     request.configuration.virglServerMode,
+                                    rootfs,
                                 )
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
@@ -912,15 +915,22 @@ class RuntimeSupervisorService : Service() {
     private fun virglLaunchProfile(
         profile: DesktopGraphicsProfile,
         requestedMode: VirglServerMode,
+        rootfs: File,
     ): VirglProotLaunchProfile =
         synchronized(virglHostLock) {
             val backend = checkNotNull(VirglHostBackend.from(profile))
             val serverMode = backend.resolveServerMode(requestedMode)
+            val guestRuntime =
+                if (backend == VirglHostBackend.VENUS) {
+                    VenusGuestRuntimeInstaller.install(this, rootfs)
+                } else {
+                    null
+                }
             val existing = ownedVirglHosts[backend]
             existing
                 ?.takeIf { it.serverMode == serverMode }
                 ?.currentSocket()
-                ?.let { VirglProotLaunchProfile(it, backend) }
+                ?.let { VirglProotLaunchProfile(it, backend, guestRuntime) }
                 ?: run {
                     if (existing != null) {
                         ownedVirglHosts.remove(backend, existing)
@@ -932,7 +942,7 @@ class RuntimeSupervisorService : Service() {
                     }
                     ownedVirglHosts[backend] = host
                     try {
-                        VirglProotLaunchProfile(host.start(), backend)
+                        VirglProotLaunchProfile(host.start(), backend, guestRuntime)
                     } catch (error: Throwable) {
                         ownedVirglHosts.remove(backend, host)
                         host.close()
@@ -944,12 +954,13 @@ class RuntimeSupervisorService : Service() {
     private fun graphicsLaunchProfile(
         profile: DesktopGraphicsProfile,
         virglServerMode: VirglServerMode,
+        rootfs: File,
     ): ProotLaunchProfile? =
         when (profile) {
             DesktopGraphicsProfile.VIRGL,
             DesktopGraphicsProfile.VIRGL_ANGLE,
             DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
-            -> virglLaunchProfile(profile, virglServerMode)
+            -> virglLaunchProfile(profile, virglServerMode, rootfs)
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
         }
@@ -1195,7 +1206,7 @@ class RuntimeSupervisorService : Service() {
                 rootfs = rootfs,
                 x11SocketDirectory = x11SocketDirectory,
                 audioEndpoint = audioController.endpoint(),
-                launchProfile = graphicsLaunchProfile(graphicsProfile, virglServerMode),
+                launchProfile = graphicsLaunchProfile(graphicsProfile, virglServerMode, rootfs),
             )
         }.mapCatching { launch ->
             configureTerminalColors()

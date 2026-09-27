@@ -3,6 +3,8 @@ package org.randomcoder.udroid.virgl
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.randomcoder.udroid.runtime.VirglServerMode
 
@@ -166,8 +168,26 @@ class VirglHostLaunchTest {
     @Test
     fun `selects Venus vtest with the X11 copy presentation path`() {
         val socket = Files.createTempFile("udroid-venus", ".sock").toFile()
-        val profile = VirglProotLaunchProfile(socket, VirglHostBackend.VENUS)
+        val runtime = Files.createTempDirectory("udroid-venus-runtime").toFile()
+        val profile =
+            VirglProotLaunchProfile(
+                socket,
+                VirglHostBackend.VENUS,
+                VenusGuestRuntime(runtime),
+            )
+        val bindings = mutableListOf<String>()
 
+        profile.addBindings(bindings)
+
+        assertEquals(
+            listOf(
+                "-b",
+                "${socket.absolutePath}:/tmp/.virgl_test",
+                "-b",
+                "${runtime.absolutePath}:/opt/udroid/venus-mesa",
+            ),
+            bindings,
+        )
         assertEquals(
             listOf(
                 "/usr/bin/env",
@@ -179,9 +199,32 @@ class VirglHostLaunchTest {
                 "MESA_LOADER_DRIVER_OVERRIDE",
                 "VN_DEBUG=vtest",
                 "MESA_VK_WSI_DEBUG=sw",
+                "LD_LIBRARY_PATH=/opt/udroid/venus-mesa/lib:" +
+                    "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu",
+                "LIBGL_DRIVERS_PATH=/opt/udroid/venus-mesa/lib/dri",
+                "VK_ICD_FILENAMES=/opt/udroid/venus-mesa/share/vulkan/icd.d/" +
+                    "virtio_icd.aarch64.json",
+                "__EGL_VENDOR_LIBRARY_FILENAMES=/opt/udroid/venus-mesa/share/glvnd/" +
+                    "egl_vendor.d/50_mesa.json",
                 "/usr/bin/vkcube",
             ),
             profile.wrapGuestCommand(listOf("/usr/bin/vkcube")),
         )
+    }
+
+    @Test
+    fun `uses bundled Venus Mesa for supported Ubuntu releases`() {
+        val rootfs = Files.createTempDirectory("udroid-venus-rootfs").toFile()
+        val osRelease = rootfs.resolve("etc/os-release")
+        requireNotNull(osRelease.parentFile).mkdirs()
+        osRelease.writeText("ID=ubuntu\nVERSION_ID=\"22.04\"\n")
+
+        assertTrue(VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs))
+
+        osRelease.writeText("ID=ubuntu\nVERSION_ID=\"24.04\"\n")
+        assertTrue(VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs))
+
+        osRelease.writeText("ID=ubuntu\nVERSION_ID=\"20.04\"\n")
+        assertFalse(VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs))
     }
 }
