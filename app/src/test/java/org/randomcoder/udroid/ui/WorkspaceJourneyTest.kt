@@ -47,6 +47,7 @@ class WorkspaceJourneyTest {
         assertFalse(journey.destinations.contains(UdroidDestination.SYSTEM))
         assertFalse(journey.destinations.contains(UdroidDestination.INSTALL))
         assertFalse(journey.destinations.contains(UdroidDestination.DESKTOP))
+        assertFalse(journey.destinations.contains(UdroidDestination.ENVIRONMENT))
     }
 
     @Test
@@ -151,6 +152,14 @@ class WorkspaceJourneyTest {
             navigationMotion(UdroidDestination.SYSTEM, UdroidDestination.MOUNTS),
         )
         assertEquals(
+            NavigationMotion.FORWARD,
+            navigationMotion(UdroidDestination.SYSTEM, UdroidDestination.ENVIRONMENT),
+        )
+        assertEquals(
+            NavigationMotion.BACK,
+            navigationMotion(UdroidDestination.ENVIRONMENT, UdroidDestination.SYSTEM),
+        )
+        assertEquals(
             NavigationMotion.BACK,
             navigationMotion(UdroidDestination.MOUNTS, UdroidDestination.SYSTEM),
         )
@@ -177,6 +186,7 @@ class WorkspaceJourneyTest {
         assertEquals(UdroidDestination.DISTROS, journey.destination)
         assertFalse(journey.destinations.contains(UdroidDestination.MOUNTS))
         assertFalse(journey.destinations.contains(UdroidDestination.MOUNT_EDITOR))
+        assertFalse(journey.destinations.contains(UdroidDestination.ENVIRONMENT))
     }
 
     @Test

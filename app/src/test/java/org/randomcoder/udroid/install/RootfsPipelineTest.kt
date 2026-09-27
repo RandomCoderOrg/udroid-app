@@ -145,13 +145,11 @@ class RootfsPipelineTest {
     }
 
     @Test
-    fun `android compatibility configuration creates missing proc files`() {
+    fun `android compatibility configuration creates guest configuration`() {
         val rootfs = Files.createTempDirectory("udroid-configurator-test").toFile()
 
         AndroidRootfsConfigurator().configure(rootfs)
 
-        assertTrue(File(rootfs, "proc/.version").isFile)
-        assertTrue(File(rootfs, "proc/.uptime").isFile)
         assertTrue(File(rootfs, "etc/hosts").readText().contains("localhost"))
         assertTrue(File(rootfs, "etc/profile.d/udroid.sh").canExecute())
     }

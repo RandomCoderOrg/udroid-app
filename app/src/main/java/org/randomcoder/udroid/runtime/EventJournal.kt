@@ -38,6 +38,22 @@ class EventJournal(context: Context) {
         activeFile.appendText(payload.toString() + "\n")
     }
 
+    fun appendCommand(
+        component: String,
+        command: List<String>,
+        bootId: String?,
+        fields: Map<String, Any?> = emptyMap(),
+    ) {
+        append(
+            component = component,
+            severity = "debug",
+            event = "command_launch",
+            message = formatCommandForLog(command),
+            bootId = bootId,
+            fields = fields,
+        )
+    }
+
     @Synchronized
     fun tail(limit: Int = 80): List<String> {
         if (!activeFile.exists()) return emptyList()
@@ -52,5 +68,11 @@ class EventJournal(context: Context) {
 
     private companion object {
         const val MAX_BYTES = 1024L * 1024L
+    }
+}
+
+internal fun formatCommandForLog(command: List<String>): String {
+    return command.joinToString(" ") { argument ->
+        "'${argument.replace("'", "'\"'\"'")}'"
     }
 }

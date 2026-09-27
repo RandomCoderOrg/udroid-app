@@ -37,6 +37,11 @@ enum class DesktopGraphicsProfile(
     val storageValue: String,
 ) {
     STANDARD("standard"),
+    SOFTWARE("software"),
+    ZINK("zink"),
+    VIRGL("virgl"),
+    VIRGL_ANGLE("virgl-angle"),
+    VENUS_EXPERIMENTAL("venus-experimental"),
     GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 
@@ -49,12 +54,39 @@ enum class DesktopGraphicsProfile(
     }
 }
 
+enum class VirglServerMode(
+    val storageValue: String,
+) {
+    AUTOMATIC("automatic"),
+    COMPATIBILITY("compatibility"),
+    MULTI_CLIENT("multi-client"),
+    ;
+
+    val multiClients: Boolean
+        get() = this == MULTI_CLIENT
+
+    companion object {
+        fun fromStorage(value: String?): VirglServerMode =
+            entries.firstOrNull { it.storageValue == value } ?: AUTOMATIC
+    }
+}
+
 data class DesktopConfiguration(
     val environmentId: String?,
     val compositingEnabled: Boolean,
     val touchScaleEnabled: Boolean,
     val graphicsProfile: DesktopGraphicsProfile = DesktopGraphicsProfile.STANDARD,
-)
+    val virglServerMode: VirglServerMode = VirglServerMode.AUTOMATIC,
+) {
+    val supportsCompositedDesktop: Boolean
+        get() =
+            (graphicsProfile != DesktopGraphicsProfile.VIRGL &&
+                graphicsProfile != DesktopGraphicsProfile.VIRGL_ANGLE) ||
+                virglServerMode == VirglServerMode.MULTI_CLIENT
+
+    val effectiveCompositingEnabled: Boolean
+        get() = compositingEnabled && supportsCompositedDesktop
+}
 
 enum class DesktopSessionPhase {
     STOPPED,
@@ -112,6 +144,10 @@ class DesktopConfigurationStore(context: Context) {
                 DesktopGraphicsProfile.fromStorage(
                     preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
                 ),
+            virglServerMode =
+                VirglServerMode.fromStorage(
+                    preferences.getString(key(rootfsName, KEY_VIRGL_SERVER_MODE), null),
+                ),
         )
     }
 
@@ -137,12 +173,25 @@ class DesktopConfigurationStore(context: Context) {
                 ).putString(
                     key(rootfsName, KEY_GRAPHICS_PROFILE),
                     configuration.graphicsProfile.storageValue,
+                ).putString(
+                    key(rootfsName, KEY_VIRGL_SERVER_MODE),
+                    configuration.virglServerMode.storageValue,
                 ).commit(),
         ) {
             "Could not save desktop settings for $rootfsName"
         }
         return configuration
     }
+
+    fun loadGraphicsProfile(rootfsName: String): DesktopGraphicsProfile =
+        DesktopGraphicsProfile.fromStorage(
+            preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
+        )
+
+    fun loadVirglServerMode(rootfsName: String): VirglServerMode =
+        VirglServerMode.fromStorage(
+            preferences.getString(key(rootfsName, KEY_VIRGL_SERVER_MODE), null),
+        )
 
     fun remove(rootfsName: String) {
         val prefix = "$rootfsName:"
@@ -172,6 +221,7 @@ class DesktopConfigurationStore(context: Context) {
         const val KEY_COMPOSITING = "compositing"
         const val KEY_TOUCH_SCALE = "touch-scale"
         const val KEY_GRAPHICS_PROFILE = "graphics-profile"
+        const val KEY_VIRGL_SERVER_MODE = "virgl-server-mode"
     }
 }
 

@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.file.Files
 
 class ProotMountProfilesTest {
     @Test
@@ -96,6 +97,58 @@ class ProotMountProfilesTest {
             )
         assertEquals(2, mounts.count { it.guestTarget == "/tmp/.X11-unix" })
         assertEquals("runtime:x11", mounts.last().origin)
+    }
+
+    @Test
+    fun `runtime shared memory mount targets dev shm`() {
+        val mount = ProotMountResolver.sharedMemoryMount("/data/user/0/udroid/no_backup/proot/shm")
+
+        assertEquals("/data/user/0/udroid/no_backup/proot/shm:/dev/shm", mount.argument)
+        assertEquals("runtime:shm", mount.origin)
+    }
+
+    @Test
+    fun `compatibility files only replace unreadable Android data`() {
+        val directory = Files.createTempDirectory("udroid-sysdata").toFile()
+        val victim = Files.createTempFile("udroid-sysdata-victim", null).toFile().apply {
+            writeText("preserve")
+        }
+        Files.createSymbolicLink(directory.resolve("pci_devices").toPath(), victim.toPath())
+
+        val mounts =
+            ProotMountResolver.prepareCompatibilityMounts(directory) { path ->
+                path == "/proc/version"
+            }
+
+        assertFalse(mounts.any { it.guestTarget == "/proc/version" })
+        assertEquals("", mounts.single { it.guestTarget == "/proc/bus/pci/devices" }.let {
+            java.io.File(it.hostSource).readText()
+        })
+        assertEquals("preserve", victim.readText())
+        assertFalse(Files.isSymbolicLink(directory.resolve("pci_devices").toPath()))
+        assertEquals(
+            "4096\n",
+            mounts.single { it.guestTarget.endsWith("max_user_watches") }.let {
+                java.io.File(it.hostSource).readText()
+            },
+        )
+        assertTrue(mounts.all { it.origin == "runtime:compatibility" })
+    }
+
+    @Test
+    fun `parent custom mount shadows automatic child mounts`() {
+        assertTrue(
+            ProotMountResolver.isShadowedByCustomTarget(
+                "/proc/bus/pci/devices",
+                setOf("/proc//"),
+            ),
+        )
+        assertFalse(
+            ProotMountResolver.isShadowedByCustomTarget(
+                "/proc/bus/pci/devices",
+                setOf("/proc/other"),
+            ),
+        )
     }
 
     @Test

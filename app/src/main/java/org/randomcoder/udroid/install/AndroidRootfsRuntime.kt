@@ -5,8 +5,12 @@ import android.os.Build
 import android.os.StatFs
 import org.randomcoder.udroid.runtime.AndroidExecutableCommand
 import org.randomcoder.udroid.runtime.ANDROID_PROOT_BIND_MOUNTS
+import org.randomcoder.udroid.runtime.ProotMountProfile
+import org.randomcoder.udroid.runtime.ProotMountResolver
 import org.randomcoder.udroid.runtime.ProotPathContract
+import org.randomcoder.udroid.runtime.ResolvedProotMount
 import org.randomcoder.udroid.runtime.addAndroidProotBindMounts
+import org.randomcoder.udroid.runtime.addProotBindMounts
 import org.tukaani.xz.XZInputStream
 import java.io.BufferedReader
 import java.io.File
@@ -84,6 +88,7 @@ class ProotTarExtractor(
     private val stripComponents: Int = 0,
     private val excludeOciWhiteouts: Boolean = false,
     private val onDiagnostic: (String) -> Unit = {},
+    private val onCommand: (List<String>) -> Unit = {},
 ) : RootfsExtractor {
     override fun extract(
         archive: File,
@@ -132,6 +137,7 @@ class ProotTarExtractor(
             File(context.cacheDir, "proot").apply {
                 check(mkdirs() || isDirectory) { "Could not create PRoot temporary storage" }
             }
+        onCommand(command)
         val process =
             ProcessBuilder(command)
                 .directory(context.filesDir)
@@ -307,12 +313,6 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                 "Could not prepare /$it"
             }
         }
-        File(rootfs, "proc").apply {
-            check(setReadable(true, true) && setWritable(true, true) && setExecutable(true, true)) {
-                "Could not prepare rootfs /proc compatibility directory"
-            }
-        }
-
         replaceFile(
             File(rootfs, "etc/hosts"),
             """
@@ -325,15 +325,6 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
             File(rootfs, "etc/resolv.conf"),
             "nameserver 1.1.1.1\nnameserver 8.8.8.8\n",
         )
-        replaceFile(
-            File(rootfs, "proc/.version"),
-            "Linux version 5.4.0-udroid-faked (udroid@android)\n",
-        )
-        replaceFile(File(rootfs, "proc/.uptime"), "0.00 0.00\n")
-        replaceFile(File(rootfs, "proc/.loadavg"), "0.00 0.00 0.00 1/1 1\n")
-        replaceFile(File(rootfs, "proc/.stat"), "cpu  1 0 1 1 0 0 0 0 0 0\n")
-        replaceFile(File(rootfs, "proc/.vmstat"), "nr_free_pages 0\n")
-
         replaceFile(
             File(rootfs, "etc/profile.d/udroid.sh"),
             """
@@ -403,6 +394,7 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
 class ProotRootfsHealthCheck(
     private val context: Context,
     private val runtime: ProotRuntime,
+    private val onCommand: (List<String>) -> Unit = {},
 ) : RootfsHealthCheck {
     override fun check(rootfs: File) {
         val shell =
@@ -413,16 +405,23 @@ class ProotRootfsHealthCheck(
         check(File(rootfs, "usr/bin/env").let { it.isFile || it.isSymbolicLink() }) {
             "Extracted rootfs has no /usr/bin/env"
         }
-        val process =
-            ProcessBuilder(
-                AndroidExecutableCommand.create(
-                    runtime.executable,
-                    *buildArguments(
-                        rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
-                        shellPath = "/${shell.relativeTo(rootfs).path}",
-                    ),
+        val command =
+            AndroidExecutableCommand.create(
+                runtime.executable,
+                *buildArguments(
+                    rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
+                    shellPath = "/${shell.relativeTo(rootfs).path}",
+                    mounts =
+                        ProotMountResolver.resolve(
+                            context = context,
+                            rootfs = rootfs,
+                            profile = ProotMountProfile(),
+                        ),
                 ),
-            ).apply {
+            )
+        onCommand(command)
+        val process =
+            ProcessBuilder(command).apply {
                 directory(context.filesDir)
                 redirectErrorStream(true)
                 environment().remove("LD_PRELOAD")
@@ -438,12 +437,15 @@ class ProotRootfsHealthCheck(
             }.start()
         val output = process.inputStream.bufferedReader().use { it.readText().trim() }
         val exitCode = process.waitFor()
-        check(exitCode == 0) {
-            if (output.isBlank()) {
-                "Rootfs health check failed with exit code $exitCode"
-            } else {
-                "Rootfs health check failed: ${output.lineSequence().last()}"
-            }
+        if (exitCode != 0) {
+            runCatching { ProotMountResolver.removeRuntime(context, rootfs.name) }
+            error(
+                if (output.isBlank()) {
+                    "Rootfs health check failed with exit code $exitCode"
+                } else {
+                    "Rootfs health check failed: ${output.lineSequence().last()}"
+                },
+            )
         }
     }
 
@@ -454,13 +456,14 @@ class ProotRootfsHealthCheck(
         internal fun buildArguments(
             rootfsPath: String,
             shellPath: String,
+            mounts: List<ResolvedProotMount> = ProotMountResolver.defaults(),
         ): Array<String> =
             buildList {
                 add("--link2symlink")
                 add("--kill-on-exit")
                 add("--root-id")
                 add("--rootfs=$rootfsPath")
-                addAndroidProotBindMounts()
+                addProotBindMounts(mounts)
                 add("--cwd=/")
                 add("/usr/bin/env")
                 add("-i")

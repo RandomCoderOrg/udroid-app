@@ -24,6 +24,8 @@ object ProotDesktopLaunchBuilder {
         val guestHome = if (File(rootfs, "root").isDirectory) "/root" else "/"
         val mounts =
             ProotMountResolver.resolve(
+                context = context,
+                rootfs = rootfs,
                 profile = ProotMountProfileStore(context).load(rootfs.name),
                 sessionMounts =
                     ProotMountResolver.sessionMounts(
@@ -31,6 +33,10 @@ object ProotDesktopLaunchBuilder {
                         audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                     ),
             )
+        val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
+        val managedEnvironment =
+            ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
         val arguments =
             buildArguments(
                 prootPath = runtime.executable.absolutePath,
@@ -42,6 +48,8 @@ object ProotDesktopLaunchBuilder {
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
                 mounts = mounts,
+                guestEnvironment = guestEnvironment,
+                managedEnvironment = managedEnvironment,
                 hasDbusRunSession =
                     File(rootfs, "usr/bin/dbus-run-session").isFile ||
                         File(rootfs, "bin/dbus-run-session").isFile,
@@ -85,6 +93,8 @@ object ProotDesktopLaunchBuilder {
         launchProfile: ProotLaunchProfile? = null,
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
+        guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
+        managedEnvironment: List<String> = emptyList(),
     ): List<String> =
         buildList {
             add(prootPath)
@@ -101,8 +111,7 @@ object ProotDesktopLaunchBuilder {
             add("USER=root")
             add("LOGNAME=root")
             add("SHELL=/bin/sh")
-            add("LANG=C.UTF-8")
-            add("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            addAll(guestEnvironment)
             add("DISPLAY=:0")
             if (audioAuthDirectory != null) {
                 add("PULSE_SERVER=${AudioEndpoint.GUEST_SERVER}")
@@ -126,11 +135,13 @@ object ProotDesktopLaunchBuilder {
                     }
                     add("/bin/sh")
                     add("-lc")
-                    add(compositorScript(environment.kind, configuration.compositingEnabled))
+                    add(compositorScript(environment.kind, configuration.effectiveCompositingEnabled))
                     add("udroid-desktop")
                     addAll(environment.command)
                 }
-            addAll(launchProfile?.wrapGuestCommand(desktopCommand) ?: desktopCommand)
+            val overriddenCommand =
+                ProotEnvironmentResolver.applyManagedOverrides(desktopCommand, managedEnvironment)
+            addAll(launchProfile?.wrapGuestCommand(overriddenCommand) ?: overriddenCommand)
         }
 
     internal fun compositorScript(
@@ -139,14 +150,13 @@ object ProotDesktopLaunchBuilder {
     ): String {
         val value = enabled.toString()
         if (kind == DesktopEnvironmentKind.XFCE) {
-            return "\"\$@\" & desktop_pid=\$!; " +
-                "if command -v xfconf-query >/dev/null 2>&1; then " +
-                "sleep 1; attempt=0; " +
+            return "if command -v xfconf-query >/dev/null 2>&1; then " +
+                "attempt=0; " +
                 "while [ \"\$attempt\" -lt 5 ]; do " +
                 "xfconf-query -c xfwm4 -p /general/use_compositing " +
-                "-n -t bool -s $value >/dev/null 2>&1 || true; " +
+                "-n -t bool -s $value >/dev/null 2>&1 && break; " +
                 "attempt=\$((attempt + 1)); sleep 0.2; " +
-                "done; fi; wait \"\$desktop_pid\""
+                "done; fi; exec \"\$@\""
         }
         val configuration =
             when (kind) {

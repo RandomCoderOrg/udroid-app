@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -40,6 +41,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DesktopWindows
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material.icons.rounded.Terminal
@@ -67,6 +70,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,7 +93,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
-import org.json.JSONObject
 import org.randomcoder.udroid.BuildConfig
 import org.randomcoder.udroid.catalog.DistroCatalogState
 import org.randomcoder.udroid.catalog.DistroVariant
@@ -113,6 +117,7 @@ import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateState
 import java.time.Instant
@@ -126,6 +131,7 @@ enum class UdroidDestination(
     DISTROS("Linux", Icons.Rounded.Storage, Icons.Rounded.Storage),
     INSTALL("Install", Icons.Rounded.Storage, Icons.Rounded.Storage),
     SYSTEM("System", Icons.Rounded.Storage, Icons.Rounded.Storage),
+    ENVIRONMENT("Environment", Icons.Rounded.Code, Icons.Rounded.Code),
     MOUNTS("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     MOUNT_EDITOR("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     TERMINAL("Terminal", Icons.Rounded.Terminal, Icons.Rounded.Terminal),
@@ -160,7 +166,9 @@ private val UdroidDestination.navigationDepth: Int
             UdroidDestination.INSTALL,
             UdroidDestination.SYSTEM,
             -> 1
-            UdroidDestination.MOUNTS -> 2
+            UdroidDestination.MOUNTS,
+            UdroidDestination.ENVIRONMENT,
+            -> 2
             UdroidDestination.MOUNT_EDITOR -> 3
             else -> 0
         }
@@ -214,6 +222,7 @@ fun UdroidApp(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -251,6 +260,7 @@ fun UdroidApp(
             -> UdroidDestination.DISTROS
             UdroidDestination.MOUNTS,
             UdroidDestination.MOUNT_EDITOR,
+            UdroidDestination.ENVIRONMENT,
             -> UdroidDestination.DISTROS
             else -> activeDestination
         }
@@ -303,15 +313,17 @@ fun UdroidApp(
             val useRail = maxWidth >= 600.dp
             if (useRail) {
                 Row(modifier = Modifier.fillMaxSize()) {
-                    WorkspaceNavigationRail(
-                        selected = navigationDestination,
-                        destinations = requestedJourney.destinations,
-                        onSelected = onPrimaryDestinationSelected,
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxHeight().width(1.dp),
-                        color = UdroidLine,
-                    )
+                    if (activeDestination != UdroidDestination.ENVIRONMENT) {
+                        WorkspaceNavigationRail(
+                            selected = navigationDestination,
+                            destinations = requestedJourney.destinations,
+                            onSelected = onPrimaryDestinationSelected,
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxHeight().width(1.dp),
+                            color = UdroidLine,
+                        )
+                    }
                     ManagementPane(
                         modifier = Modifier.weight(1f),
                         destination = activeDestination,
@@ -375,6 +387,7 @@ fun UdroidApp(
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
                         onGraphicsProfileChanged = onGraphicsProfileChanged,
+                        onVirglServerModeChanged = onVirglServerModeChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -460,6 +473,7 @@ fun UdroidApp(
                         onCompositingChanged = onCompositingChanged,
                         onTouchScaleChanged = onTouchScaleChanged,
                         onGraphicsProfileChanged = onGraphicsProfileChanged,
+                        onVirglServerModeChanged = onVirglServerModeChanged,
                         onAudioOutputChanged = onAudioOutputChanged,
                         onMicrophoneChanged = onMicrophoneChanged,
                         onStartDesktop = onStartDesktop,
@@ -479,17 +493,19 @@ fun UdroidApp(
                         onInstallUpdate = onInstallUpdate,
                         onOpenUpdateRelease = onOpenUpdateRelease,
                     )
-                    WorkspaceNavigationBar(
-                        selected = navigationDestination,
-                        destinations =
-                            workspaceJourney(
-                                requestedDestination = activeDestination,
-                                hasInstalledLinux = hasInstalledLinux,
-                                hasInstallation = installProgress != null,
-                                compactNavigation = true,
-                            ).destinations,
-                        onSelected = onPrimaryDestinationSelected,
-                    )
+                    if (activeDestination != UdroidDestination.ENVIRONMENT) {
+                        WorkspaceNavigationBar(
+                            selected = navigationDestination,
+                            destinations =
+                                workspaceJourney(
+                                    requestedDestination = activeDestination,
+                                    hasInstalledLinux = hasInstalledLinux,
+                                    hasInstallation = installProgress != null,
+                                    compactNavigation = true,
+                                ).destinations,
+                            onSelected = onPrimaryDestinationSelected,
+                        )
+                    }
                 }
             }
         }
@@ -549,6 +565,7 @@ private fun ManagementPane(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onStartDesktop: () -> Unit,
@@ -771,6 +788,41 @@ private fun ManagementPane(
                             )
                         }
                     }
+                    UdroidDestination.ENVIRONMENT -> {
+                        val rootfsName = selectedSystemRootfsName ?: installedRootfsName
+                        val selectedRootfs =
+                            installedRootfses.firstOrNull { it.name == rootfsName }
+                        val selectedDistro =
+                            (catalogueState as? DistroCatalogState.Ready)
+                                ?.catalog
+                                ?.variants
+                                ?.firstOrNull { it.internalName == rootfsName }
+                        if (selectedRootfs == null) {
+                            onDestinationSelected(UdroidDestination.DISTROS)
+                        } else {
+                            ProotEnvironmentProfilePage(
+                                systemId = selectedRootfs.name,
+                                systemTitle =
+                                    selectedDistro?.releaseName
+                                        ?: installedSystemTitle(selectedRootfs.name),
+                                rootfsDirectory = selectedRootfs.directory,
+                                desktopEnvironment =
+                                    desktopEnvironments.firstOrNull {
+                                        it.id == desktopConfiguration.environmentId
+                                    },
+                                desktopConfiguration = desktopConfiguration,
+                                runtimeRunning =
+                                    snapshot.rootfsName == selectedRootfs.name &&
+                                        snapshot.phase == RuntimePhase.RUNNING,
+                                desktopRunning =
+                                    snapshot.desktop.rootfsName == selectedRootfs.name &&
+                                        snapshot.desktop.phase == DesktopSessionPhase.RUNNING,
+                                onBack = {
+                                    onDestinationSelected(UdroidDestination.SYSTEM)
+                                },
+                            )
+                        }
+                    }
                     UdroidDestination.DISTROS ->
                         selectedOciRepository?.let { repository ->
                             OciTagCataloguePage(
@@ -870,6 +922,7 @@ private fun ManagementPane(
                                 onCompositingChanged = onCompositingChanged,
                                 onTouchScaleChanged = onTouchScaleChanged,
                                 onGraphicsProfileChanged = onGraphicsProfileChanged,
+                                onVirglServerModeChanged = onVirglServerModeChanged,
                                 onAudioOutputChanged = onAudioOutputChanged,
                                 onMicrophoneChanged = onMicrophoneChanged,
                                 onRefreshCapabilities = onRefresh,
@@ -879,6 +932,9 @@ private fun ManagementPane(
                                 onRestartDesktop = onRestartDesktop,
                                 onConfigureMounts = {
                                     onSelectMountProfile(mountConfigurationSourceId)
+                                },
+                                onConfigureEnvironment = {
+                                    onDestinationSelected(UdroidDestination.ENVIRONMENT)
                                 },
                                 onResetFilesystem = {
                                     onResetRootfs(selectedRootfs.name, selectedDistro)
@@ -1371,7 +1427,6 @@ private fun AboutPage(
     onInstallUpdate: () -> Unit,
     onOpenUpdateRelease: () -> Unit,
 ) {
-    val visibleJournalLines = newestSupervisorEvents(journalLines)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     LazyColumn(
@@ -1487,11 +1542,7 @@ private fun AboutPage(
                 Column(modifier = Modifier.weight(1f)) {
                     UdroidSectionLabel(text = "Diagnostic log")
                     Text(
-                        if (journalLines.size > visibleJournalLines.size) {
-                            "Latest ${visibleJournalLines.size} events"
-                        } else {
-                            "Recent app and Linux session events"
-                        },
+                        "Search, inspect, and copy app and Linux session events",
                         color = UdroidMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -1521,7 +1572,7 @@ private fun AboutPage(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(5.dp))
-                    Text("Copy diagnostic report")
+                    Text("Copy report")
                 }
                 IconButton(onClick = onRefresh) {
                     Icon(
@@ -1532,23 +1583,8 @@ private fun AboutPage(
                 }
             }
         }
-        if (visibleJournalLines.isEmpty()) {
-            item {
-                Surface(
-                    color = UdroidRaised,
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Text(
-                        "No diagnostic events",
-                        modifier = Modifier.padding(16.dp),
-                        color = UdroidMuted,
-                    )
-                }
-            }
-        } else {
-            items(visibleJournalLines) { line ->
-                JournalRow(line)
-            }
+        item {
+            DiagnosticLogWindow(journalLines)
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -1667,53 +1703,163 @@ private fun AppUpdateStatusPanel(
 }
 
 @Composable
-private fun JournalRow(line: String) {
-    val payload = runCatching { JSONObject(line) }.getOrNull()
-    val event = payload?.optString("event").orEmpty().ifBlank { "event" }
-    val message = payload?.optString("message").orEmpty().ifBlank { line }
-    val timestamp = payload?.optString("timestamp").orEmpty()
+private fun DiagnosticLogWindow(journalLines: List<String>) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val entries = remember(journalLines, query) { diagnosticLogEntries(journalLines, query) }
+    val context = LocalContext.current
     Surface(
+        modifier = Modifier.fillMaxWidth().height(430.dp),
         color = UdroidRaised,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Surface(
-                modifier = Modifier.size(8.dp).padding(top = 2.dp),
-                color = UdroidForest,
-                shape = CircleShape,
-            ) {}
-            Spacer(Modifier.width(11.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+        Column {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                singleLine = true,
+                placeholder = { Text("Search diagnostics") },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Rounded.Clear, contentDescription = "Clear search")
+                        }
+                    }
+                },
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = UdroidInset,
+                        unfocusedContainerColor = UdroidInset,
+                    ),
+            )
+            Text(
+                if (query.isBlank()) {
+                    "${entries.size} events  •  newest at bottom"
+                } else {
+                    "${entries.size} of ${journalLines.size} events  •  newest at bottom"
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                color = UdroidMuted,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 8.dp),
+                color = UdroidLine,
+            )
+            if (entries.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        event,
-                        modifier = Modifier.weight(1f),
+                        if (journalLines.isEmpty()) "No diagnostic events" else "No matching events",
+                        color = UdroidMuted,
                         fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(
-                        timestamp.substringAfter("T").take(8),
-                        color = UdroidFaint,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
                 }
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    message,
-                    color = UdroidMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    reverseLayout = true,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    items(entries) { entry ->
+                        DiagnosticLogRow(entry) {
+                            context
+                                .getSystemService(ClipboardManager::class.java)
+                                .setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        "uDroid diagnostic log",
+                                        formatDiagnosticLogEntry(entry),
+                                    ),
+                                )
+                            Toast.makeText(
+                                context,
+                                "Log copied to clipboard",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun DiagnosticLogRow(
+    entry: DiagnosticLogEntry,
+    onCopy: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Copy log", onClick = onCopy)
+                .padding(vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                entry.timestamp,
+                color = UdroidFaint,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                entry.severity.uppercase(),
+                color = diagnosticSeverityColor(entry.severity),
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "${entry.component}/${entry.event}",
+            color = UdroidForest,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            entry.message,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 5,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (entry.fields.isNotEmpty()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                entry.fields,
+                color = UdroidMuted,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 10.dp),
+            color = UdroidLine,
+        )
+    }
+}
+
+@Composable
+private fun diagnosticSeverityColor(severity: String): Color =
+    when (severity.lowercase()) {
+        "error", "fatal" -> MaterialTheme.colorScheme.error
+        "warning", "warn" -> UdroidWarning
+        else -> UdroidMuted
+    }
 
 private fun installedSystemTitle(rootfsName: String): String =
     when {

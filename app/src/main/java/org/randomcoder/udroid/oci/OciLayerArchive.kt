@@ -288,6 +288,7 @@ class OciLayerRootfsAssembler(
     private val runtime: ProotRuntime,
     private val scanner: TarEntryNameScanner = TarEntryNameScanner(),
     private val whiteoutApplier: OciWhiteoutApplier = OciWhiteoutApplier(),
+    private val onCommand: (List<String>) -> Unit = {},
 ) {
     fun assemble(
         layers: List<VerifiedOciLayer>,
@@ -312,6 +313,7 @@ class OciLayerRootfsAssembler(
                 context = context,
                 runtime = runtime,
                 excludeOciWhiteouts = true,
+                onCommand = onCommand,
             ).extract(layer.file, destination) { completed, total ->
                 onLayerProgress(index, layers.size, completed, total)
             }

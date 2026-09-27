@@ -111,8 +111,7 @@ class DesktopEnvironmentScannerTest {
         assertTrue(arguments.contains("GDK_SCALE=2"))
         val script = arguments[arguments.indexOf("-lc") + 1]
         assertTrue(script.contains("-s false"))
-        assertTrue(script.contains("sleep 1"))
-        assertTrue(script.contains("wait \"\$desktop_pid\""))
+        assertTrue(script.endsWith("exec \"\$@\""))
         assertEquals(desktop.command, arguments.takeLast(desktop.command.size))
         assertFalse(script.contains(desktop.command.last()))
     }
@@ -172,10 +171,137 @@ class DesktopEnvironmentScannerTest {
     }
 
     @Test
+    fun `desktop launch wraps the session with the selected graphics environment`() {
+        val desktop =
+            DesktopEnvironment(
+                id = "xfce",
+                name = "Xfce",
+                command = listOf("startxfce4"),
+                desktopFilePath = "/usr/share/xsessions/xfce.desktop",
+                kind = DesktopEnvironmentKind.XFCE,
+            )
+        val arguments =
+            ProotDesktopLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                environment = desktop,
+                configuration = DesktopConfiguration(desktop.id, false, false),
+                hasDbusRunSession = false,
+                launchProfile =
+                    EnvironmentProotLaunchProfile.from(DesktopGraphicsProfile.SOFTWARE),
+            )
+
+        assertEquals(
+            listOf(
+                "/usr/bin/env",
+                "LIBGL_ALWAYS_SOFTWARE=1",
+                "GALLIUM_DRIVER=llvmpipe",
+                "/bin/sh",
+            ),
+            arguments.subList(
+                arguments.lastIndexOf("/usr/bin/env"),
+                arguments.lastIndexOf("/usr/bin/env") + 4,
+            ),
+        )
+        assertEquals("startxfce4", arguments.last())
+    }
+
+    @Test
+    fun `desktop receives saved guest variables before locked desktop variables`() {
+        val desktop =
+            DesktopEnvironment(
+                id = "xfce",
+                name = "Xfce",
+                command = listOf("startxfce4"),
+                desktopFilePath = "/usr/share/xsessions/xfce.desktop",
+                kind = DesktopEnvironmentKind.XFCE,
+            )
+        val arguments =
+            ProotDesktopLaunchBuilder.buildArguments(
+                prootPath = "/data/proot",
+                rootfsPath = "/data/rootfs",
+                x11SocketDirectory = "/data/x11/.X11-unix",
+                guestHome = "/root",
+                environment = desktop,
+                configuration = DesktopConfiguration(desktop.id, false, false),
+                hasDbusRunSession = false,
+                guestEnvironment =
+                    ProotEnvironmentResolver.resolve(
+                        ProotEnvironmentProfile(
+                            customVariables =
+                                listOf(ProotCustomEnvironmentVariable("custom", "GTK_THEME", "Adwaita dark")),
+                        ),
+                    ),
+            )
+
+        assertTrue(arguments.indexOf("GTK_THEME=Adwaita dark") < arguments.indexOf("DISPLAY=:0"))
+        assertTrue(
+            arguments.indexOf("GTK_THEME=Adwaita dark") <
+                arguments.indexOf("XDG_CURRENT_DESKTOP=XFCE"),
+        )
+    }
+
+    @Test
     fun `unknown stored graphics profile safely falls back to standard`() {
         assertEquals(
             DesktopGraphicsProfile.STANDARD,
             DesktopGraphicsProfile.fromStorage("future-driver"),
+        )
+    }
+
+    @Test
+    fun `environment graphics profiles survive storage`() {
+        assertEquals(
+            DesktopGraphicsProfile.SOFTWARE,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.SOFTWARE.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.ZINK,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.ZINK.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.VIRGL,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.VIRGL_ANGLE,
+            DesktopGraphicsProfile.fromStorage(DesktopGraphicsProfile.VIRGL_ANGLE.storageValue),
+        )
+        assertEquals(
+            DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+            DesktopGraphicsProfile.fromStorage(
+                DesktopGraphicsProfile.VENUS_EXPERIMENTAL.storageValue,
+            ),
+        )
+    }
+
+    @Test
+    fun `VirGL server modes survive storage and unknown values stay automatic`() {
+        VirglServerMode.entries.forEach { mode ->
+            assertEquals(mode, VirglServerMode.fromStorage(mode.storageValue))
+        }
+        assertEquals(VirglServerMode.AUTOMATIC, VirglServerMode.fromStorage("future-mode"))
+    }
+
+    @Test
+    fun `VirGL compatibility mode disables desktop compositing`() {
+        val compatible =
+            DesktopConfiguration(
+                environmentId = "xfce",
+                compositingEnabled = true,
+                touchScaleEnabled = false,
+                graphicsProfile = DesktopGraphicsProfile.VIRGL_ANGLE,
+            )
+        assertFalse(compatible.effectiveCompositingEnabled)
+        assertTrue(
+            compatible.copy(virglServerMode = VirglServerMode.MULTI_CLIENT)
+                .effectiveCompositingEnabled,
+        )
+        assertTrue(
+            compatible.copy(graphicsProfile = DesktopGraphicsProfile.VENUS_EXPERIMENTAL)
+                .effectiveCompositingEnabled,
         )
     }
 

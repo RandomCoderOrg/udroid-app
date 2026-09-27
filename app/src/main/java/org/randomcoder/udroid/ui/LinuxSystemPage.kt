@@ -1,6 +1,5 @@
 package org.randomcoder.udroid.ui
 
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -21,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Refresh
@@ -67,12 +67,17 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
+import org.randomcoder.udroid.runtime.GraphicsProfileCompatibilityProbe
+import org.randomcoder.udroid.runtime.GraphicsProfileSupport
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
+import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
+import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
+import org.randomcoder.udroid.runtime.VirglServerMode
 import java.text.DateFormat
 import java.util.Date
 
@@ -100,6 +105,7 @@ fun LinuxSystemPage(
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
     onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeChanged: (VirglServerMode) -> Unit,
     onAudioOutputChanged: (Boolean) -> Unit,
     onMicrophoneChanged: (Boolean) -> Unit,
     onRefreshCapabilities: () -> Unit,
@@ -108,19 +114,29 @@ fun LinuxSystemPage(
     onStopDesktop: () -> Unit,
     onRestartDesktop: () -> Unit,
     onConfigureMounts: () -> Unit,
+    onConfigureEnvironment: () -> Unit,
     onResetFilesystem: () -> Unit,
     onDeleteFilesystem: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
     val context = androidx.compose.ui.platform.LocalContext.current
+    val graphicsProfileSupport =
+        remember(rootfs.directory.absolutePath) {
+            GraphicsProfileCompatibilityProbe.run(context, rootfs.directory)
+        }
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
+    val environmentProfileStore = remember(context) { ProotEnvironmentProfileStore(context) }
     var confirmation by remember(rootfs.name) {
         mutableStateOf<FilesystemConfirmation?>(null)
     }
     val mountProfile = remember(rootfs.name) {
         runCatching { mountProfileStore.load(rootfs.name) }
             .getOrDefault(ProotMountProfile())
+    }
+    val environmentProfile = remember(rootfs.name) {
+        runCatching { environmentProfileStore.load(rootfs.name) }
+            .getOrDefault(ProotEnvironmentProfile())
     }
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
@@ -290,6 +306,31 @@ fun LinuxSystemPage(
             )
         }
 
+        item(key = "graphics-label") {
+            UdroidSectionLabel(
+                text = "Graphics",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "graphics-settings") {
+            Surface(
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, UdroidLine),
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                GraphicsProfileSelector(
+                    selected = configuration.graphicsProfile,
+                    virglServerMode = configuration.virglServerMode,
+                    support = graphicsProfileSupport,
+                    runtimeRunning =
+                        runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
+                    desktopRunning = desktopRunning,
+                    onSelected = onGraphicsProfileChanged,
+                    onVirglServerModeSelected = onVirglServerModeChanged,
+                )
+            }
+        }
+
         item(key = "desktop-label") {
             UdroidSectionLabel(
                 text = "Desktop session",
@@ -360,7 +401,6 @@ fun LinuxSystemPage(
                     desktopRunning = desktopRunning,
                     onCompositingChanged = onCompositingChanged,
                     onTouchScaleChanged = onTouchScaleChanged,
-                    onGraphicsProfileChanged = onGraphicsProfileChanged,
                 )
             }
             item(key = "desktop-controls") {
@@ -455,6 +495,20 @@ fun LinuxSystemPage(
                 message = null,
                 onConfigure = onConfigureMounts,
                 onRetry = onOpenTerminal,
+            )
+        }
+
+        item(key = "environment-label") {
+            UdroidSectionLabel(
+                text = "Environment",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "environment-settings") {
+            EnvironmentProfilePanel(
+                profile = environmentProfile,
+                runtimeRunning = runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
+                onConfigure = onConfigureEnvironment,
             )
         }
 
@@ -646,6 +700,45 @@ fun LinuxSystemPage(
         )
     }
 
+}
+
+@Composable
+private fun EnvironmentProfilePanel(
+    profile: ProotEnvironmentProfile,
+    runtimeRunning: Boolean,
+    onConfigure: () -> Unit,
+) {
+    val changed =
+        profile.defaultOverrides.size +
+            profile.managedOverrides.size +
+            profile.customVariables.size
+    Surface(
+        modifier = Modifier.clickable(onClick = onConfigure),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = { Text("Environment variables") },
+            supportingContent = {
+                Text(
+                    buildString {
+                        append(if (changed == 0) "Defaults" else "$changed changed")
+                        append(" · New launches use changes")
+                        if (runtimeRunning) append(" · Restart Linux for the terminal")
+                    },
+                )
+            },
+            leadingContent = { Icon(Icons.Rounded.Code, contentDescription = null) },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Configure")
+                    Icon(Icons.Rounded.ChevronRight, contentDescription = null)
+                }
+            },
+        )
+    }
 }
 
 private enum class FilesystemConfirmation {
@@ -971,17 +1064,17 @@ private fun DesktopSettingsPanel(
     desktopRunning: Boolean,
     onCompositingChanged: (Boolean) -> Unit,
     onTouchScaleChanged: (Boolean) -> Unit,
-    onGraphicsProfileChanged: (DesktopGraphicsProfile) -> Unit,
 ) {
     val compositorSupport = environment.kind.compositorSupport
     val compositorConfigurable =
-        compositorSupport == DesktopCompositorSupport.CONFIGURABLE
+        compositorSupport == DesktopCompositorSupport.CONFIGURABLE &&
+            configuration.supportsCompositedDesktop
     val compositorChecked =
         when (compositorSupport) {
             DesktopCompositorSupport.REQUIRED -> true
             DesktopCompositorSupport.EXTERNAL_OR_NONE -> false
             DesktopCompositorSupport.UNKNOWN -> configuration.compositingEnabled
-            DesktopCompositorSupport.CONFIGURABLE -> configuration.compositingEnabled
+            DesktopCompositorSupport.CONFIGURABLE -> configuration.effectiveCompositingEnabled
         }
     Surface(
         color = Color.Transparent,
@@ -994,8 +1087,13 @@ private fun DesktopSettingsPanel(
                 detail =
                     when (compositorSupport) {
                         DesktopCompositorSupport.CONFIGURABLE ->
-                            "Turn off for lower latency, or turn on for effects and transparency." +
-                                if (desktopRunning) " Restart the desktop to apply." else ""
+                            if (configuration.supportsCompositedDesktop) {
+                                "Turn off for lower latency, or turn on for effects and transparency." +
+                                    if (desktopRunning) " Restart the desktop to apply." else ""
+                            } else {
+                                "Compatibility-mode VirGL requires compositing off. " +
+                                    "Use multi-client mode only with a matching patched Mesa."
+                            }
                         DesktopCompositorSupport.REQUIRED ->
                             "${environment.kind.desktopName} requires compositing"
                         DesktopCompositorSupport.EXTERNAL_OR_NONE ->
@@ -1017,14 +1115,6 @@ private fun DesktopSettingsPanel(
                 enabled = true,
                 onCheckedChange = onTouchScaleChanged,
             )
-            if (GFXSTREAM_PROFILE_ENABLED) {
-                HorizontalDivider(color = UdroidLine)
-                GraphicsProfileSelector(
-                    selected = configuration.graphicsProfile,
-                    desktopRunning = desktopRunning,
-                    onSelected = onGraphicsProfileChanged,
-                )
-            }
         }
     }
 }
@@ -1032,10 +1122,13 @@ private fun DesktopSettingsPanel(
 @Composable
 private fun GraphicsProfileSelector(
     selected: DesktopGraphicsProfile,
+    virglServerMode: VirglServerMode = VirglServerMode.AUTOMATIC,
+    support: Map<DesktopGraphicsProfile, GraphicsProfileSupport>,
+    runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
+    onVirglServerModeSelected: (VirglServerMode) -> Unit,
 ) {
-    val gfxstreamSupported = "arm64-v8a" in Build.SUPPORTED_ABIS
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(
             "Graphics driver",
@@ -1043,27 +1136,137 @@ private fun GraphicsProfileSelector(
             color = UdroidInk,
             style = MaterialTheme.typography.titleMedium,
         )
-        GraphicsProfileRow(
-            title = "Standard",
-            detail = "Use the distribution’s default graphics driver",
-            selected = selected == DesktopGraphicsProfile.STANDARD,
-            enabled = true,
-            onClick = { onSelected(DesktopGraphicsProfile.STANDARD) },
+        Text(
+            when {
+                runtimeRunning && desktopRunning ->
+                    "New apps use this choice. Restart Linux for the terminal and restart " +
+                        "the desktop for the current desktop session."
+                runtimeRunning ->
+                    "New apps use this choice. Restart Linux to update the terminal."
+                desktopRunning ->
+                    "New apps use this choice. Restart the desktop to update it."
+                else -> "New terminal, app, and desktop launches use this choice."
+            },
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            color = UdroidMuted,
+            style = MaterialTheme.typography.bodySmall,
         )
-        GraphicsProfileRow(
-            title = "gfxstream (experimental)",
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.STANDARD,
+            title = "Automatic",
+            detail = "Use the distribution’s default graphics driver.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.SOFTWARE,
+            title = "Software",
+            detail = "Use Mesa llvmpipe on the CPU.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.ZINK,
+            title = "Zink",
+            detail = "Use OpenGL over a working Vulkan driver installed inside Linux.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VIRGL,
+            title = "VirGL",
+            detail = "Use Android OpenGL ES with a current Mesa virpipe driver inside Linux.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VIRGL_ANGLE,
+            title = "VirGL + ANGLE",
             detail =
-                if (gfxstreamSupported) {
-                    "Use Android’s Vulkan driver." +
-                        if (desktopRunning) " Restart the desktop to apply." else ""
-                } else {
-                    "Available only on arm64 devices"
-                },
-            selected = selected == DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
-            enabled = gfxstreamSupported,
-            onClick = { onSelected(DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL) },
+                "Use VirGL through ANGLE and Android Vulkan with a current Mesa " +
+                    "virpipe driver inside Linux.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
         )
+        GraphicsProfileOption(
+            profile = DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
+            title = "Venus (experimental)",
+            detail =
+                "Accelerate Vulkan apps through Android’s driver. OpenGL stays on software " +
+                    "rendering; X11 presentation uses Mesa’s copy path.",
+            selected = selected,
+            support = support,
+            onSelected = onSelected,
+        )
+        if ((selected == DesktopGraphicsProfile.VIRGL ||
+                selected == DesktopGraphicsProfile.VIRGL_ANGLE) &&
+            support[selected]?.available == true
+        ) {
+            HorizontalDivider(color = UdroidLine)
+            Text(
+                "VirGL server mode",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                color = UdroidInk,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            GraphicsProfileRow(
+                title = "Automatic",
+                detail = "Use the compatible mode for distribution Mesa packages.",
+                selected = virglServerMode == VirglServerMode.AUTOMATIC,
+                enabled = true,
+                onClick = { onVirglServerModeSelected(VirglServerMode.AUTOMATIC) },
+            )
+            GraphicsProfileRow(
+                title = "Compatibility",
+                detail = "Stable protocol for Ubuntu, Debian, Arch, and similar guests.",
+                selected = virglServerMode == VirglServerMode.COMPATIBILITY,
+                enabled = true,
+                onClick = { onVirglServerModeSelected(VirglServerMode.COMPATIBILITY) },
+            )
+            GraphicsProfileRow(
+                title = "Multi-client",
+                detail = "Protocol 3 for patched Mesa; supports concurrent GL clients.",
+                selected = virglServerMode == VirglServerMode.MULTI_CLIENT,
+                enabled = true,
+                onClick = { onVirglServerModeSelected(VirglServerMode.MULTI_CLIENT) },
+            )
+        }
+        if (GFXSTREAM_PROFILE_ENABLED) {
+            GraphicsProfileOption(
+                profile = DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
+                title = "gfxstream (experimental)",
+                detail = "Use Android’s Vulkan driver.",
+                selected = selected,
+                support = support,
+                onSelected = onSelected,
+            )
+        }
     }
+}
+
+@Composable
+private fun GraphicsProfileOption(
+    profile: DesktopGraphicsProfile,
+    title: String,
+    detail: String,
+    selected: DesktopGraphicsProfile,
+    support: Map<DesktopGraphicsProfile, GraphicsProfileSupport>,
+    onSelected: (DesktopGraphicsProfile) -> Unit,
+) {
+    val profileSupport = support[profile] ?: GraphicsProfileSupport(false, "Compatibility unknown")
+    if (!profileSupport.available && selected != profile) return
+    GraphicsProfileRow(
+        title = title,
+        detail = profileSupport.reason ?: detail,
+        selected = selected == profile,
+        enabled = profileSupport.available,
+        onClick = { onSelected(profile) },
+    )
 }
 
 @Composable
