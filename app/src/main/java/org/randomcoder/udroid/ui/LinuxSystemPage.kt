@@ -1207,7 +1207,8 @@ private fun GraphicsProfileSelector(
             title = "Venus (experimental)",
             detail =
                 "Accelerate Vulkan apps through Android’s driver. OpenGL stays on software " +
-                    "rendering; X11 presentation uses Mesa’s copy path.",
+                    "rendering; X11 presentation uses Mesa’s copy path. Zink profile results " +
+                    "appear in Device compatibility after starting a desktop.",
             selected = selected,
             support = support,
             onSelected = onSelected,

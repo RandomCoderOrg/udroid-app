@@ -227,4 +227,29 @@ class VirglHostLaunchTest {
         osRelease.writeText("ID=ubuntu\nVERSION_ID=\"20.04\"\n")
         assertFalse(VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs))
     }
+
+    @Test
+    fun `parses verbose Zink profile results`() {
+        val results =
+            parseZinkRequirements(
+                """
+                Checking profile VP_ZINK_gl21_baseline
+                Checking device Virtio-GPU Venus
+                Supported
+
+                Checking profile VP_ZINK_gl46_baseline
+                Checking device Virtio-GPU Venus
+                UNSUPPORTED physical device
+                """.trimIndent(),
+            )
+
+        assertEquals(
+            listOf(
+                ZinkRequirementResult("VP_ZINK_gl21_baseline", true),
+                ZinkRequirementResult("VP_ZINK_gl46_baseline", false),
+            ),
+            results,
+        )
+        assertEquals("OpenGL 2.1 baseline", results.first().label)
+    }
 }
