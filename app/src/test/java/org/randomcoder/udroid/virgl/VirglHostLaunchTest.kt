@@ -166,7 +166,7 @@ class VirglHostLaunchTest {
     }
 
     @Test
-    fun `selects Venus vtest with the X11 copy presentation path`() {
+    fun `selects Venus vtest with native WSI presentation`() {
         val socket = Files.createTempFile("udroid-venus", ".sock").toFile()
         val runtime = Files.createTempDirectory("udroid-venus-runtime").toFile()
         val profile =
@@ -197,8 +197,9 @@ class VirglHostLaunchTest {
                 "GALLIUM_DRIVER",
                 "-u",
                 "MESA_LOADER_DRIVER_OVERRIDE",
+                "-u",
+                "MESA_VK_WSI_DEBUG",
                 "VN_DEBUG=vtest",
-                "MESA_VK_WSI_DEBUG=sw",
                 "LD_LIBRARY_PATH=/opt/udroid/venus-mesa/lib:" +
                     "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu",
                 "LIBGL_DRIVERS_PATH=/opt/udroid/venus-mesa/lib/dri",

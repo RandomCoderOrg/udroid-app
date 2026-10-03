@@ -20,7 +20,7 @@ internal data class VenusGuestRuntime(
 )
 
 internal object VirglHostRuntimeInstaller {
-    const val VERSION = "1.3.0-6"
+    const val VERSION = "1.3.0-7"
     private val bundle =
         VerifiedRuntimeAssetBundle(
             name = "VirGL host",
