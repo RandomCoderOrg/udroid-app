@@ -45,6 +45,7 @@ import org.randomcoder.udroid.virgl.VirglHostBackend
 import org.randomcoder.udroid.virgl.VirglHostSnapshot
 import org.randomcoder.udroid.virgl.VirglProotLaunchProfile
 import org.randomcoder.udroid.virgl.VenusGuestRuntimeInstaller
+import org.randomcoder.udroid.virgl.parseZinkRequirements
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
 import java.io.File
@@ -816,6 +817,28 @@ class RuntimeSupervisorService : Service() {
                                 )
                             }
                         }
+                    if (request.configuration.graphicsProfile ==
+                        DesktopGraphicsProfile.VENUS_EXPERIMENTAL
+                    ) {
+                        runCatching {
+                            logZinkRequirements(
+                                rootfs = rootfs,
+                                socketDirectory = socketDirectory,
+                                launchProfile = launchProfile,
+                                bootId = runtime.bootId,
+                            )
+                        }.onFailure { error ->
+                            app.journal.append(
+                                component = "graphics",
+                                severity = "warning",
+                                event = "zink_requirements_failed",
+                                message =
+                                    error.message ?: "Could not run the Zink requirements probe",
+                                bootId = runtime.bootId,
+                                fields = mapOf("rootfs" to rootfs.name),
+                            )
+                        }
+                    }
                     val launch =
                         ProotDesktopLaunchBuilder.create(
                             context = this,
@@ -1144,6 +1167,83 @@ class RuntimeSupervisorService : Service() {
             -> virglLaunchProfile(profile, virglServerMode, rootfs)
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
+        }
+    }
+
+    private fun logZinkRequirements(
+        rootfs: File,
+        socketDirectory: File,
+        launchProfile: ProotLaunchProfile?,
+        bootId: String?,
+    ) {
+        val profile = launchProfile as? VirglProotLaunchProfile ?: return
+        if (profile.backend != VirglHostBackend.VENUS || profile.venusGuestRuntime == null) return
+        val checker = "${VenusGuestRuntimeInstaller.GUEST_DIRECTORY}/bin/zink_check_requirements"
+        val launch =
+            ProotApplicationLaunchBuilder.create(
+                context = this,
+                runtime = ProotRuntimeInstaller.install(this),
+                rootfs = rootfs,
+                x11SocketDirectory = socketDirectory,
+                application =
+                    LinuxApplication(
+                        id = "udroid-zink-requirements",
+                        name = "Zink requirements",
+                        genericName = null,
+                        comment = null,
+                        executable = "/usr/bin/timeout",
+                        arguments = listOf("5s", checker),
+                        iconName = null,
+                        iconPath = null,
+                        desktopFilePath = "",
+                        desktopFileGuestPath = "",
+                        workingDirectory = "/root",
+                        categories = emptyList(),
+                        terminal = true,
+                    ),
+                launchProfile = profile,
+            )
+        app.journal.appendCommand(
+            component = "graphics",
+            command = launch.command,
+            bootId = bootId,
+            fields = mapOf("probe" to "zink_check_requirements", "rootfs" to rootfs.name),
+        )
+        val process =
+            ProcessBuilder(launch.command)
+                .directory(launch.workingDirectory)
+                .redirectErrorStream(true)
+                .apply {
+                    environment().clear()
+                    environment().putAll(launch.environment)
+                }.start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        val exitCode = process.waitFor()
+        val results = parseZinkRequirements(output)
+        val highest = results.lastOrNull { it.supported }
+        val summary =
+            when {
+                exitCode != 0 -> "Zink requirements probe failed with exit code $exitCode"
+                highest == null -> "Venus does not satisfy the minimum Zink profile"
+                else -> "Highest supported Zink profile: ${highest.label}"
+            }
+        app.journal.append(
+            component = "graphics",
+            severity = if (exitCode != 0 || highest == null) "warning" else "info",
+            event = "zink_requirements",
+            message = summary,
+            bootId = bootId,
+            fields = mapOf("report" to output.trim(), "rootfs" to rootfs.name),
+        )
+        results.forEach { result ->
+            app.journal.append(
+                component = "graphics",
+                severity = if (result.supported) "debug" else "info",
+                event = "zink_profile",
+                message = "${result.label}: ${if (result.supported) "supported" else "unsupported"}",
+                bootId = bootId,
+                fields = mapOf("profile" to result.profile),
+            )
         }
     }
 

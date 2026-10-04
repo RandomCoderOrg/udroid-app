@@ -62,6 +62,9 @@ Keep expensive runtime scenarios small and reproducible first. Add focused
 Macrobenchmarks or microbenchmarks for a suspected cost, inspect traces, then
 validate the resulting change in the complete user journey.
 
+For Venus, Zink, Lorie, and SurfaceFlinger profiling, use the reproducible
+[Venus Perfetto capture](graphics/VENUS_PERFETTO_PROFILING.md).
+
 References:
 
 - [Compose performance](https://developer.android.com/develop/ui/compose/performance)

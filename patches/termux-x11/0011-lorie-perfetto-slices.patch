@@ -1,0 +1,72 @@
+--- a/renderer.c
++++ b/renderer.c
+@@ -16,6 +16,7 @@
+ #include <EGL/eglext.h>
+ #include <GLES2/gl2.h>
+ #include <GLES2/gl2ext.h>
++#include <android/trace.h>
+ #include <android/native_window_jni.h>
+ #include <android/log.h>
+ #include <media/NdkImageReader.h>
+@@ -30,6 +31,18 @@
+ #define log(...) __android_log_print(ANDROID_LOG_DEBUG, "gles-renderer", __VA_ARGS__)
+ #define loge(...) __android_log_print(ANDROID_LOG_ERROR, "gles-renderer", __VA_ARGS__)
+ 
++static inline bool traceBegin(const char *name) {
++    bool enabled = ATrace_isEnabled();
++    if (enabled)
++        ATrace_beginSection(name);
++    return enabled;
++}
++
++static inline void traceEnd(bool enabled) {
++    if (enabled)
++        ATrace_endSection();
++}
++
+ static GLuint createProgram(const char* p_vertex_source, const char* p_fragment_source);
+ 
+ static int printEglError(char* msg, int line) {
+@@ -890,6 +903,7 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
+                            sourceLeft, sourceTop, logicalSourceWidth, logicalSourceHeight);
+ 
+     // We should signal X server to not use root window while we actively copy it
++    bool frameTrace = traceBegin("uDroid/Lorie draw");
+     lorie_mutex_lock(&state->lock, &state->lockingPid);
+     // Share this draw's flush+fence below instead of a separate round trip per frame.
+     uint64_t gpuCopySerial = rendererApplyPendingGpuCopiesLocked();
+@@ -920,7 +934,9 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
+     glFlush();
+ 
+     // Wait until root window drawing is finished before giving control back to X server
++    bool rootFenceTrace = traceBegin("uDroid/Lorie root fence wait");
+     eglClientWaitSyncKHR(egl_display, fence, 0, EGL_FOREVER);
++    traceEnd(rootFenceTrace);
+     eglDestroySyncKHR(egl_display, fence);
+     if (gpuCopySerial) {
+         state->gpuCopyQueue.completedSerial = gpuCopySerial;
+@@ -929,8 +945,10 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
+     state->waitForNextFrame = true;
+     lorie_mutex_unlock(&state->lock, &state->lockingPid);
+ 
++    bool swapTrace = traceBegin("uDroid/Lorie eglSwapBuffers");
+     if (eglSwapBuffers(egl_display, sfc) != EGL_TRUE)
+         printEglError("Failed to swap buffers", __LINE__);
++    traceEnd(swapTrace);
+ 
+     // Perform a little drawing operation to make sure the next buffer is ready on the next invocation of drawing
+     glEnable(GL_SCISSOR_TEST);
+@@ -939,10 +957,13 @@ void rendererRedrawLocked(bool* waitingForBuffers) {
+     glClear(GL_COLOR_BUFFER_BIT);
+     glDisable(GL_SCISSOR_TEST);
+     fence = eglCreateSyncKHR(egl_display, EGL_SYNC_FENCE_KHR, NULL);
++    bool postSwapFenceTrace = traceBegin("uDroid/Lorie post-swap fence wait");
+     eglClientWaitSyncKHR(egl_display, fence, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER);
++    traceEnd(postSwapFenceTrace);
+     eglDestroySyncKHR(egl_display, fence);
+ 
+     state->renderedFrames++;
++    traceEnd(frameTrace);
+ }
+ 
+ static inline __always_inline bool rendererShouldWait(bool *waitingForBuffers) {

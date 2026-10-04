@@ -959,6 +959,7 @@ private fun ManagementPane(
                     UdroidDestination.DEVICE ->
                         DevicePage(
                             capabilities = capabilities,
+                            journalLines = journalLines,
                             onRefresh = onRefresh,
                         )
                     UdroidDestination.ABOUT ->
@@ -1316,9 +1317,11 @@ private fun updateStatusText(state: AppUpdateState): String =
 @Composable
 private fun DevicePage(
     capabilities: List<CapabilityResult>,
+    journalLines: List<String>,
     onRefresh: () -> Unit,
 ) {
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefresh)
+    val zinkCapabilities = remember(journalLines) { zinkCompatibilityResults(journalLines) }
     LazyColumn(
         modifier =
             Modifier
@@ -1347,6 +1350,34 @@ private fun DevicePage(
                 capability = capability,
                 onOpenDeveloperOptions = openDeveloperOptions,
             )
+        }
+        item {
+            UdroidSectionLabel(
+                text = "Venus and Zink",
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (zinkCapabilities.isEmpty()) {
+            item {
+                CapabilityRow(
+                    capability =
+                        CapabilityResult(
+                            name = "Zink through Venus",
+                            status = CapabilityStatus.INFO,
+                            detail =
+                                "Not checked yet. Start a desktop with Venus, then refresh this page.",
+                            required = false,
+                        ),
+                    onOpenDeveloperOptions = openDeveloperOptions,
+                )
+            }
+        } else {
+            items(zinkCapabilities) { capability ->
+                CapabilityRow(
+                    capability = capability,
+                    onOpenDeveloperOptions = openDeveloperOptions,
+                )
+            }
         }
         item { Spacer(Modifier.height(16.dp)) }
     }

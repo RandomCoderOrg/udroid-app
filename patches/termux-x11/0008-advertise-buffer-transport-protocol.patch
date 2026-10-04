@@ -58,3 +58,83 @@
      return TRUE;
  }                               /* end lorieScreenInit */
  
+@@ -1184,32 +1219,56 @@
+     return NULL;
+ }
+-
+-static int lorieGetFormats(__unused ScreenPtr screen, CARD32 *num_formats, CARD32 **formats) {
+-    static CARD32 format = DRM_FORMAT_ARGB8888;
+-    *num_formats = 1;
+-    *formats = &format;
+-    return TRUE;
+-}
+-
+-static int lorieGetModifiers(__unused ScreenPtr screen, uint32_t format, uint32_t *num_modifiers, uint64_t **modifiers) {
+-    static uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+-
+-    if (format != DRM_FORMAT_ARGB8888 && format != DRM_FORMAT_XRGB8888) {
+-        *num_modifiers = 0;
+-        *modifiers = NULL;
+-        return TRUE;
+-    }
+-
+-    *num_modifiers = 1;
+-    *modifiers = &modifier;
+-    return TRUE;
+-}
+-
++
++static int lorieGetFormats(__unused ScreenPtr screen, CARD32 *num_formats, CARD32 **formats) {
++    static CARD32 format = DRM_FORMAT_ARGB8888;
++    *num_formats = 1;
++    *formats = &format;
++    return TRUE;
++}
++
++static uint64_t lorieSupportedModifiers[] = {
++    1255, /* AHardwareBuffer BGRA socket transport */
++    1257, /* AHardwareBuffer RGBA socket transport */
++    DRM_FORMAT_MOD_LINEAR,
++};
++
++static int lorieGetModifiers(__unused ScreenPtr screen, uint32_t format, uint32_t *num_modifiers, uint64_t **modifiers) {
++    if (format != DRM_FORMAT_ARGB8888 && format != DRM_FORMAT_XRGB8888) {
++        *num_modifiers = 0;
++        *modifiers = NULL;
++        return TRUE;
++    }
++
++    *num_modifiers = sizeof(lorieSupportedModifiers) / sizeof(lorieSupportedModifiers[0]);
++    *modifiers = lorieSupportedModifiers;
++    return TRUE;
++}
++
++static int lorieGetDrawableModifiers(__unused DrawablePtr draw, uint32_t format,
++                                     uint32_t *num_modifiers, uint64_t **modifiers) {
++    uint64_t *copy;
++
++    if (format != DRM_FORMAT_ARGB8888 && format != DRM_FORMAT_XRGB8888) {
++        *num_modifiers = 0;
++        *modifiers = NULL;
++        return TRUE;
++    }
++
++    copy = malloc(sizeof(lorieSupportedModifiers));
++    if (!copy)
++        return FALSE;
++
++    memcpy(copy, lorieSupportedModifiers, sizeof(lorieSupportedModifiers));
++    *num_modifiers = sizeof(lorieSupportedModifiers) / sizeof(lorieSupportedModifiers[0]);
++    *modifiers = copy;
++    return TRUE;
++}
++
+ static dri3_screen_info_rec lorieDri3Info = {
+         .version = 2,
+         .fds_from_pixmap = FalseNoop,
+         .pixmap_from_fds = loriePixmapFromFds,
+         .get_formats = lorieGetFormats,
+         .get_modifiers = lorieGetModifiers,
+-        .get_drawable_modifiers = FalseNoop
++        .get_drawable_modifiers = lorieGetDrawableModifiers
+ };
