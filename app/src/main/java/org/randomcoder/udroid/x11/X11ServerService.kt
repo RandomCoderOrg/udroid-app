@@ -14,6 +14,7 @@ import android.util.Log
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import org.randomcoder.udroid.BuildConfig
 
 class X11ServerService : Service() {
     private val monitorExecutor =
@@ -142,6 +143,7 @@ class X11ServerService : Service() {
         Os.setenv("TMPDIR", runtime.absolutePath, true)
         Os.setenv("XKB_CONFIG_ROOT", xkbRoot.canonicalPath, true)
         Os.setenv("HOME", filesRoot.absolutePath, true)
+        if (BuildConfig.DEBUG) Os.setenv("TERMUX_X11_DEBUG", "1", true)
     }
 
     private fun monitorSocket(

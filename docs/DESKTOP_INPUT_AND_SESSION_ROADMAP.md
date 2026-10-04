@@ -539,3 +539,58 @@ not prohibited by the architecture.
 
 Normal UI may call these Linux workspaces. Advanced UI may expose display
 numbers, PIDs, sockets, leases, and renderer state.
+
+## Native Wayland session (planned, opt-in)
+
+Wayland is a separate session backend, not Wayland-over-Lorie. Keep the existing
+Lorie/X11 session unchanged as the fallback. The Android app owns the Wayland
+compositor and its Android surface; Linux clients run in the selected PRoot and
+connect through a private Wayland socket. A guest desktop compositor such as
+KWin is nested as a Wayland client, so this is rootless and does not pretend
+that PRoot owns DRM/KMS.
+
+Use an Android-hosted wlroots compositor as the reference architecture.
+WLDroid at `9560e767bb3e31f3d9b72d280e051c47cda35cf1` is a useful black-box
+reference, not a safe integration dependency yet. Its current code advertises
+fabricated DRM device feedback, assumes a private AHardwareBuffer native-handle
+layout for DMA-BUF export, submits buffers without acquire fences, and drives
+frames from a fixed 16 ms timer. Do not carry these assumptions into uDroid.
+Audit every dependency license before considering any reuse. Do not port the
+GPL-3.0 wlroots-android-bridge code into uDroid. The existing experimental
+AHardwareBuffer/SurfaceControl presenter is a candidate output component, not
+proof that the complete Wayland protocol, client-buffer import, or KWin path is
+ready.
+
+### First checkpoint and current status
+
+The pinned source audit is complete, but its reference build is not. The local
+macOS build reached the cross-build and stopped because the host Bison is 2.3,
+below libxkbcommon's required 3.6. Meson was installed only in a temporary
+Python environment; no APK or compositor library was produced, and nothing
+was installed on a device.
+
+Do not run stock WLDroid with KWin: it advertises fabricated DRM device
+feedback and its AHardwareBuffer output omits acquire fences. A standalone APK
+also cannot connect to uDroid's app-private rootfs/socket because it has a
+different Android UID. These are architectural blockers, not just build
+friction.
+
+1. Keep the current X11 path unchanged. Do not import WLDroid's Proot, launcher,
+   VirGL, or Android shims into uDroid.
+2. If continuing with this reference, first make a disposable development
+   variant that completely disables its linux-dmabuf global/feedback and uses
+   a software/SHM client-buffer path plus CPU-copy presentation. Do not expose
+   fake DRM identity or the current no-fence AHardwareBuffer path.
+3. Embed that compositor in a uDroid dev build so the selected distro connects
+   through a same-UID private Wayland socket; a separate APK cannot test this
+   boundary.
+4. Launch `weston-simple-shm`; verify pixels, resize, touch/pointer/keyboard
+   input, detach/reattach, and clean stop/restart before trying EGL or KWin.
+5. Add EGL and guest KWin only after the SHM/lifecycle gate passes. Keep
+   `linux-dmabuf` disabled until device feedback is truthful and the complete
+   buffer import plus acquire/release ordering is validated.
+
+The first checkpoint passes only if X11 remains unaffected, the SHM client is
+visibly correct, input reaches it, and the session survives lifecycle cycles.
+GPU acceleration, Plasma support, and performance qualification are later
+gates; the Wayland option stays hidden/disabled until each is demonstrated.

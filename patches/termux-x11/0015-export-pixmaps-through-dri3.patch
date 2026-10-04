@@ -1,0 +1,209 @@
+diff --git a/InitOutput.c b/InitOutput.c
+index 2c7453f..eb1889f 100644
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -1299,6 +1299,27 @@ static int lorieGetFormats(__unused ScreenPtr screen, CARD32 *num_formats, CARD3
+     return TRUE;
+ }
+ 
++static int lorieFdsFromPixmap(__unused ScreenPtr screen, PixmapPtr pixmap,
++                              int *fds, uint32_t *strides,
++                              uint32_t *offsets, uint64_t *modifier) {
++    LorieBuffer *buffer = lorieEnsureGpuSampleable(pixmap, LORIEBUFFER_FD);
++    uint32_t size;
++    if (!buffer)
++        return 0;
++
++    const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
++    fds[0] = LorieBuffer_exportDmaBuf(buffer, &offsets[0], &size);
++    if (fds[0] < 0)
++        return 0;
++
++    strides[0] = desc->stride * 4;
++    *modifier = DRM_FORMAT_MOD_LINEAR;
++    if (lorieServerDebugEnabled)
++        log(INFO, "DRI3: exported DMA-BUF pixmap %ux%u stride %u size %u",
++            pixmap->drawable.width, pixmap->drawable.height, strides[0], size);
++    return 1;
++}
++
+ static uint64_t lorieSupportedModifiers[] = {
+     1255, /* AHardwareBuffer BGRA socket transport */
+     1257, /* AHardwareBuffer RGBA socket transport */
+@@ -1348,7 +1370,7 @@ static int lorieGetDrawableModifiers(__unused DrawablePtr draw, uint32_t format,
+ 
+ static dri3_screen_info_rec lorieDri3Info = {
+         .version = 2,
+-        .fds_from_pixmap = FalseNoop,
++        .fds_from_pixmap = lorieFdsFromPixmap,
+         .pixmap_from_fds = loriePixmapFromFds,
+         .get_formats = lorieGetFormats,
+         .get_modifiers = lorieGetModifiers,
+diff --git a/buffer.c b/buffer.c
+index f063c79..8ee07db 100644
+--- a/buffer.c
++++ b/buffer.c
+@@ -12,6 +12,7 @@
+ #include <stdbool.h>
+ #include <stdint.h>
+ #include <linux/dma-buf.h>
++#include <linux/dma-heap.h>
+ #include <linux/memfd.h>
+ #include <sys/ioctl.h>
+ #include <sys/mman.h>
+@@ -142,6 +143,49 @@ static inline size_t alignToPage(size_t size) {
+     return (size + page_size - 1) & ~(page_size - 1);
+ }
+ 
++static inline int32_t alignGpuSampledStride(int32_t width) {
++    const int32_t pixelsPerAlignment = 64 / sizeof(uint32_t);
++    return (width + pixelsPerAlignment - 1) & ~(pixelsPerAlignment - 1);
++}
++
++static int createDmaHeapRegion(size_t size) {
++    static const char *const heapPaths[] = {
++        "/dev/dma_heap/system-uncached",
++        "/dev/dma_heap/system",
++    };
++    struct dma_heap_allocation_data allocation = {
++        .len = alignToPage(size),
++        .fd_flags = O_RDWR | O_CLOEXEC,
++    };
++
++    for (size_t i = 0; i < sizeof(heapPaths) / sizeof(heapPaths[0]); i++) {
++        int heap = open(heapPaths[i], O_RDONLY | O_CLOEXEC);
++        if (heap < 0)
++            continue;
++
++        int result;
++        do {
++            result = ioctl(heap, DMA_HEAP_IOCTL_ALLOC, &allocation);
++        } while (result < 0 && errno == EINTR);
++        int savedErrno = errno;
++        close(heap);
++        errno = savedErrno;
++        if (result == 0)
++            return (int) allocation.fd;
++    }
++
++    return -1;
++}
++
++static int syncDmaBuf(int fd, uint64_t flags) {
++    struct dma_buf_sync sync = { .flags = flags };
++    int result;
++    do {
++        result = ioctl(fd, DMA_BUF_IOCTL_SYNC, &sync);
++    } while (result < 0 && errno == EINTR);
++    return result;
++}
++
+ #pragma clang diagnostic push
+ #pragma ide diagnostic ignored "UnreachableCallsOfFunction"
+ int LorieBuffer_createRegion(char const* name, size_t size) {
+@@ -266,12 +308,16 @@ static LorieBuffer* allocate(int32_t width, int32_t stride, int32_t height, int8
+ 
+ __LIBC_HIDDEN__ LorieBuffer* LorieBuffer_allocate(int32_t width, int32_t height, int8_t format, int8_t type) {
+     int fd = -1;
++    int32_t stride = width;
+     size_t size = 0;
+     AHardwareBuffer *ahardwarebuffer = NULL;
+ 
+     if (type == LORIEBUFFER_FD) {
+-        size = alignToPage(width * height * sizeof(uint32_t));
+-        fd = LorieBuffer_createRegion("LorieBuffer", size);
++        stride = alignGpuSampledStride(width);
++        size = alignToPage(stride * height * sizeof(uint32_t));
++        fd = createDmaHeapRegion(size);
++        if (fd < 0)
++            fd = LorieBuffer_createRegion("LorieBuffer", size);
+         if (fd < 0)
+             return NULL;
+     } else if (type == LORIEBUFFER_AHARDWAREBUFFER) {
+@@ -281,7 +327,7 @@ __LIBC_HIDDEN__ LorieBuffer* LorieBuffer_allocate(int32_t width, int32_t height,
+             dprintf(2, "FATAL: failed to allocate AHardwareBuffer (width %d height %d format %d): error %d\n", width, height, format, err);
+     }
+ 
+-    return allocate(width, width, height, format, type, ahardwarebuffer, fd, size, 0, true);
++    return allocate(width, stride, height, format, type, ahardwarebuffer, fd, size, 0, true);
+ }
+ 
+ __LIBC_HIDDEN__ LorieBuffer* LorieBuffer_wrapFileDescriptor(int32_t width, int32_t stride, int32_t height, int8_t format, int fd, off_t offset) {
+@@ -299,8 +345,12 @@ __LIBC_HIDDEN__ void LorieBuffer_convert(LorieBuffer* buffer, int8_t type, int8_
+         return;
+ 
+     if (type == LORIEBUFFER_FD) {
+-        size_t size = alignToPage(buffer->desc.stride * buffer->desc.height * sizeof(uint32_t));
+-        int fd = LorieBuffer_createRegion("LorieBuffer", size);
++        const int32_t sourceStride = buffer->desc.stride;
++        const int32_t destinationStride = alignGpuSampledStride(buffer->desc.width);
++        size_t size = alignToPage(destinationStride * buffer->desc.height * sizeof(uint32_t));
++        int fd = createDmaHeapRegion(size);
++        if (fd < 0)
++            fd = LorieBuffer_createRegion("LorieBuffer", size);
+         if (fd < 0)
+             return;
+ 
+@@ -311,10 +361,18 @@ __LIBC_HIDDEN__ void LorieBuffer_convert(LorieBuffer* buffer, int8_t type, int8_
+             return;
+         }
+ 
+-        pixman_blt(buffer->desc.data, data, buffer->desc.stride, buffer->desc.stride, 32, 32, 0, 0, 0, 0, buffer->desc.width, buffer->desc.height);
++        bool isDmaBuf = syncDmaBuf(fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE) == 0;
++        pixman_blt(buffer->desc.data, data, sourceStride, destinationStride, 32, 32,
++                   0, 0, 0, 0, buffer->desc.width, buffer->desc.height);
++        if (isDmaBuf && syncDmaBuf(fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE) < 0) {
++            munmap(data, size);
++            close(fd);
++            return;
++        }
+ 
+         buffer->desc.type = type;
+         buffer->desc.format = format;
++        buffer->desc.stride = destinationStride;
+         buffer->fd = fd;
+         buffer->size = size;
+         buffer->offset = 0;
+@@ -383,6 +441,27 @@ __LIBC_HIDDEN__ const LorieBuffer_Desc* LorieBuffer_description(LorieBuffer* buf
+     return buffer ? &buffer->desc : &none;
+ }
+ 
++__LIBC_HIDDEN__ int LorieBuffer_exportDmaBuf(LorieBuffer* buffer,
++                                              uint32_t* offset,
++                                              uint32_t* size) {
++    if (!buffer || !offset || !size || buffer->desc.type != LORIEBUFFER_FD ||
++        buffer->fd < 0 || buffer->offset < 0 || buffer->offset > UINT32_MAX ||
++        buffer->size > UINT32_MAX)
++        return -1;
++
++    if (syncDmaBuf(buffer->fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ) < 0)
++        return -1;
++    if (syncDmaBuf(buffer->fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ) < 0)
++        return -1;
++
++    int fd = fcntl(buffer->fd, F_DUPFD_CLOEXEC, 0);
++    if (fd >= 0) {
++        *offset = (uint32_t) buffer->offset;
++        *size = (uint32_t) buffer->size;
++    }
++    return fd;
++}
++
+ __LIBC_HIDDEN__ int LorieBuffer_lock(LorieBuffer* buffer, void** out) {
+     int ret = 0;
+     if (!buffer)
+diff --git a/buffer.h b/buffer.h
+index 751004b..98ac68b 100644
+--- a/buffer.h
++++ b/buffer.h
+@@ -112,6 +112,10 @@ STATIC_INLINE void LorieBuffer_release(LorieBuffer* _Nullable buffer) {
+  */
+ const LorieBuffer_Desc* _Nonnull LorieBuffer_description(LorieBuffer* _Nullable buffer);
+ 
++int LorieBuffer_exportDmaBuf(LorieBuffer* _Nullable buffer,
++                             uint32_t* _Nonnull offset,
++                             uint32_t* _Nonnull size);
++
+ /**
+  * Lock the AHardwareBuffer for direct CPU access.
+  * See AHardwareBuffer_lock() description for details
