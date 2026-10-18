@@ -1,0 +1,162 @@
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -1333,12 +1333,28 @@
+ static int lorieFdsFromPixmap(__unused ScreenPtr screen, PixmapPtr pixmap,
+                               int *fds, uint32_t *strides,
+                               uint32_t *offsets, uint64_t *modifier) {
+-    LorieBuffer *buffer = lorieEnsureGpuSampleable(pixmap, LORIEBUFFER_FD);
++    LoriePixmapPriv *priv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap);
++    LorieBuffer *buffer;
+     uint32_t size;
+-    if (!buffer)
++    if (!priv || !priv->buffer || priv->mem)
+         return 0;
+
++    /*
++     * Redirected compositor pixmaps are already AHB-backed. Export that same
++     * storage through DRI3; rejecting it forces Mesa into an XGetImage readback.
++     */
++    buffer = priv->buffer;
+     const LorieBuffer_Desc *desc = LorieBuffer_description(buffer);
++    if (desc->type == LORIEBUFFER_REGULAR) {
++        buffer = lorieEnsureGpuSampleable(pixmap, LORIEBUFFER_FD);
++        if (!buffer)
++            return 0;
++        desc = LorieBuffer_description(buffer);
++    }
++    if (desc->type != LORIEBUFFER_FD &&
++        desc->type != LORIEBUFFER_AHARDWAREBUFFER)
++        return 0;
++
+     fds[0] = LorieBuffer_exportDmaBuf(buffer, &offsets[0], &size);
+     if (fds[0] < 0)
+         return 0;
+--- a/buffer.c
++++ b/buffer.c
+@@ -441,12 +441,115 @@
+     static const LorieBuffer_Desc none = {0};
+     return buffer ? &buffer->desc : &none;
+ }
++
++/*
++ * AHardwareBuffer exposes no public direct fd getter. Round-trip the native
++ * handle through the NDK socket API, then accept only a CPU-readable DMA-BUF.
++ */
++static int exportAHardwareBufferDmaBuf(AHardwareBuffer *buffer,
++                                       uint32_t minimumSize,
++                                       uint32_t *size) {
++    enum { MAX_HANDLE_FDS = 16 };
++    int sockets[2] = {-1, -1};
++    int receivedFds[MAX_HANDLE_FDS];
++    size_t receivedFdCount = 0;
++    int selectedFd = -1;
++    ssize_t receivedBytes;
++    char payload[4096];
++    char control[CMSG_SPACE(sizeof(int) * MAX_HANDLE_FDS)];
++    struct iovec iov = {
++        .iov_base = payload,
++        .iov_len = sizeof(payload),
++    };
++    struct msghdr message = {
++        .msg_iov = &iov,
++        .msg_iovlen = 1,
++        .msg_control = control,
++        .msg_controllen = sizeof(control),
++    };
++
++    if (!buffer || socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets) != 0)
++        return -1;
++
++    if (AHardwareBuffer_sendHandleToUnixSocket(buffer, sockets[0]) != 0)
++        goto out;
++    close(sockets[0]);
++    sockets[0] = -1;
+
++    receivedBytes = recvmsg(sockets[1], &message, MSG_CMSG_CLOEXEC);
++    if (receivedBytes <= 0)
++        goto out;
++
++    for (struct cmsghdr *header = CMSG_FIRSTHDR(&message);
++         header && receivedFdCount < MAX_HANDLE_FDS;
++         header = CMSG_NXTHDR(&message, header)) {
++        if (header->cmsg_level != SOL_SOCKET || header->cmsg_type != SCM_RIGHTS)
++            continue;
++
++        size_t count = (header->cmsg_len - CMSG_LEN(0)) / sizeof(int);
++        int *fds = (int *)CMSG_DATA(header);
++        for (size_t i = 0; i < count && receivedFdCount < MAX_HANDLE_FDS; i++)
++            receivedFds[receivedFdCount++] = fds[i];
++    }
++
++    /* recvmsg may still install the descriptors that fit before reporting a
++     * truncated control message. Close those descriptors through out rather
++     * than attempting to interpret an incomplete native handle. */
++    if (message.msg_flags & MSG_CTRUNC)
++        goto out;
++
++    for (size_t i = 0; i < receivedFdCount; i++) {
++        struct stat info = {0};
++        int fd = receivedFds[i];
++
++        if (fstat(fd, &info) != 0 || info.st_size < minimumSize ||
++            info.st_size > UINT32_MAX)
++            continue;
++        if (syncDmaBuf(fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ) != 0)
++            continue;
++        if (syncDmaBuf(fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ) != 0)
++            continue;
++
++        selectedFd = fd;
++        *size = (uint32_t)info.st_size;
++        receivedFds[i] = -1;
++        break;
++    }
++
++out:
++    for (size_t i = 0; i < receivedFdCount; i++)
++        if (receivedFds[i] >= 0)
++            close(receivedFds[i]);
++    if (sockets[0] >= 0)
++        close(sockets[0]);
++    if (sockets[1] >= 0)
++        close(sockets[1]);
++    return selectedFd;
++}
++
+ __LIBC_HIDDEN__ int LorieBuffer_exportDmaBuf(LorieBuffer* buffer,
+                                               uint32_t* offset,
+                                               uint32_t* size) {
+-    if (!buffer || !offset || !size || buffer->desc.type != LORIEBUFFER_FD ||
+-        buffer->fd < 0 || buffer->offset < 0 || buffer->offset > UINT32_MAX ||
++    int fd;
++
++    if (!buffer || !offset || !size)
++        return -1;
++
++    if (buffer->desc.type == LORIEBUFFER_AHARDWAREBUFFER) {
++        uint64_t minimumSize = (uint64_t)buffer->desc.stride *
++                               buffer->desc.height * sizeof(uint32_t);
++        if (minimumSize > UINT32_MAX)
++            return -1;
++
++        fd = exportAHardwareBufferDmaBuf(buffer->desc.buffer,
++                                         (uint32_t)minimumSize, size);
++        if (fd >= 0)
++            *offset = 0;
++        return fd;
++    }
++
++    if (buffer->desc.type != LORIEBUFFER_FD || buffer->fd < 0 ||
++        buffer->offset < 0 || buffer->offset > UINT32_MAX ||
+         buffer->size > UINT32_MAX)
+         return -1;
+
+@@ -455,7 +554,7 @@
+     if (syncDmaBuf(buffer->fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ) < 0)
+         return -1;
+
+-    int fd = fcntl(buffer->fd, F_DUPFD_CLOEXEC, 0);
++    fd = fcntl(buffer->fd, F_DUPFD_CLOEXEC, 0);
+     if (fd >= 0) {
+         *offset = (uint32_t) buffer->offset;
+         *size = (uint32_t) buffer->size;

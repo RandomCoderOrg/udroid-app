@@ -123,8 +123,16 @@ if [[ "${UDROID_EXPERIMENTAL_GFXSTREAM_X11:-0}" == "1" ]]; then
         "$cpp_root/lorie" \
         "$repo_root/patches/termux-x11/0016-accept-fd-gpu-copy-sources.patch" \
         'lorieGpuCopySource'
+    apply_once \
+        "$cpp_root/lorie" \
+        "$repo_root/patches/termux-x11/0017-export-ahardwarebuffer-pixmaps-through-dri3.patch" \
+        'exportAHardwareBufferDmaBuf'
 else
     source_profile="standard"
+    revert_if_applied \
+        "$cpp_root/lorie" \
+        "$repo_root/patches/termux-x11/0017-export-ahardwarebuffer-pixmaps-through-dri3.patch" \
+        'exportAHardwareBufferDmaBuf'
     revert_if_applied \
         "$cpp_root/lorie" \
         "$repo_root/patches/termux-x11/0016-accept-fd-gpu-copy-sources.patch" \
