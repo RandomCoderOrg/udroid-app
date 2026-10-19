@@ -13,6 +13,7 @@ class GraphicsProfileCompatibilityTest {
                 openGlEsVersion = 0x00030000,
                 vulkanVersion = (1 shl 22) or (1 shl 12),
                 hardwareBuffer = true,
+                vendorVulkanHal = true,
             )
         val compatibleGuest =
             GraphicsGuestSupport(
@@ -21,12 +22,14 @@ class GraphicsProfileCompatibilityTest {
                 vulkanIcd = true,
                 virgl = true,
                 venus = true,
+                sphal = true,
             )
 
         val supported = GraphicsProfileCompatibilityProbe.classify(compatibleDevice, compatibleGuest)
         assertTrue(supported.getValue(DesktopGraphicsProfile.VIRGL).available)
         assertTrue(supported.getValue(DesktopGraphicsProfile.VIRGL_ANGLE).available)
         assertTrue(supported.getValue(DesktopGraphicsProfile.VENUS_EXPERIMENTAL).available)
+        assertTrue(supported.getValue(DesktopGraphicsProfile.SPHAL_EXPERIMENTAL).available)
 
         val noAndroidVulkan =
             GraphicsProfileCompatibilityProbe.classify(
@@ -37,6 +40,7 @@ class GraphicsProfileCompatibilityTest {
         assertTrue(noAndroidVulkan.getValue(DesktopGraphicsProfile.ZINK).available)
         assertFalse(noAndroidVulkan.getValue(DesktopGraphicsProfile.VIRGL_ANGLE).available)
         assertFalse(noAndroidVulkan.getValue(DesktopGraphicsProfile.VENUS_EXPERIMENTAL).available)
+        assertFalse(noAndroidVulkan.getValue(DesktopGraphicsProfile.SPHAL_EXPERIMENTAL).available)
 
         val minimalGuest =
             GraphicsProfileCompatibilityProbe.classify(
@@ -47,6 +51,7 @@ class GraphicsProfileCompatibilityTest {
                     vulkanIcd = false,
                     virgl = false,
                     venus = false,
+                    sphal = false,
                 ),
             )
         assertTrue(minimalGuest.getValue(DesktopGraphicsProfile.STANDARD).available)
@@ -54,5 +59,6 @@ class GraphicsProfileCompatibilityTest {
         assertFalse(minimalGuest.getValue(DesktopGraphicsProfile.ZINK).available)
         assertFalse(minimalGuest.getValue(DesktopGraphicsProfile.VIRGL).available)
         assertFalse(minimalGuest.getValue(DesktopGraphicsProfile.VENUS_EXPERIMENTAL).available)
+        assertFalse(minimalGuest.getValue(DesktopGraphicsProfile.SPHAL_EXPERIMENTAL).available)
     }
 }
