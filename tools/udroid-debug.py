@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 
 
@@ -93,6 +94,72 @@ def show_logs(package, serial, limit, raw):
         )
 
 
+def wait_for_desktop(package, serial, rootfs, timeout):
+    deadline = time.monotonic() + timeout
+    last_message = "Desktop state is unavailable"
+    while time.monotonic() < deadline:
+        state = preferences(package, "runtime-supervisor-state", serial)
+        phase = state.get("desktop-phase", "unknown")
+        last_message = state.get("desktop-message", last_message)
+        if phase == "RUNNING" and state.get("rootfs-name") == rootfs:
+            return
+        if phase == "CRASHED":
+            raise RuntimeError(last_message)
+        time.sleep(0.5)
+    raise RuntimeError(f"Timed out waiting for {rootfs} desktop: {last_message}")
+
+
+def launch_application(package, serial, rootfs, application_id):
+    adb(
+        [
+            "shell", "am", "start", "-n",
+            f"{package}/org.randomcoder.udroid.MainActivity",
+            "-a", "org.randomcoder.udroid.action.LAUNCH_LINUX_APPLICATION",
+            "--es", "org.randomcoder.udroid.extra.LINUX_APPLICATION_ID", application_id,
+            "--es", "org.randomcoder.udroid.extra.ROOTFS_NAME", rootfs,
+            "-f", "0x24000000",  # CLEAR_TOP | SINGLE_TOP
+        ],
+        serial=serial,
+    )
+
+
+def accessibility_node_center(document, description, package=None):
+    root = ET.fromstring(document)
+    for node in root.iter("node"):
+        if node.attrib.get("content-desc") != description:
+            continue
+        if package and node.attrib.get("package") != package:
+            continue
+        match = re.fullmatch(
+            r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",
+            node.attrib.get("bounds", ""),
+        )
+        if match:
+            left, top, right, bottom = map(int, match.groups())
+            return (left + right) // 2, (top + bottom) // 2
+    return None
+
+
+def collapse_desktop_controls(package, serial, timeout):
+    remote = "/sdcard/udroid-debug-window.xml"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        adb(["shell", "rm", "-f", remote], serial=serial, check=False)
+        adb(["shell", "uiautomator", "dump", remote], serial=serial, check=False)
+        result = adb(["exec-out", "cat", remote], serial=serial, check=False)
+        if result.returncode == 0:
+            center = accessibility_node_center(
+                result.stdout,
+                "Collapse desktop controls",
+                package,
+            )
+            if center:
+                adb(["shell", "input", "tap", str(center[0]), str(center[1])], serial=serial)
+                return
+        time.sleep(0.5)
+    raise RuntimeError("Desktop opened, but its Collapse desktop controls button was not found")
+
+
 def send_command(package, serial, command, rootfs, environment):
     args = [
         "shell", "am", "broadcast", "--receiver-foreground",
@@ -119,6 +186,30 @@ def send_command(package, serial, command, rootfs, environment):
     print(output)
 
 
+def reproduce_damage(package, serial, rootfs, environment, application, timeout, keep_controls):
+    state = preferences(package, "runtime-supervisor-state", serial)
+    if state.get("desktop-phase") != "STOPPED":
+        send_command(package, serial, "stop-desktop", None, None)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state = preferences(package, "runtime-supervisor-state", serial)
+            if state.get("desktop-phase") == "STOPPED":
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError("Timed out stopping the existing desktop")
+    send_command(package, serial, "start-desktop", rootfs, environment)
+    wait_for_desktop(package, serial, rootfs, timeout)
+    launch_application(package, serial, rootfs, application)
+    if not keep_controls:
+        collapse_desktop_controls(package, serial, timeout)
+    adb(["shell", "input", "keyevent", "KEYCODE_ESCAPE"], serial=serial)
+    print(
+        f"Damage reproduction ready: {environment} + {application}. "
+        "Drag the window, then type glxgears one character at a time."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", help="ADB device serial")
@@ -133,6 +224,12 @@ def main():
     logs = sub.add_parser("logs")
     logs.add_argument("--limit", type=int, default=80)
     logs.add_argument("--raw", action="store_true", help="Print original JSONL")
+    damage = sub.add_parser("repro-damage", help="Open the Panfrost GNOME damage reproduction")
+    damage.add_argument("--rootfs", default="noble-raw")
+    damage.add_argument("--environment", default="udroid-gnome-panfrost")
+    damage.add_argument("--application", default="Alacritty", help="Desktop application ID")
+    damage.add_argument("--timeout", type=float, default=30)
+    damage.add_argument("--keep-controls", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "status":
@@ -143,6 +240,18 @@ def main():
             if args.limit < 1:
                 parser.error("--limit must be positive")
             show_logs(args.package, args.serial, args.limit, args.raw)
+        elif args.command == "repro-damage":
+            if args.timeout <= 0:
+                parser.error("--timeout must be positive")
+            reproduce_damage(
+                args.package,
+                args.serial,
+                args.rootfs,
+                args.environment,
+                args.application,
+                args.timeout,
+                args.keep_controls,
+            )
         else:
             send_command(
                 args.package,

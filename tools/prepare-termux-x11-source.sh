@@ -102,11 +102,16 @@ apply_once \
 apply_once \
     "$cpp_root" \
     "$repo_root/patches/termux-x11/0009-defer-gpu-only-present-while-detached.patch" \
-    'Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {'
+    'Bool loriePixmapIsGpuOnly(PixmapPtr pixmap) {'
 revert_if_applied \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0010-disable-gpu-present-copy.patch" \
     "uDroid standard profile: use Xorg's copy path"
+
+revert_if_applied \
+    "$cpp_root" \
+    "$repo_root/patches/termux-x11/0014-lorie-present-lifecycle-diagnostics.patch" \
+    'Present GPU copy schedule serial='
 
 if [[ "${UDROID_EXPERIMENTAL_GFXSTREAM_X11:-0}" == "1" ]]; then
     source_profile="experimental gfxstream"
@@ -114,16 +119,8 @@ if [[ "${UDROID_EXPERIMENTAL_GFXSTREAM_X11:-0}" == "1" ]]; then
         "$cpp_root/lorie" \
         "$repo_root/patches/termux-x11/0012-lorie-raw-fd-import-diagnostics.patch" \
         'raw-fd import stage=mmap'
-    apply_once \
-        "$cpp_root" \
-        "$repo_root/patches/termux-x11/0014-lorie-present-lifecycle-diagnostics.patch" \
-        'Present GPU copy schedule serial='
 else
     source_profile="standard"
-    revert_if_applied \
-        "$cpp_root" \
-        "$repo_root/patches/termux-x11/0014-lorie-present-lifecycle-diagnostics.patch" \
-        'Present GPU copy schedule serial='
     revert_if_applied \
         "$cpp_root/lorie" \
         "$repo_root/patches/termux-x11/0012-lorie-raw-fd-import-diagnostics.patch" \
@@ -143,6 +140,10 @@ apply_once \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0017-export-ahardwarebuffer-pixmaps-through-dri3.patch" \
     'exportAHardwareBufferDmaBuf'
+apply_once \
+    "$cpp_root" \
+    "$repo_root/patches/termux-x11/0018-present-damage-ordering.patch" \
+    'RegionPtr           gpu_copy_damage'
 
 apply_once \
     "$cpp_root/lorie" \
