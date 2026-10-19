@@ -2,15 +2,7 @@ Log the complete raw-FD import contract and preserve the failing errno.
 
 --- a/buffer.c
 +++ b/buffer.c
-@@ -17,6 +17,7 @@
- #include <sys/ioctl.h>
- #include <sys/mman.h>
- #include <sys/socket.h>
-+#include <sys/stat.h>
- #include <unistd.h>
- #include <errno.h>
- #include <EGL/egl.h>
-@@ -175,9 +176,11 @@
+@@ -175,9 +175,11 @@
      AHardwareBuffer_Desc desc = {0};
      static uint64_t id = 0;
      bool acceptable = (format == AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM || format == AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM) && width > 0 && height > 0;

@@ -33,6 +33,14 @@
          return 0;
 --- a/buffer.c
 +++ b/buffer.c
+@@ -17,6 +17,7 @@
+ #include <sys/ioctl.h>
+ #include <sys/mman.h>
+ #include <sys/socket.h>
++#include <sys/stat.h>
+ #include <unistd.h>
+ #include <errno.h>
+ #include <EGL/egl.h>
 @@ -441,12 +441,115 @@
      static const LorieBuffer_Desc none = {0};
      return buffer ? &buffer->desc : &none;
