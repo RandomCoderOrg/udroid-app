@@ -1,0 +1,84 @@
+Synchronize nested EXA CPU access to DMA-BUF-backed pixmaps.
+
+--- a/buffer.h
++++ b/buffer.h
+@@ -115,6 +115,8 @@ const LorieBuffer_Desc* _Nonnull LorieBuffer_description(LorieBuffer* _Nullable
+ int LorieBuffer_exportDmaBuf(LorieBuffer* _Nullable buffer,
+                              uint32_t* _Nonnull offset,
+                              uint32_t* _Nonnull size);
++bool LorieBuffer_cpuAccessBegin(LorieBuffer* _Nullable buffer, bool write);
++void LorieBuffer_cpuAccessEnd(LorieBuffer* _Nullable buffer, bool write);
+ 
+ /**
+  * Lock the AHardwareBuffer for direct CPU access.
+--- a/buffer.c
++++ b/buffer.c
+@@ -548,6 +548,30 @@ __LIBC_HIDDEN__ int LorieBuffer_exportDmaBuf(LorieBuffer* buffer,
+     return fd;
+ }
+ 
++__LIBC_HIDDEN__ bool LorieBuffer_cpuAccessBegin(LorieBuffer* buffer, bool write) {
++    if (!buffer || buffer->desc.type != LORIEBUFFER_FD ||
++        buffer->dmaBufSyncSupport == DMA_BUF_SYNC_UNSUPPORTED)
++        return false;
++
++    if (syncDmaBuf(buffer->fd, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ |
++                               (write ? DMA_BUF_SYNC_WRITE : 0)) == 0) {
++        buffer->dmaBufSyncSupport = DMA_BUF_SYNC_SUPPORTED;
++        return true;
++    }
++
++    int error = errno;
++    if (buffer->dmaBufSyncSupport == DMA_BUF_SYNC_UNKNOWN &&
++        (error == ENOTTY || error == EINVAL || error == ENOSYS)) {
++        buffer->dmaBufSyncSupport = DMA_BUF_SYNC_UNSUPPORTED;
++    }
++    return false;
++}
++
++__LIBC_HIDDEN__ void LorieBuffer_cpuAccessEnd(LorieBuffer* buffer, bool write) {
++    syncDmaBuf(buffer->fd, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ |
++                           (write ? DMA_BUF_SYNC_WRITE : 0));
++}
++
+ __LIBC_HIDDEN__ int LorieBuffer_lock(LorieBuffer* buffer, void** out) {
+     int ret = 0;
+     if (!buffer)
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -112,6 +112,8 @@ static pthread_cond_t* volatile rendererCond = &rendererCondPlaceholder;
+ typedef struct {
+     LorieBuffer *buffer;
+     bool flipped, wasLocked, imported, gpuOnly;
++    uint8_t dmaBufAccessDepth;
++    bool dmaBufAccessWrite;
+     void *locked;
+     void *mem;
+ } LoriePixmapPriv;
+@@ -1170,6 +1172,14 @@ Bool loriePrepareAccess(PixmapPtr pPix, int index) {
+     } else
+         priv->wasLocked = TRUE;
+ 
++    if (priv->buffer && !priv->mem) {
++        bool write = index == EXA_PREPARE_DEST || index == EXA_PREPARE_AUX_DEST;
++        if (priv->dmaBufAccessDepth || LorieBuffer_cpuAccessBegin(priv->buffer, write)) {
++            priv->dmaBufAccessDepth++;
++            priv->dmaBufAccessWrite |= write;
++        }
++    }
++
+     pPix->devPrivate.ptr = priv->locked ?: priv->mem;
+     return TRUE;
+ }
+@@ -1176,6 +1186,11 @@ void lorieFinishAccess(PixmapPtr pPix, int index) {
+     if (lorieNeedsGpuLock(pPix, priv, index))
+         lorie_mutex_unlock(&pvfb->state->lock, &pvfb->state->lockingPid);
+ 
++    if (priv->dmaBufAccessDepth && !--priv->dmaBufAccessDepth) {
++        LorieBuffer_cpuAccessEnd(priv->buffer, priv->dmaBufAccessWrite);
++        priv->dmaBufAccessWrite = false;
++    }
++
+     if (!priv->wasLocked) {
+         LorieBuffer_unlock(priv->buffer);
+         priv->locked = NULL;

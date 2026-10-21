@@ -1,0 +1,35 @@
+Report the active renderer import contract once at startup.
+
+--- a/renderer.c
++++ b/renderer.c
+@@ -298,6 +298,30 @@ int rendererInitThread(void* cookie) {
+     eglMakeCurrent(egl_display, sfc, sfc, ctx);
+     eglSwapInterval(egl_display, 0);
+ 
++    const char *eglVendor = eglQueryString(egl_display, EGL_VENDOR);
++    const char *eglVersion = eglQueryString(egl_display, EGL_VERSION);
++    const char *eglExtensions = eglQueryString(egl_display, EGL_EXTENSIONS);
++    const char *glExtensions = (const char *) glGetString(GL_EXTENSIONS);
++    bool dmaBufImport = eglExtensions && strstr(eglExtensions, "EGL_EXT_image_dma_buf_import");
++    bool dmaBufModifiers = eglExtensions && strstr(eglExtensions, "EGL_EXT_image_dma_buf_import_modifiers");
++    bool nativeBuffer = eglExtensions && strstr(eglExtensions, "EGL_ANDROID_image_native_buffer");
++    bool nativeClientBuffer = eglExtensions && strstr(eglExtensions, "EGL_ANDROID_get_native_client_buffer");
++    bool nativeFence = eglExtensions && strstr(eglExtensions, "EGL_ANDROID_native_fence_sync");
++    bool waitSync = eglExtensions && strstr(eglExtensions, "EGL_KHR_wait_sync");
++    bool imageBase = eglExtensions && strstr(eglExtensions, "EGL_KHR_image_base");
++    bool externalImage = glExtensions && strstr(glExtensions, "GL_OES_EGL_image_external");
++    bool ahardwareBufferImport = nativeBuffer && nativeClientBuffer && imageBase && externalImage;
++    const char *route = dmaBufImport && imageBase ? "egl-dmabuf" :
++                        ahardwareBufferImport ? "ahardwarebuffer" : "cpu-upload";
++    const char *fallback = dmaBufImport && imageBase ? "none" :
++                           ahardwareBufferImport ? "direct DMA-BUF import unavailable" :
++                           "no GPU-native import route";
++
++    log("Xlorie: G0 graphics contract vendor=\"%s\" version=\"%s\" dma_buf_import=%d dma_buf_modifiers=%d native_buffer=%d native_client_buffer=%d native_fence=%d wait_sync=%d image_base=%d external_image=%d eligible_route=%s fallback=\"%s\"",
++        eglVendor ?: "unknown", eglVersion ?: "unknown", dmaBufImport, dmaBufModifiers,
++        nativeBuffer, nativeClientBuffer, nativeFence, waitSync, imageBase, externalImage,
++        route, fallback);
++
+     g_texture_program = createProgram(vertexShaderSrc, fragmentShaderSrc);
+     if (!g_texture_program)
+         log("Xlorie: GLESv2: Unable to create shader program.\n");

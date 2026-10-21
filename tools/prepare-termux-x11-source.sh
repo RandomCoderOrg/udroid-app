@@ -105,25 +105,20 @@ apply_once \
     'Bool loriePixmapIsGpuOnly(PixmapPtr pixmap) {'
 revert_if_applied \
     "$cpp_root/lorie" \
-    "$repo_root/patches/termux-x11/0010-disable-gpu-present-copy.patch" \
-    "uDroid standard profile: use Xorg's copy path"
+    "$repo_root/patches/termux-x11/experiments/0013-fix-present-flip-height-check.patch" \
+    'pvfb->root.height != pixmap->drawable.height'
 
-revert_if_applied \
-    "$cpp_root" \
-    "$repo_root/patches/termux-x11/0014-lorie-present-lifecycle-diagnostics.patch" \
-    'Present GPU copy schedule serial='
-
-if [[ "${UDROID_EXPERIMENTAL_GFXSTREAM_X11:-0}" == "1" ]]; then
-    source_profile="experimental gfxstream"
+if [[ "${UDROID_X11_DIAGNOSTICS:-0}" == "1" ]]; then
+    source_profile="diagnostics"
     apply_once \
         "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0012-lorie-raw-fd-import-diagnostics.patch" \
+        "$repo_root/patches/termux-x11/diagnostics/0012-lorie-raw-fd-import-diagnostics.patch" \
         'raw-fd import stage=mmap'
 else
     source_profile="standard"
     revert_if_applied \
         "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0012-lorie-raw-fd-import-diagnostics.patch" \
+        "$repo_root/patches/termux-x11/diagnostics/0012-lorie-raw-fd-import-diagnostics.patch" \
         'raw-fd import stage=mmap'
 fi
 
@@ -144,6 +139,22 @@ apply_once \
     "$cpp_root" \
     "$repo_root/patches/termux-x11/0018-present-damage-ordering.patch" \
     'RegionPtr           gpu_copy_damage'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0019-dmabuf-exa-cpu-access-sync.patch" \
+    'LorieBuffer_cpuAccessBegin'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0020-renderer-route-capability-probe.patch" \
+    'Xlorie: G0 graphics contract'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0021-preserve-logical-ahb-pixmap-size.patch" \
+    'logical %ux%u physical %ux%u'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0022-disable-incoherent-ahb-gpu-present.patch" \
+    'CPU and GPU views of AHardwareBuffer are not coherent'
 
 apply_once \
     "$cpp_root/lorie" \

@@ -1,0 +1,28 @@
+Preserve logical DRI3 pixmap dimensions over padded AHB allocations.
+
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -1268,6 +1268,9 @@ static PixmapPtr loriePixmapFromFds(ScreenPtr screen, CARD8 num_fds, const int
+             && desc.format != AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM
+             && desc.format != AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM,
+             "DRI3: AHARDWAREBUFFER_SOCKET_FD: wrong format of AHardwareBuffer. Must be one of: AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM, AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM, AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM (stands for 5).");
++        check(desc.width < width || desc.height < height,
++              "DRI3: AHardwareBuffer %ux%u is smaller than pixmap %ux%u",
++              desc.width, desc.height, width, height);
+         check(!(priv->buffer = LorieBuffer_wrapAHardwareBuffer(received_buffer)), "DRI3: LorieBuffer_wrapAHardwareBuffer failed.");
+         received_buffer = NULL;
+         if (modifier == AHARDWAREBUFFER_RGBA_SOCKET_FD)
+@@ -1278,9 +1281,11 @@ static PixmapPtr loriePixmapFromFds(ScreenPtr screen, CARD8 num_fds, const int
+         priv->gpuOnly = LorieBuffer_lock(priv->buffer, &probe) != 0;
+         LorieBuffer_unlock(priv->buffer);
+ 
+-        screen->ModifyPixmapHeader(pixmap, desc.width, desc.height, 0, 0, desc.stride * 4, NULL);
++        /* The AHB may contain physical padding hidden from the X pixmap. */
++        screen->ModifyPixmapHeader(pixmap, width, height, 0, 0, desc.stride * 4, NULL);
+         if (lorieServerDebugEnabled)
+-            log(INFO, "DRI3: imported AHardwareBuffer, modifier %llu, %ux%u stride %u%s", (unsigned long long) modifier, desc.width, desc.height, desc.stride, priv->gpuOnly ? ", not lockable" : "");
++            log(INFO, "DRI3: imported AHardwareBuffer, modifier %llu, logical %ux%u physical %ux%u stride %u%s",
++                (unsigned long long) modifier, width, height, desc.width, desc.height, desc.stride, priv->gpuOnly ? ", not lockable" : "");
+     }
+ 
+     return pixmap;

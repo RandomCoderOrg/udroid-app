@@ -26,12 +26,7 @@ CPU fallback.
  static Bool lorieServerDebugEnabled = FALSE;
  
  void OsVendorInit(void) {
-@@ -867,7 +880,7 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
-         return FALSE;
-     }
- 
--    if (!(srcBuffer = lorieEnsureGpuSampleable(pixmap, LORIEBUFFER_AHARDWAREBUFFER))) {
-+    if (!(srcBuffer = lorieGpuCopySource(pixmap))) {
-         static uint8_t logged = 0;
-         LoriePixmapPriv *failed = LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap);
-         const LorieBuffer_Desc *failedDesc = failed && failed->buffer ? LorieBuffer_description(failed->buffer) : NULL;
+@@ -921,2 +934,2 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+-    if (!(srcBuffer = lorieEnsureGpuSampleable(pixmap, LORIEBUFFER_AHARDWAREBUFFER)) ||
++    if (!(srcBuffer = lorieGpuCopySource(pixmap)) ||
+         !(dstBuffer = lorieEnsureGpuSampleable(dst, LORIEBUFFER_AHARDWAREBUFFER))) {
