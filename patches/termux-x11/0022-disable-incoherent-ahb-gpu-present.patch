@@ -1,4 +1,11 @@
-Disable Present GPU offload when CPU and GLES see incoherent AHB data.
+lorie: reject incoherent AHB GPU Present paths
+
+Probe whether CPU and GLES observe the same AHardwareBuffer contents before
+enabling GPU Present. Fall back to the synchronized CPU path when they do not,
+without maintaining a vendor or device blacklist.
+
+Based on termux/termux-x11@501f72f8e1183e62925951551bf631586145c1e6
+from termux/termux-x11#1148.
 
 diff --git a/InitOutput.c b/InitOutput.c
 --- a/InitOutput.c

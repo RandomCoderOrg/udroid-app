@@ -1,3 +1,9 @@
+lorie: trace draw, fence and swap latency with Perfetto
+
+Frame counters cannot identify whether rendering, fence waits, or swapping
+caused a stall. Add inactive-by-default ATrace slices rather than per-frame log
+output.
+
 --- a/renderer.c
 +++ b/renderer.c
 @@ -16,6 +16,7 @@

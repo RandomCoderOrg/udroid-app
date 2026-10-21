@@ -1,3 +1,10 @@
+lorie: synchronize DMA-BUF reads before GLES upload
+
+A GPU producer may leave cache lines invisible to the CPU. Bracket mapped reads
+with DMA_BUF_IOCTL_SYNC and retain the shared-memory path for ordinary file
+descriptors. This follows the Linux DMA-BUF userspace contract and the work in
+termux/termux-x11#1148.
+
 --- a/buffer.c
 +++ b/buffer.c
 @@ -7,12 +7,17 @@

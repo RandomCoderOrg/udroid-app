@@ -1,3 +1,9 @@
+present: defer GPU-only buffers while the renderer is detached
+
+GPU-only AHardwareBuffers cannot fall back to EXA when the Android renderer is
+temporarily unavailable. Retry them on a later fake vblank instead of entering
+an invalid CPU mapping path.
+
 --- a/lorie/InitOutput.c
 +++ b/lorie/InitOutput.c
 @@ -988,6 +988,19 @@ Bool lorieGpuCopyIsDone(uint64_t serial) {

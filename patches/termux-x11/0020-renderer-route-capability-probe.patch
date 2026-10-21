@@ -1,4 +1,8 @@
-Report the active renderer import contract once at startup.
+lorie: report renderer import capabilities at startup
+
+Emit one structured record with the EGL and GLES extensions needed to identify
+the DMA-BUF, AHardwareBuffer, or CPU-upload route. The probe does not alter
+route selection.
 
 --- a/renderer.c
 +++ b/renderer.c

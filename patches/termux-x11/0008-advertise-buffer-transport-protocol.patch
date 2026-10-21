@@ -1,3 +1,9 @@
+lorie: advertise the private buffer transport contract
+
+Publish a versioned root-window property so guest producers can discover AHB
+socket transport, channel semantics, and GPU Present support instead of
+guessing. The property describes capabilities without enabling them.
+
 --- a/InitOutput.c
 +++ b/InitOutput.c
 @@ -40,6 +40,9 @@

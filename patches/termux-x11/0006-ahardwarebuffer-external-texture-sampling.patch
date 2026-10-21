@@ -1,3 +1,9 @@
+lorie: sample AHardwareBuffers as external textures
+
+Android BufferQueue images use external-image storage. Keep the existing 2D
+view for framebuffer use, but sample supported AHardwareBuffers through
+GL_TEXTURE_EXTERNAL_OES to avoid incomplete or stale images on Mali.
+
 --- a/buffer.c
 +++ b/buffer.c
 @@ -41,6 +41,7 @@ struct LorieBuffer {

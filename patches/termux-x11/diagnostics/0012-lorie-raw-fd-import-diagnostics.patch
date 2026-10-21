@@ -1,4 +1,8 @@
-Log the complete raw-FD import contract and preserve the failing errno.
+lorie: add raw-FD import diagnostics
+
+Log descriptor size, offset, stride, ownership, and errno around duplication and
+mmap failures. This is intentionally limited to the opt-in diagnostics profile
+because imports may generate substantial output.
 
 --- a/buffer.c
 +++ b/buffer.c

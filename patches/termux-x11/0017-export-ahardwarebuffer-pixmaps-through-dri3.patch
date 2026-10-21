@@ -1,3 +1,9 @@
+lorie: export existing AHardwareBuffers through DRI3
+
+Redirected compositor pixmaps may already have GPU-native storage. Duplicate
+the underlying DMA-BUF while preserving offset and size instead of replacing
+the buffer and forcing a readback.
+
 --- a/InitOutput.c
 +++ b/InitOutput.c
 @@ -1333,12 +1333,28 @@

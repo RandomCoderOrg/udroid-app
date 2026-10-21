@@ -1,3 +1,8 @@
+lorie: add the uDroid renderer bridge
+
+The embedded display uses uDroid JNI names rather than Termux:X11's classes.
+Route both consumers through the shared renderer and X socket helpers.
+
 --- a/cmdentrypoint.c
 +++ b/cmdentrypoint.c
 @@ -511,8 +511,7 @@ void DDXNotifyFocusChanged(void) {

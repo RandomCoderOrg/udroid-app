@@ -1,3 +1,9 @@
+lorie: export redirected pixmaps through DRI3
+
+Implement fds_from_pixmap with aligned, CPU-mappable DMA-heap storage so
+compositors can share redirected pixmaps with Mesa instead of falling back to
+XGetImage readback.
+
 diff --git a/InitOutput.c b/InitOutput.c
 index 2c7453f..eb1889f 100644
 --- a/InitOutput.c

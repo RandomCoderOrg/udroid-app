@@ -1,3 +1,13 @@
+present: order damage and ownership around async GPU copies
+
+Keep damage pending until the queued copy completes, drain earlier GPU work
+before a CPU fallback, and translate damage into screen coordinates. Increase
+the bounded damage list to 64 rectangles and use acquire/release ordering for
+completion state.
+
+Adapted from termux/termux-x11#1148 commits 0995bdc, e32828e, bac0460,
+4eb76e3, and 1346e1e.
+
 --- a/lorie/lorie.h
 +++ b/lorie/lorie.h
 @@ -177,7 +177,7 @@

@@ -1,4 +1,9 @@
-Compare the full-screen pixmap height with the root height.
+present: correct the direct-flip height comparison
+
+The upstream predicate compares root width against both pixmap dimensions and
+rejects valid non-square fullscreen buffers. Keep this patch experimental: the
+fix also makes direct flip reachable before uDroid has established its required
+ownership and fence contract.
 
 --- a/InitOutput.c
 +++ b/InitOutput.c

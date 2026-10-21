@@ -1,8 +1,8 @@
-Accept existing DMA-BUF and AHardwareBuffer pixmaps as GPU-copy sources.
+lorie: accept DMA-BUF pixmaps as GPU-copy sources
 
-The renderer already handles both source types. Requiring AHardwareBuffer here
-rejects Venus/Zink's CPU-mappable DMA-BUF pixmaps and forces Present through the
-CPU fallback.
+The renderer accepts both DMA-BUF and AHardwareBuffer storage. Avoid converting
+an already usable Venus or Zink pixmap and forcing Present through the CPU
+fallback.
 
 --- a/InitOutput.c
 +++ b/InitOutput.c

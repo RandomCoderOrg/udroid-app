@@ -1,4 +1,10 @@
-Synchronize nested EXA CPU access to DMA-BUF-backed pixmaps.
+exa: synchronize CPU access to DMA-BUF pixmaps
+
+DRI3 clients may render with the GPU while Xorg reads or writes the same mapped
+storage. Emit matching DMA_BUF_SYNC_START and END ioctls around the outermost
+EXA access to prevent partially updated rows.
+
+Based on termux/termux-x11@d85d65c7809c53c1707cb771fa8e4e645cc9f3ea.
 
 --- a/buffer.h
 +++ b/buffer.h

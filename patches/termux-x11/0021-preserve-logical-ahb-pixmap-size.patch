@@ -1,4 +1,8 @@
-Preserve logical DRI3 pixmap dimensions over padded AHB allocations.
+lorie: preserve logical pixmap dimensions for padded AHBs
+
+Android allocators may enlarge the physical allocation or stride. Validate that
+storage covers the requested image, but keep the DRI3 dimensions as the logical
+X pixmap size so padding is never exposed as content.
 
 --- a/InitOutput.c
 +++ b/InitOutput.c
