@@ -155,6 +155,10 @@ apply_once \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0022-disable-incoherent-ahb-gpu-present.patch" \
     'CPU and GPU views of AHardwareBuffer are not coherent'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0023-transfer-ahb-present-ownership.patch" \
+    'Transfer an idle CPU mapping back to the GPU'
 
 apply_once \
     "$cpp_root/lorie" \

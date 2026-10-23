@@ -37,6 +37,7 @@ Xserver changes applied outside `lorie/`.
 | `0020` | Reports the active EGL/GLES import contract, eligible route, and fallback reason once at renderer startup. | Yes |
 | `0021` | Keeps padded AHardwareBuffer dimensions out of the logical X pixmap size and rejects undersized imports. | Yes |
 | `0022` | Disables Present GPU copies when CPU and GPU views of the same AHardwareBuffer are incoherent. | Yes |
+| `0023` | Transfers AHardwareBuffer ownership between EXA CPU access and fenced GPU Present copies. | Yes |
 
 ## Non-production patches
 
