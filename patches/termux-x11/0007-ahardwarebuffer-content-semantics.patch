@@ -1,3 +1,9 @@
+lorie: define AHardwareBuffer content and ownership semantics
+
+Give the private DRI3 modifiers explicit BGRA and RGBA meanings and bound the
+socket handshake. This prevents swapped colors and releases received buffers
+when transport fails.
+
 --- a/InitOutput.c
 +++ b/InitOutput.c
 @@ -14,6 +14,8 @@
@@ -86,7 +92,7 @@
 +        check(!(priv->buffer = LorieBuffer_wrapAHardwareBuffer(received_buffer)), "DRI3: LorieBuffer_wrapAHardwareBuffer failed.");
 +        received_buffer = NULL;
 +        if (modifier == AHARDWAREBUFFER_RGBA_SOCKET_FD)
-+            LorieBuffer_setNeedsBgraSwizzle(priv->buffer, false);
++            LorieBuffer_setNeedsBgraSwizzle(priv->buffer, true);
  
          screen->ModifyPixmapHeader(pixmap, desc.width, desc.height, 0, 0, desc.stride * 4, NULL);
          if (lorieServerDebugEnabled)

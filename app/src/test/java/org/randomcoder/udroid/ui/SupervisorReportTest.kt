@@ -44,4 +44,21 @@ class SupervisorReportTest {
             formatDiagnosticLogEntry(entry),
         )
     }
+
+    @Test
+    fun latestZinkCheckBecomesReadableCompatibilityRows() {
+        val results =
+            zinkCompatibilityResults(
+                listOf(
+                    """{"timestamp":"2026-10-03T09:00:02Z","component":"graphics","severity":"info","event":"zink_profile","message":"OpenGL 4.6 baseline: unsupported","fields":{"profile":"VP_ZINK_gl46_baseline"}}""",
+                    """{"timestamp":"2026-10-03T09:00:01Z","component":"graphics","severity":"debug","event":"zink_profile","message":"OpenGL 2.1 baseline: supported","fields":{"profile":"VP_ZINK_gl21_baseline"}}""",
+                    """{"timestamp":"2026-10-03T09:00:00Z","component":"graphics","severity":"info","event":"zink_requirements","message":"Highest supported Zink profile: OpenGL 2.1 baseline","fields":{"rootfs":"proot-ubuntu-jammy"}}""",
+                ),
+            )
+
+        assertEquals("Zink through Venus", results[0].name)
+        assertEquals("OpenGL 2.1 baseline", results[1].name)
+        assertEquals("OpenGL 4.6 baseline", results[2].name)
+        assertEquals("VP_ZINK_gl46_baseline · Linux system: proot-ubuntu-jammy", results[2].detail)
+    }
 }

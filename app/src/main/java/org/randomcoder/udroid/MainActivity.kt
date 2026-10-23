@@ -134,6 +134,8 @@ class MainActivity : ComponentActivity() {
     private var pendingDesktopStart: PendingDesktopStart? = null
     private var pendingShortcutRootfsName: String? = null
     private var pendingTerminalRootfsName: String? = null
+    private var pendingDebugDesktop: DebugCommand? = null
+    private var pendingDebugStopDesktop = false
     private var pendingMicrophoneRootfsName: String? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
@@ -179,6 +181,10 @@ class MainActivity : ComponentActivity() {
                     (binder as? RuntimeSupervisorService.RuntimeBinder)?.service()
                 runtimeService = connectedService
                 refreshFromDisk()
+                if (pendingDebugStopDesktop) {
+                    pendingDebugStopDesktop = false
+                    connectedService?.stopDesktop()
+                }
                 launchPendingLinuxApplication()
                 launchPendingDesktop()
                 if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
@@ -319,6 +325,7 @@ class MainActivity : ComponentActivity() {
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
+        handleDebugCommand()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -327,6 +334,7 @@ class MainActivity : ComponentActivity() {
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
         handleShortcutIntent(intent)
+        handleDebugCommand()
     }
 
     override fun onStart() {
@@ -979,6 +987,7 @@ class MainActivity : ComponentActivity() {
                             "${environments.size} desktop session" +
                                 if (environments.size == 1) " detected" else "s detected"
                         }
+                    launchPendingDebugDesktop(rootfsName)
                 },
                 onFailure = {
                     desktopEnvironments = emptyList()
@@ -989,9 +998,76 @@ class MainActivity : ComponentActivity() {
                             touchScaleEnabled = true,
                         )
                     desktopScanMessage = it.message ?: "Desktop detection failed"
+                    if (pendingDebugDesktop?.rootfsName == rootfsName) {
+                        debugCommandError(desktopScanMessage ?: "Desktop detection failed")
+                    }
+                    pendingDebugDesktop = null
                 },
             )
         }
+    }
+
+    private fun handleDebugCommand() {
+        if (!BuildConfig.DEBUG) return
+        val command = DebugCommandStore.take(this) ?: return
+        val rootfsName = command.rootfsName ?: installedRootfsName
+        app.journal.append(
+            component = "debug",
+            severity = "info",
+            event = "adb_command",
+            message = command.action,
+            bootId = snapshot.bootId,
+            fields = mapOf("rootfs" to rootfsName, "environment" to command.environmentId),
+        )
+        if (command.action in setOf("open-system", "start-terminal", "start-desktop") &&
+            installedRootfses.none { it.name == rootfsName }
+        ) {
+            debugCommandError("Linux system ${rootfsName ?: "(none)"} is not installed")
+            return
+        }
+        when (command.action) {
+            "open-system" -> openSystemDetails(rootfsName!!)
+            "open-desktop" -> selectDestination(UdroidDestination.DESKTOP)
+            "start-terminal" -> openRootfsTerminal(rootfsName!!)
+            "stop-terminal" -> RuntimeSupervisorService.stop(this)
+            "start-desktop" -> {
+                pendingDebugDesktop = command.copy(rootfsName = rootfsName)
+                openSystemDetails(rootfsName!!)
+            }
+            "stop-desktop" -> {
+                if (runtimeService == null) pendingDebugStopDesktop = true
+                else runtimeService?.stopDesktop()
+            }
+        }
+    }
+
+    private fun launchPendingDebugDesktop(rootfsName: String) {
+        val command = pendingDebugDesktop?.takeIf { it.rootfsName == rootfsName } ?: return
+        pendingDebugDesktop = null
+        val requestedEnvironment = command.environmentId
+        if (requestedEnvironment != null) {
+            if (desktopEnvironments.none { it.id == requestedEnvironment }) {
+                debugCommandError("Desktop $requestedEnvironment is not installed in $rootfsName")
+                return
+            }
+            selectDesktopEnvironment(requestedEnvironment)
+        }
+        if (desktopEnvironments.isEmpty()) {
+            debugCommandError("No desktop session is installed in $rootfsName")
+            return
+        }
+        startSelectedDesktop()
+        selectDestination(UdroidDestination.DESKTOP)
+    }
+
+    private fun debugCommandError(message: String) {
+        app.journal.append(
+            component = "debug",
+            severity = "error",
+            event = "adb_command_rejected",
+            message = message,
+            bootId = snapshot.bootId,
+        )
     }
 
     private fun selectDesktopEnvironment(environmentId: String) {

@@ -251,12 +251,14 @@ transport now separates the physical buffer format from its content semantics:
 
 - `1255`: RGBA AHardwareBuffer carrying BGRA-compatible content; the X11
   renderer applies its channel swizzle.
-- `1257`: RGBA AHardwareBuffer carrying native RGBA content; the X11 renderer
-  samples it without the swizzle.
+- `1257`: RGBA AHardwareBuffer whose sampled bytes match the X11 root-buffer
+  contract; the GPU copy does not swizzle it, and the final root draw performs
+  the single required Android presentation swizzle.
 
-Before `1257`, direct Vulkan rendered the LunarG texture with visibly swapped
-brown channels. The paired client/server change restores its cyan/teal colors
-without regressing GLX. The server publishes the versioned root-window
+Treating `1257` as already Android-display-ready added a second channel swap;
+SuperTuxKart exposed it as blue UI and kart colors. Matching the imported
+buffer to the X11 root contract restores normal red, green, and yellow colors
+without disabling GPU Present. The server publishes the versioned root-window
 property `_UDROID_X11_BUFFER_TRANSPORT`; the verified value is
 `1, 11, 1255, 0, 1257, 0`, advertising AHardwareBuffer socket transport, RGBA
 content semantics, and GPU-copy support. It deliberately does not advertise

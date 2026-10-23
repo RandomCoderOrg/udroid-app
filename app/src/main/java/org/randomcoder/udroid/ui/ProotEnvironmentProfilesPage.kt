@@ -58,6 +58,7 @@ import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileValidator
 import org.randomcoder.udroid.runtime.ProotTerminalLaunchBuilder
+import org.randomcoder.udroid.runtime.SphalGraphicsSupport
 import java.io.File
 
 @Composable
@@ -593,7 +594,18 @@ private fun automaticManagedEnvironmentValues(
         -> set("GALLIUM_DRIVER", "virpipe")
         DesktopGraphicsProfile.VENUS_EXPERIMENTAL -> {
             set("VN_DEBUG", "vtest")
-            set("MESA_VK_WSI_DEBUG", "sw")
+        }
+        DesktopGraphicsProfile.SPHAL_EXPERIMENTAL -> {
+            set("MESA_LOADER_DRIVER_OVERRIDE", "zink")
+            set("GALLIUM_DRIVER", "zink")
+            set("LIBGL_KOPPER_DRI2", "true")
+            set("ZINK_FORCE_XCB_SURFACE", "1")
+            set(
+                "LD_LIBRARY_PATH",
+                "${SphalGraphicsSupport.GUEST_MESA_LIBRARY_DIRECTORY}:" +
+                    "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu",
+            )
+            set("LIBGL_DRIVERS_PATH", SphalGraphicsSupport.GUEST_MESA_DRI_DIRECTORY)
         }
         DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> Unit
     }

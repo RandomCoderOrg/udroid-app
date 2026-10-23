@@ -1,0 +1,75 @@
+duration_ms: 15000
+
+buffers {
+  size_kb: 65536
+  fill_policy: RING_BUFFER
+}
+
+data_sources {
+  config {
+    name: "linux.ftrace"
+    ftrace_config {
+      ftrace_events: "sched/sched_switch"
+      ftrace_events: "sched/sched_waking"
+      ftrace_events: "sched/sched_wakeup_new"
+      ftrace_events: "power/cpu_frequency"
+      ftrace_events: "power/gpu_frequency"
+      ftrace_events: "power/gpu_work_period"
+      ftrace_events: "gpu_mem/gpu_mem_total"
+      ftrace_events: "mali/mali_JM_SUBMIT"
+      ftrace_events: "mali/mali_JM_JOB_DONE"
+      ftrace_events: "mali/mali_job_slots_event"
+      atrace_categories: "gfx"
+      atrace_categories: "input"
+      atrace_categories: "sched"
+      atrace_categories: "view"
+      atrace_apps: "org.randomcoder.udroid"
+      atrace_apps: "org.randomcoder.udroid.dev"
+      compact_sched {
+        enabled: true
+      }
+    }
+  }
+}
+
+data_sources {
+  config {
+    name: "android.surfaceflinger.frame"
+  }
+}
+
+data_sources {
+  config {
+    name: "android.surfaceflinger.frametimeline"
+  }
+}
+
+data_sources {
+  config {
+    name: "android.surfaceflinger.layers"
+    surfaceflinger_layers_config {
+      mode: MODE_ACTIVE
+      trace_flags: TRACE_FLAG_COMPOSITION
+      trace_flags: TRACE_FLAG_BUFFERS
+    }
+  }
+}
+
+data_sources {
+  config {
+    name: "android.gpu.memory"
+  }
+}
+
+data_sources {
+  config {
+    name: "linux.process_stats"
+    process_stats_config {
+      scan_all_processes_on_start: true
+      proc_stats_poll_ms: 1000
+    }
+  }
+}
+
+write_into_file: true
+file_write_period_ms: 1000

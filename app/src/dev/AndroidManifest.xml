@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <receiver
+            android:name=".DebugCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
         <activity
             android:name=".gfxstream.GfxstreamPresenterProbeActivity"
             android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize"

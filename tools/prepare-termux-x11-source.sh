@@ -81,58 +81,88 @@ apply_once \
     "$repo_root/patches/termux-x11/0004-udroid-batched-native-touch.patch" \
     'EVENT_TOUCH_FRAME'
 
-if [[ "${UDROID_EXPERIMENTAL_GFXSTREAM_X11:-0}" == "1" ]]; then
-    source_profile="experimental gfxstream"
-    revert_if_applied \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0010-disable-gpu-present-copy.patch" \
-        "uDroid standard profile: use Xorg's copy path"
+# SPHAL is a runtime graphics profile, so its AHardwareBuffer and Present-copy
+# contract must be present in every embedded X11 build.
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch" \
+    'DMA_BUF_IOCTL_SYNC'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0006-ahardwarebuffer-external-texture-sampling.patch" \
+    'GL_TEXTURE_EXTERNAL_OES'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0007-ahardwarebuffer-content-semantics.patch" \
+    'AHARDWAREBUFFER_RGBA_SOCKET_FD'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0008-advertise-buffer-transport-protocol.patch" \
+    'UDROID_X11_BUFFER_TRANSPORT_ATOM'
+apply_once \
+    "$cpp_root" \
+    "$repo_root/patches/termux-x11/0009-defer-gpu-only-present-while-detached.patch" \
+    'Bool loriePixmapIsGpuOnly(PixmapPtr pixmap) {'
+revert_if_applied \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/experiments/0013-fix-present-flip-height-check.patch" \
+    'pvfb->root.height != pixmap->drawable.height'
+
+if [[ "${UDROID_X11_DIAGNOSTICS:-0}" == "1" ]]; then
+    source_profile="diagnostics"
     apply_once \
         "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch" \
-        'DMA_BUF_IOCTL_SYNC'
-    apply_once \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0006-ahardwarebuffer-external-texture-sampling.patch" \
-        'GL_TEXTURE_EXTERNAL_OES'
-    apply_once \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0007-ahardwarebuffer-content-semantics.patch" \
-        'AHARDWAREBUFFER_RGBA_SOCKET_FD'
-    apply_once \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0008-advertise-buffer-transport-protocol.patch" \
-        'UDROID_X11_BUFFER_TRANSPORT_ATOM'
-    apply_once \
-        "$cpp_root" \
-        "$repo_root/patches/termux-x11/0009-defer-gpu-only-present-while-detached.patch" \
-        'Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {'
+        "$repo_root/patches/termux-x11/diagnostics/0012-lorie-raw-fd-import-diagnostics.patch" \
+        'raw-fd import stage=mmap'
 else
     source_profile="standard"
     revert_if_applied \
-        "$cpp_root" \
-        "$repo_root/patches/termux-x11/0009-defer-gpu-only-present-while-detached.patch" \
-        'Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {'
-    revert_if_applied \
         "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0008-advertise-buffer-transport-protocol.patch" \
-        'UDROID_X11_BUFFER_TRANSPORT_ATOM'
-    revert_if_applied \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0007-ahardwarebuffer-content-semantics.patch" \
-        'AHARDWAREBUFFER_RGBA_SOCKET_FD'
-    revert_if_applied \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0006-ahardwarebuffer-external-texture-sampling.patch" \
-        'GL_TEXTURE_EXTERNAL_OES'
-    revert_if_applied \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch" \
-        'DMA_BUF_IOCTL_SYNC'
-    apply_once \
-        "$cpp_root/lorie" \
-        "$repo_root/patches/termux-x11/0010-disable-gpu-present-copy.patch" \
-        "uDroid standard profile: use Xorg's copy path"
+        "$repo_root/patches/termux-x11/diagnostics/0012-lorie-raw-fd-import-diagnostics.patch" \
+        'raw-fd import stage=mmap'
 fi
+
+# Compositors import redirected window pixmaps through DRI3 in every profile.
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0015-export-pixmaps-through-dri3.patch" \
+    'DRI3: exported DMA-BUF pixmap'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0016-accept-fd-gpu-copy-sources.patch" \
+    'lorieGpuCopySource'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0017-export-ahardwarebuffer-pixmaps-through-dri3.patch" \
+    'exportAHardwareBufferDmaBuf'
+apply_once \
+    "$cpp_root" \
+    "$repo_root/patches/termux-x11/0018-present-damage-ordering.patch" \
+    'RegionPtr           gpu_copy_damage'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0019-dmabuf-exa-cpu-access-sync.patch" \
+    'LorieBuffer_cpuAccessBegin'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0020-renderer-route-capability-probe.patch" \
+    'Xlorie: G0 graphics contract'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0021-preserve-logical-ahb-pixmap-size.patch" \
+    'logical %ux%u physical %ux%u'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0022-disable-incoherent-ahb-gpu-present.patch" \
+    'CPU and GPU views of AHardwareBuffer are not coherent'
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0023-transfer-ahb-present-ownership.patch" \
+    'Transfer an idle CPU mapping back to the GPU'
+
+apply_once \
+    "$cpp_root/lorie" \
+    "$repo_root/patches/termux-x11/0011-lorie-perfetto-slices.patch" \
+    'uDroid/Lorie draw'
 
 echo "Termux:X11 native source is ready ($source_profile profile)."

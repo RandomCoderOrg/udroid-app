@@ -1,8 +1,14 @@
+lorie: sample AHardwareBuffers as external textures
+
+Android BufferQueue images use external-image storage. Keep the existing 2D
+view for framebuffer use, but sample supported AHardwareBuffers through
+GL_TEXTURE_EXTERNAL_OES to avoid incomplete or stale images on Mali.
+
 --- a/buffer.c
 +++ b/buffer.c
-@@ -42,6 +42,7 @@ struct LorieBuffer {
-     uint32_t debugUploadCount;
- 
+@@ -41,6 +41,7 @@ struct LorieBuffer {
+     int8_t dmaBufSyncSupport;
+
      GLuint id;
 +    GLuint externalId;
      EGLImage image;
@@ -17,14 +23,13 @@
  
      if (eglGetCurrentDisplay() && buffer->image)
          eglDestroyImageKHR(eglGetCurrentDisplay(), buffer->image);
-@@ -428,6 +431,8 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
+@@ -404,5 +407,7 @@ __LIBC_HIDDEN__ void LorieBuffer_recvHandleFromUnixSocket(int socketFd, LorieBuf
  
      read(socketFd, &buffer, sizeof(buffer));
      buffer.image = NULL; // Only for process-local use
 +    buffer.id = 0;
 +    buffer.externalId = 0;
      buffer.dmaBufSyncSupport = DMA_BUF_SYNC_UNKNOWN;
-     buffer.debugUploadCount = 0;
      if (buffer.desc.type == LORIEBUFFER_FD) {
 @@ -489,6 +494,22 @@ __LIBC_HIDDEN__ void LorieBuffer_attachToGL(LorieBuffer* buffer) {
          // The image will be updated in redraw call because of `drawRequested` flag, so we are not uploading pixels
