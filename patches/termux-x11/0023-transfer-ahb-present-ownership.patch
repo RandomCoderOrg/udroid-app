@@ -13,26 +13,31 @@ for later CPU work under the existing renderer state lock.
 diff --git a/InitOutput.c b/InitOutput.c
 --- a/InitOutput.c
 +++ b/InitOutput.c
-@@ -963,11 +963,16 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+@@ -916,5 +916,5 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+     LorieBuffer *srcBuffer, *dstBuffer;
+-    LoriePixmapPriv *priv;
++    LoriePixmapPriv *priv, *dstPriv;
+     const LorieBuffer_Desc *desc, *dstDesc;
+     LorieGpuCopyEntry *entry;
+     BoxRec fullBox;
+@@ -941,6 +941,18 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+     }
+     priv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap);
++    dstPriv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(dst);
      desc = LorieBuffer_description(srcBuffer);
      dstDesc = LorieBuffer_description(dstBuffer);
  
--    /* AHardwareBuffer_lock() does not permit a concurrent GPU write. */
 +    /* Transfer an idle CPU mapping back to the GPU before queuing the write. */
-     if (dstDesc->type == LORIEBUFFER_AHARDWAREBUFFER && dstPriv && dstPriv->locked) {
--        gpuCopyAttempts++;
--        gpuCopyDisabled++;
--        return FALSE;
++    if (dstDesc->type == LORIEBUFFER_AHARDWAREBUFFER && dstPriv && dstPriv->locked) {
 +        if (LorieBuffer_unlock(dstPriv->buffer) != 0) {
 +            gpuCopyAttempts++;
-+            gpuCopyDisabled++;
 +            return FALSE;
 +        }
 +        dstPriv->locked = NULL;
 +        dstPriv->wasLocked = false;
 +        dst->devPrivate.ptr = NULL;
-     }
- 
++    }
++
      if (update) {
 diff --git a/renderer.c b/renderer.c
 --- a/renderer.c
