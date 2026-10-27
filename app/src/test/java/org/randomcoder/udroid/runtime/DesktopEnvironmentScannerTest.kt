@@ -314,38 +314,4 @@ class DesktopEnvironmentScannerTest {
             ),
         )
     }
-
-    @Test
-    fun `SPHAL profile is available only after its experimental flag is enabled`() {
-        val value = DesktopGraphicsProfile.SPHAL_EXPERIMENTAL.storageValue
-
-        assertEquals(DesktopGraphicsProfile.STANDARD, DesktopGraphicsProfile.fromStorage(value))
-        assertEquals(
-            DesktopGraphicsProfile.SPHAL_EXPERIMENTAL,
-            DesktopGraphicsProfile.fromStorage(value, sphalEnabled = true),
-        )
-    }
-
-    @Test
-    fun `SPHAL profile wraps guest commands with vendor Vulkan and Zink`() {
-        val command = listOf("startxfce4")
-
-        assertEquals(
-            listOf(
-                "/usr/bin/env",
-                "MESA_LOADER_DRIVER_OVERRIDE=zink",
-                "GALLIUM_DRIVER=zink",
-                "LIBGL_KOPPER_DRI2=true",
-                "ZINK_FORCE_XCB_SURFACE=1",
-                "LD_LIBRARY_PATH=/opt/udroid/graphics/lib/mesa:" +
-                    "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu",
-                "LIBGL_DRIVERS_PATH=/opt/udroid/graphics/lib/mesa/dri",
-                SphalGraphicsSupport.GUEST_RUNNER,
-                "/vendor/lib64/hw/vulkan.mali.so",
-                "startxfce4",
-            ),
-            SphalProotLaunchProfile("/vendor/lib64/hw/vulkan.mali.so")
-                .wrapGuestCommand(command),
-        )
-    }
 }

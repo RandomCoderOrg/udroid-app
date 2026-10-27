@@ -81,8 +81,7 @@ apply_once \
     "$repo_root/patches/termux-x11/0004-udroid-batched-native-touch.patch" \
     'EVENT_TOUCH_FRAME'
 
-# SPHAL is a runtime graphics profile, so its AHardwareBuffer and Present-copy
-# contract must be present in every embedded X11 build.
+# AHardwareBuffer and Present-copy handling is shared by all embedded X11 builds.
 apply_once \
     "$cpp_root/lorie" \
     "$repo_root/patches/termux-x11/0005-dmabuf-cpu-read-sync.patch" \

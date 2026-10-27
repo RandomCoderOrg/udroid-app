@@ -77,7 +77,6 @@ import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
-import org.randomcoder.udroid.runtime.SphalGraphicsSupport
 import org.randomcoder.udroid.runtime.VirglServerMode
 import java.text.DateFormat
 import java.util.Date
@@ -127,7 +126,6 @@ fun LinuxSystemPage(
         remember(rootfs.directory.absolutePath) {
             GraphicsProfileCompatibilityProbe.run(context, rootfs.directory)
         }
-    val sphalEnabled = remember(context) { SphalGraphicsSupport.isEnabled(context) }
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
     val environmentProfileStore = remember(context) { ProotEnvironmentProfileStore(context) }
@@ -326,7 +324,6 @@ fun LinuxSystemPage(
                     selected = configuration.graphicsProfile,
                     virglServerMode = configuration.virglServerMode,
                     support = graphicsProfileSupport,
-                    sphalEnabled = sphalEnabled,
                     runtimeRunning =
                         runtimeOwnsSystem && snapshot.phase == RuntimePhase.RUNNING,
                     desktopRunning = desktopRunning,
@@ -1136,7 +1133,6 @@ private fun GraphicsProfileSelector(
     selected: DesktopGraphicsProfile,
     virglServerMode: VirglServerMode = VirglServerMode.AUTOMATIC,
     support: Map<DesktopGraphicsProfile, GraphicsProfileSupport>,
-    sphalEnabled: Boolean,
     runtimeRunning: Boolean,
     desktopRunning: Boolean,
     onSelected: (DesktopGraphicsProfile) -> Unit,
@@ -1217,16 +1213,6 @@ private fun GraphicsProfileSelector(
             support = support,
             onSelected = onSelected,
         )
-        if (sphalEnabled) {
-            GraphicsProfileOption(
-                profile = DesktopGraphicsProfile.SPHAL_EXPERIMENTAL,
-                title = "SPHAL Zink (experimental)",
-                detail = "Use an installed SPHAL bridge with Android's vendor Vulkan driver.",
-                selected = selected,
-                support = support,
-                onSelected = onSelected,
-            )
-        }
         if ((selected == DesktopGraphicsProfile.VIRGL ||
                 selected == DesktopGraphicsProfile.VIRGL_ANGLE) &&
             support[selected]?.available == true

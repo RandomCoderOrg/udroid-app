@@ -18,7 +18,6 @@ internal data class GraphicsDeviceSupport(
     val openGlEsVersion: Int,
     val vulkanVersion: Int,
     val hardwareBuffer: Boolean,
-    val vendorVulkanHal: Boolean,
 )
 
 internal data class GraphicsGuestSupport(
@@ -27,7 +26,6 @@ internal data class GraphicsGuestSupport(
     val vulkanIcd: Boolean,
     val virgl: Boolean,
     val venus: Boolean,
-    val sphal: Boolean,
 )
 
 object GraphicsProfileCompatibilityProbe {
@@ -77,14 +75,6 @@ object GraphicsProfileCompatibilityProbe {
                     device.hardwareBuffer to "This device cannot allocate GPU hardware buffers",
                     guest.venus to "A compatible Mesa Venus driver is not available in Linux",
                 ),
-            DesktopGraphicsProfile.SPHAL_EXPERIMENTAL to
-                firstFailure(
-                    device.arm64 to "SPHAL is packaged only for arm64 devices",
-                    isVulkan11(device.vulkanVersion) to "SPHAL requires Android Vulkan 1.1",
-                    device.hardwareBuffer to "This device cannot allocate GPU hardware buffers",
-                    device.vendorVulkanHal to "No unambiguous Android vendor Vulkan driver was found",
-                    guest.sphal to "Install the SPHAL guest runtime and patched Mesa in Linux",
-                ),
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL to
                 require(GFXSTREAM_PROFILE_ENABLED, "gfxstream is not enabled in this build"),
         )
@@ -115,7 +105,6 @@ object GraphicsProfileCompatibilityProbe {
             openGlEsVersion = openGlEsVersion,
             vulkanVersion = vulkanVersion,
             hardwareBuffer = hardwareBuffer,
-            vendorVulkanHal = SphalGraphicsSupport.findVulkanHal() != null,
         )
     }
 
@@ -158,7 +147,6 @@ object GraphicsProfileCompatibilityProbe {
             vulkanIcd = icds.isNotEmpty(),
             virgl = hasDriDriver("virtio_gpu_dri.so"),
             venus = VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs) || systemVenus,
-            sphal = SphalGraphicsSupport.isGuestRuntimeAvailable(rootfs),
         )
     }
 

@@ -42,18 +42,13 @@ enum class DesktopGraphicsProfile(
     VIRGL("virgl"),
     VIRGL_ANGLE("virgl-angle"),
     VENUS_EXPERIMENTAL("venus-experimental"),
-    SPHAL_EXPERIMENTAL("sphal-experimental"),
     GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 
     companion object {
-        fun fromStorage(
-            value: String?,
-            sphalEnabled: Boolean = false,
-        ): DesktopGraphicsProfile =
+        fun fromStorage(value: String?): DesktopGraphicsProfile =
             entries.firstOrNull {
                 it.storageValue == value &&
-                    (it != SPHAL_EXPERIMENTAL || sphalEnabled) &&
                     (it != GFXSTREAM_EXPERIMENTAL || GFXSTREAM_PROFILE_ENABLED)
             } ?: STANDARD
     }
@@ -112,9 +107,8 @@ data class DesktopSessionSnapshot(
 )
 
 class DesktopConfigurationStore(context: Context) {
-    private val context = context.applicationContext
     private val preferences =
-        this.context
+        context.applicationContext
             .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun load(
@@ -149,7 +143,6 @@ class DesktopConfigurationStore(context: Context) {
             graphicsProfile =
                 DesktopGraphicsProfile.fromStorage(
                     preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
-                    SphalGraphicsSupport.isEnabled(context),
                 ),
             virglServerMode =
                 VirglServerMode.fromStorage(
@@ -193,7 +186,6 @@ class DesktopConfigurationStore(context: Context) {
     fun loadGraphicsProfile(rootfsName: String): DesktopGraphicsProfile =
         DesktopGraphicsProfile.fromStorage(
             preferences.getString(key(rootfsName, KEY_GRAPHICS_PROFILE), null),
-            SphalGraphicsSupport.isEnabled(context),
         )
 
     fun loadVirglServerMode(rootfsName: String): VirglServerMode =

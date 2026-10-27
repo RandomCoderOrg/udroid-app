@@ -73,7 +73,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -118,7 +117,6 @@ import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
-import org.randomcoder.udroid.runtime.SphalGraphicsSupport
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateState
@@ -1473,9 +1471,6 @@ private fun AboutPage(
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    var sphalEnabled by remember(context) {
-        mutableStateOf(SphalGraphicsSupport.isEnabled(context))
-    }
     LazyColumn(
         modifier =
             Modifier
@@ -1542,30 +1537,6 @@ private fun AboutPage(
             SupportProjectPanel(
                 onStar = { uriHandler.openUri(GITHUB_REPOSITORY_URL) },
                 onSponsor = { uriHandler.openUri(GITHUB_SPONSOR_URL) },
-            )
-        }
-        item {
-            UdroidSectionLabel(
-                text = "Experimental",
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        item {
-            ListItem(
-                headlineContent = { Text("SPHAL graphics bridge") },
-                supportingContent = {
-                    Text("Show the vendor Vulkan driver option for compatible Linux systems")
-                },
-                trailingContent = {
-                    Switch(
-                        checked = sphalEnabled,
-                        onCheckedChange = { enabled ->
-                            SphalGraphicsSupport.setEnabled(context, enabled)
-                            sphalEnabled = enabled
-                        },
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = UdroidRaised),
             )
         }
         item {

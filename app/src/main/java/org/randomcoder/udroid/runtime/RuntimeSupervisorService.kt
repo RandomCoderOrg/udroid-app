@@ -792,8 +792,6 @@ class RuntimeSupervisorService : Service() {
                                     request.configuration.virglServerMode,
                                     rootfs,
                                 )
-                            DesktopGraphicsProfile.SPHAL_EXPERIMENTAL ->
-                                sphalLaunchProfile(rootfs)
                             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
                                 lateinit var host: GfxstreamHostController
                                 host =
@@ -1167,24 +1165,9 @@ class RuntimeSupervisorService : Service() {
             DesktopGraphicsProfile.VIRGL_ANGLE,
             DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
             -> virglLaunchProfile(profile, virglServerMode, rootfs)
-            DesktopGraphicsProfile.SPHAL_EXPERIMENTAL -> sphalLaunchProfile(rootfs)
             DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
         }
-    }
-
-    private fun sphalLaunchProfile(rootfs: File): ProotLaunchProfile {
-        check(SphalGraphicsSupport.isEnabled(this)) {
-            "Enable the experimental SPHAL graphics bridge in About"
-        }
-        check(SphalGraphicsSupport.isGuestRuntimeAvailable(rootfs)) {
-            "The SPHAL guest runtime and patched Mesa are not installed in Linux"
-        }
-        val hal =
-            checkNotNull(SphalGraphicsSupport.findVulkanHal()) {
-                "No unambiguous Android vendor Vulkan driver was found"
-            }
-        return SphalProotLaunchProfile(hal)
     }
 
     private fun logZinkRequirements(
