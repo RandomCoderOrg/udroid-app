@@ -32,6 +32,7 @@ data class X11Settings(
     val preferScancodes: Boolean = false,
     val keepScreenOn: Boolean = true,
     val startControlsCollapsed: Boolean = false,
+    val overlayKeys: List<Int> = OverlayKeyboard.defaults,
 )
 
 data class X11Viewport(
@@ -137,6 +138,11 @@ class X11SettingsStore(context: Context) {
             keepScreenOn = preferences.getBoolean(KEY_KEEP_SCREEN_ON, true),
             startControlsCollapsed =
                 preferences.getBoolean(KEY_START_CONTROLS_COLLAPSED, false),
+            overlayKeys =
+                OverlayKeyboard.normalized(
+                    preferences.getString(KEY_OVERLAY_KEYS, null)
+                        ?.split(',')?.mapNotNull(String::toIntOrNull).orEmpty(),
+                ),
         )
 
     fun save(settings: X11Settings): X11Settings {
@@ -155,6 +161,9 @@ class X11SettingsStore(context: Context) {
             .putBoolean(
                 KEY_START_CONTROLS_COLLAPSED,
                 settings.startControlsCollapsed,
+            ).putString(
+                KEY_OVERLAY_KEYS,
+                OverlayKeyboard.normalized(settings.overlayKeys).joinToString(","),
             ).apply()
         return settings
     }
@@ -177,5 +186,6 @@ class X11SettingsStore(context: Context) {
         const val KEY_PREFER_SCANCODES = "prefer-scancodes"
         const val KEY_KEEP_SCREEN_ON = "keep-screen-on"
         const val KEY_START_CONTROLS_COLLAPSED = "start-controls-collapsed"
+        const val KEY_OVERLAY_KEYS = "overlay-keys"
     }
 }

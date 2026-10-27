@@ -74,7 +74,8 @@ shortcut always points to that application in that specific Linux system.
 
 ## Control the desktop
 
-The desktop toolbar opens the keyboard, mouse controls, and display settings.
+The desktop toolbar opens the Android keyboard, mouse controls, on-screen keys,
+and display settings.
 
 - **Direct** touch moves the pointer to your finger.
 - **Trackpad** touch moves the pointer relative to your finger and is useful
@@ -83,6 +84,15 @@ The desktop toolbar opens the keyboard, mouse controls, and display settings.
   that support them.
 - The mouse palette provides left, middle, right, and scroll controls. Hold a
   button while moving another finger on the display to drag.
+- **Keys** opens a movable 12-key palette. Keep a finger on a key for a real
+  hold, including WASD diagonals or a modifier plus another key or mouse action.
+  A quick tap on Ctrl, Alt, Shift, or Super locks it until you tap it again.
+  Hiding the palette releases every held or locked key.
+
+Change each on-screen key in **Desktop settings → Keyboard**. The default layout
+has modifiers, WASD, and common desktop keys; you can replace any slot with a
+letter, number, arrow, function, navigation, supported punctuation key, mouse
+button, or scroll direction.
 
 Display settings can change resolution, scaling, sharpness, pointer speed,
 keyboard handling, and whether the screen stays awake.

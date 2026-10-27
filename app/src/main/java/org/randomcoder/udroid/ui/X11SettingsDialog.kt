@@ -9,15 +9,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -25,7 +30,13 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -36,6 +47,7 @@ import org.randomcoder.udroid.x11.X11DisplayFilter
 import org.randomcoder.udroid.x11.X11ResolutionMode
 import org.randomcoder.udroid.x11.X11Settings
 import org.randomcoder.udroid.x11.X11TouchMode
+import org.randomcoder.udroid.x11.OverlayKeyboard
 import kotlin.math.roundToInt
 
 @Composable
@@ -44,6 +56,8 @@ fun X11SettingsDialog(
     onSettingsChanged: (X11Settings) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var editingSlot by remember { mutableIntStateOf(-1) }
+    var keySearch by remember { mutableStateOf("") }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -210,6 +224,42 @@ fun X11SettingsDialog(
                                 onSettingsChanged(settings.copy(preferScancodes = it))
                             },
                         )
+                        SettingsLabel(
+                            title = "On-screen keys",
+                            subtitle =
+                                "Hold a key while touching the display or another key. " +
+                                    "Tap a modifier to lock it; tap again to release it. " +
+                                    "Slots can also be mouse buttons or scroll.",
+                        )
+                        OverlayKeyboard.normalized(settings.overlayKeys).chunked(4)
+                            .forEachIndexed { row, bindings ->
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    bindings.forEachIndexed { column, keyCode ->
+                                        val slot = row * 4 + column
+                                        OutlinedButton(
+                                            onClick = {
+                                                keySearch = ""
+                                                editingSlot = slot
+                                            },
+                                            modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp),
+                                        ) {
+                                            Text(
+                                                OverlayKeyboard.label(keyCode),
+                                                maxLines = 1,
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        TextButton(
+                            onClick = {
+                                onSettingsChanged(settings.copy(overlayKeys = OverlayKeyboard.defaults))
+                            },
+                        ) {
+                            Text("Reset on-screen keys")
+                        }
 
                         SettingsDivider()
                         SettingsSectionTitle("Session")
@@ -235,6 +285,47 @@ fun X11SettingsDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (editingSlot >= 0) {
+        UdroidTerminalTheme {
+            AlertDialog(
+                onDismissRequest = { editingSlot = -1 },
+                title = { Text("Choose key ${editingSlot + 1}") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = keySearch,
+                            onValueChange = { keySearch = it },
+                            label = { Text("Search keys") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                            items(
+                                OverlayKeyboard.keys.filter {
+                                    OverlayKeyboard.label(it).contains(keySearch, ignoreCase = true)
+                                },
+                            ) { keyCode ->
+                                Text(
+                                    text = OverlayKeyboard.label(keyCode),
+                                    modifier =
+                                        Modifier.fillMaxWidth().clickable {
+                                            val bindings = OverlayKeyboard.normalized(settings.overlayKeys).toMutableList()
+                                            bindings[editingSlot] = keyCode
+                                            onSettingsChanged(settings.copy(overlayKeys = bindings))
+                                            editingSlot = -1
+                                        }.padding(12.dp),
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { editingSlot = -1 }) { Text("Cancel") }
+                },
+            )
         }
     }
 }

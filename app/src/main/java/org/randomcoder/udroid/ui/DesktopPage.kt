@@ -36,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -58,6 +60,7 @@ fun DesktopPage(
         mutableStateOf(!settings.startControlsCollapsed)
     }
     var inputPaletteVisible by rememberSaveable { mutableStateOf(false) }
+    var keyboardPaletteVisible by rememberSaveable { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var displayView by remember { mutableStateOf<X11DisplayView?>(null) }
     BackHandler {
@@ -65,6 +68,8 @@ fun DesktopPage(
             showSettings = false
         } else if (inputPaletteVisible) {
             inputPaletteVisible = false
+        } else if (keyboardPaletteVisible) {
+            keyboardPaletteVisible = false
         } else {
             onExit()
         }
@@ -119,9 +124,11 @@ fun DesktopPage(
                 DesktopControlBar(
                     status = status,
                     inputPaletteVisible = inputPaletteVisible,
+                    keyboardPaletteVisible = keyboardPaletteVisible,
                     onExit = onExit,
                     onKeyboard = { displayView?.showKeyboard() },
                     onInputPalette = { inputPaletteVisible = !inputPaletteVisible },
+                    onKeyboardPalette = { keyboardPaletteVisible = !keyboardPaletteVisible },
                     onSettings = { showSettings = true },
                     onCollapse = { controlsExpanded = false },
                 )
@@ -147,6 +154,8 @@ fun DesktopPage(
                     update = {
                         it.displayView.applySettings(settings)
                         it.setPaletteVisible(inputPaletteVisible)
+                        it.setKeyboardBindings(settings.overlayKeys)
+                        it.setKeyboardPaletteVisible(keyboardPaletteVisible)
                         it.setPaletteColors(
                             primaryContainer = palettePrimary,
                             surfaceContainer = paletteSurface,
@@ -173,9 +182,11 @@ fun DesktopPage(
 private fun DesktopControlBar(
     status: String,
     inputPaletteVisible: Boolean,
+    keyboardPaletteVisible: Boolean,
     onExit: () -> Unit,
     onKeyboard: () -> Unit,
     onInputPalette: () -> Unit,
+    onKeyboardPalette: () -> Unit,
     onSettings: () -> Unit,
     onCollapse: () -> Unit,
 ) {
@@ -234,6 +245,19 @@ private fun DesktopControlBar(
                     } else {
                         UdroidTerminalText
                     },
+            )
+        }
+        IconButton(
+            onClick = onKeyboardPalette,
+            modifier = Modifier.semantics {
+                contentDescription =
+                    if (keyboardPaletteVisible) "Hide on-screen keys" else "Show on-screen keys"
+            },
+        ) {
+            Text(
+                text = "Keys",
+                color = if (keyboardPaletteVisible) UdroidTerminalGreen else UdroidTerminalText,
+                style = MaterialTheme.typography.labelSmall,
             )
         }
         IconButton(onClick = onSettings) {

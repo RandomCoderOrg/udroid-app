@@ -14,6 +14,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.termux.x11.input.InputStub
 import org.randomcoder.udroid.x11.X11DisplayView
+import org.randomcoder.udroid.x11.OverlayKeyboard
+import org.randomcoder.udroid.x11.OverlayKeyState
 import kotlin.math.roundToInt
 
 internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
@@ -21,6 +23,25 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
 
     private val density = resources.displayMetrics.density
     private val palette = LinearLayout(context)
+    private val keyboardPalette = LinearLayout(context)
+    private val keyboardButtons = mutableListOf<TextView>()
+    private val keyboardState = OverlayKeyState { binding, pressed ->
+        when (binding) {
+            OverlayKeyboard.MOUSE_LEFT ->
+                displayView.setOverlayMouseButton(InputStub.BUTTON_LEFT, pressed)
+            OverlayKeyboard.MOUSE_MIDDLE ->
+                displayView.setOverlayMouseButton(InputStub.BUTTON_MIDDLE, pressed)
+            OverlayKeyboard.MOUSE_RIGHT ->
+                displayView.setOverlayMouseButton(InputStub.BUTTON_RIGHT, pressed)
+            OverlayKeyboard.SCROLL_UP -> if (pressed) displayView.scrollMouse(120f)
+            OverlayKeyboard.SCROLL_DOWN -> if (pressed) displayView.scrollMouse(-120f)
+            else -> displayView.setOverlayKey(binding, pressed)
+        }
+    }
+    private val heldKeyboardSlots = mutableSetOf<Int>()
+    private val chordUsedSlots = mutableSetOf<Int>()
+    private var keyboardBindings = OverlayKeyboard.defaults
+    private var keyboardPaletteLocked = false
     private val mouseButtons = mutableMapOf<Int, TextView>()
     private val scrollButtons = mutableListOf<TextView>()
     private val paletteTextViews = mutableListOf<TextView>()
@@ -47,11 +68,45 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
             },
         )
         palette.visibility = View.GONE
+        buildKeyboardPalette()
+        addView(
+            keyboardPalette,
+            LayoutParams(dp(224), LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.BOTTOM or Gravity.START
+                setMargins(dp(12), dp(12), dp(12), dp(12))
+            },
+        )
+        keyboardPalette.visibility = View.GONE
+        displayView.setOnInputReset {
+            keyboardState.clear()
+            heldKeyboardSlots.clear()
+            chordUsedSlots.clear()
+            updateKeyboardButtons()
+            releaseMouseButtons()
+        }
+        displayView.setOnCompanionInput(::markKeyboardChordUsed)
     }
 
     fun setPaletteVisible(visible: Boolean) {
         if (!visible) releaseMouseButtons()
         palette.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    fun setKeyboardPaletteVisible(visible: Boolean) {
+        if (!visible) releaseKeyboard()
+        keyboardPalette.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    fun setKeyboardBindings(bindings: List<Int>) {
+        val normalized = OverlayKeyboard.normalized(bindings)
+        if (normalized == keyboardBindings) return
+        releaseKeyboard()
+        keyboardBindings = normalized
+        keyboardButtons.forEachIndexed { index, view ->
+            val label = OverlayKeyboard.label(normalized[index])
+            view.text = label
+            view.contentDescription = "Hold $label key"
+        }
     }
 
     fun setPaletteColors(
@@ -65,9 +120,11 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         this.onSurface = onSurface
         this.outline = outline
         palette.background = roundedBackground(surfaceContainer, outline, 30)
+        keyboardPalette.background = roundedBackground(surfaceContainer, outline, 30)
         paletteTextViews.forEach { it.setTextColor(onSurface) }
         mouseButtons.forEach { (button, view) -> updateMouseButton(view, button) }
         scrollButtons.forEach { it.background = mouseButtonBackground(true) }
+        updateKeyboardButtons()
     }
 
     private fun buildPalette() {
@@ -96,7 +153,7 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
             lock.contentDescription =
                 if (paletteLocked) "Unlock mouse controls" else "Lock mouse controls"
         }
-        installPaletteDrag(header)
+        installPaletteDrag(header, palette) { paletteLocked }
 
         val mouseBody =
             LinearLayout(context).apply {
@@ -126,29 +183,79 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         palette.addView(mouseBody)
     }
 
-    private fun installPaletteDrag(header: View) {
+    private fun buildKeyboardPalette() {
+        keyboardPalette.orientation = LinearLayout.VERTICAL
+        keyboardPalette.isMotionEventSplittingEnabled = true
+        keyboardPalette.setPadding(dp(8), dp(8), dp(8), dp(8))
+        keyboardPalette.background = roundedBackground(surfaceContainer, outline, 30)
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = textButton("☰  Keys", "Move keyboard controls").apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setTypeface(typeface, Typeface.BOLD)
+            isClickable = false
+        }
+        val lock = textButton("Lock", "Lock keyboard controls")
+        header.addView(title, LinearLayout.LayoutParams(0, dp(36), 1f))
+        header.addView(lock, LinearLayout.LayoutParams(dp(52), dp(36)))
+        keyboardPalette.addView(header)
+        lock.setOnClickListener {
+            keyboardPaletteLocked = !keyboardPaletteLocked
+            lock.text = if (keyboardPaletteLocked) "Move" else "Lock"
+            lock.contentDescription =
+                if (keyboardPaletteLocked) "Unlock keyboard controls" else "Lock keyboard controls"
+        }
+        installPaletteDrag(header, keyboardPalette) { keyboardPaletteLocked }
+
+        repeat(3) { rowIndex ->
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                isMotionEventSplittingEnabled = true
+            }
+            repeat(4) { columnIndex ->
+                val slot = rowIndex * 4 + columnIndex
+                val label = OverlayKeyboard.label(keyboardBindings[slot])
+                val view = textButton(label, "Hold $label key").apply {
+                    textSize = 12f
+                    background = mouseButtonBackground(false)
+                }
+                installKeyboardButton(view, slot)
+                keyboardButtons += view
+                row.addView(view, LinearLayout.LayoutParams(0, dp(48), 1f))
+            }
+            keyboardPalette.addView(row, LinearLayout.LayoutParams(dp(208), dp(48)))
+        }
+    }
+
+    private fun installPaletteDrag(
+        header: View,
+        targetPalette: View,
+        isLocked: () -> Boolean,
+    ) {
         var startRawX = 0f
         var startRawY = 0f
         var startX = 0f
         var startY = 0f
         header.setOnTouchListener { _, event ->
-            if (paletteLocked) return@setOnTouchListener false
+            if (isLocked()) return@setOnTouchListener true
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startRawX = event.rawX
                     startRawY = event.rawY
-                    startX = palette.x
-                    startY = palette.y
+                    startX = targetPalette.x
+                    startY = targetPalette.y
                     true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    palette.x =
+                    targetPalette.x =
                         (startX + event.rawX - startRawX)
-                            .coerceIn(0f, (width - palette.width).coerceAtLeast(0).toFloat())
-                    palette.y =
+                            .coerceIn(0f, (width - targetPalette.width).coerceAtLeast(0).toFloat())
+                    targetPalette.y =
                         (startY + event.rawY - startRawY)
-                            .coerceIn(0f, (height - palette.height).coerceAtLeast(0).toFloat())
+                            .coerceIn(0f, (height - targetPalette.height).coerceAtLeast(0).toFloat())
                     true
                 }
 
@@ -174,6 +281,7 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         view.setOnTouchListener { target, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    markKeyboardChordUsed()
                     target.isPressed = true
                     momentaryPress = false
                     target.postDelayed(
@@ -214,6 +322,108 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         }
     }
 
+    private fun installKeyboardButton(view: TextView, slot: Int) {
+        var downTime = 0L
+        var handledTouchClick = false
+        view.setOnClickListener {
+            if (handledTouchClick) {
+                handledTouchClick = false
+            } else if (displayView.isRendererAttached) {
+                val keyCode = keyboardBindings[slot]
+                if (OverlayKeyboard.isModifier(keyCode)) {
+                    toggleLatchedKey(slot)
+                } else {
+                    keyboardState.press(touchOwner(slot), keyCode)
+                    keyboardState.release(touchOwner(slot))
+                }
+                updateKeyboardButtons()
+            }
+        }
+        view.setOnTouchListener { target, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (!displayView.isRendererAttached) return@setOnTouchListener true
+                    if (heldKeyboardSlots.isNotEmpty()) {
+                        chordUsedSlots.addAll(heldKeyboardSlots)
+                        chordUsedSlots.add(slot)
+                    }
+                    heldKeyboardSlots.add(slot)
+                    downTime = event.eventTime
+                    target.isPressed = true
+                    keyboardState.press(touchOwner(slot), keyboardBindings[slot])
+                    updateKeyboardButtons()
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    target.isPressed = false
+                    val keyCode = keyboardBindings[slot]
+                    if (shouldLatchModifier(
+                            isHeld = slot in heldKeyboardSlots,
+                            isModifier = OverlayKeyboard.isModifier(keyCode),
+                            usedInChord = slot in chordUsedSlots,
+                            heldMillis = event.eventTime - downTime,
+                            tapThresholdMillis = ViewConfiguration.getLongPressTimeout().toLong(),
+                        )) {
+                        toggleLatchedKey(slot)
+                    }
+                    keyboardState.release(touchOwner(slot))
+                    heldKeyboardSlots.remove(slot)
+                    chordUsedSlots.remove(slot)
+                    updateKeyboardButtons()
+                    handledTouchClick = true
+                    target.performClick()
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    target.isPressed = false
+                    keyboardState.release(touchOwner(slot))
+                    heldKeyboardSlots.remove(slot)
+                    chordUsedSlots.remove(slot)
+                    updateKeyboardButtons()
+                    true
+                }
+
+                else -> true
+            }
+        }
+    }
+
+    private fun toggleLatchedKey(slot: Int) {
+        val owner = latchOwner(slot)
+        if (keyboardState.isPressed(owner)) {
+            keyboardState.release(owner)
+        } else {
+            keyboardState.press(owner, keyboardBindings[slot])
+        }
+    }
+
+    private fun markKeyboardChordUsed() {
+        chordUsedSlots.addAll(heldKeyboardSlots)
+    }
+
+    private fun releaseKeyboard() {
+        keyboardState.releaseAll()
+        heldKeyboardSlots.clear()
+        chordUsedSlots.clear()
+        updateKeyboardButtons()
+    }
+
+    private fun updateKeyboardButtons() {
+        keyboardButtons.forEachIndexed { slot, view ->
+            view.background =
+                mouseButtonBackground(
+                    keyboardState.isPressed(touchOwner(slot)) ||
+                        keyboardState.isPressed(latchOwner(slot)),
+                )
+        }
+    }
+
+    private fun touchOwner(slot: Int) = slot * 2
+
+    private fun latchOwner(slot: Int) = slot * 2 + 1
+
     private fun toggleMouseButton(button: Int) {
         val next = nextLatchedMouseButton(latchedButton, button)
         releaseMouseButtons()
@@ -245,7 +455,10 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
 
     private fun scrollButton(label: String, amount: Float) =
         textButton(label, if (amount > 0) "Scroll up" else "Scroll down").apply {
-            setOnClickListener { displayView.scrollMouse(amount) }
+            setOnClickListener {
+                markKeyboardChordUsed()
+                displayView.scrollMouse(amount)
+            }
             background = mouseButtonBackground(true)
             scrollButtons += this
         }
@@ -282,10 +495,29 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
     override fun onDetachedFromWindow() {
+        releaseKeyboard()
         releaseMouseButtons()
         super.onDetachedFromWindow()
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus) {
+            releaseKeyboard()
+            releaseMouseButtons()
+        }
     }
 }
 
 internal fun nextLatchedMouseButton(current: Int, tapped: Int): Int =
     if (current == tapped) InputStub.BUTTON_UNDEFINED else tapped
+
+internal fun shouldLatchModifier(
+    isHeld: Boolean,
+    isModifier: Boolean,
+    usedInChord: Boolean,
+    heldMillis: Long,
+    tapThresholdMillis: Long,
+): Boolean =
+    isHeld && isModifier && !usedInChord &&
+        heldMillis < tapThresholdMillis

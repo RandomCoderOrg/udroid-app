@@ -20,6 +20,21 @@ implementation.
 
 ## Current input path
 
+The app-owned on-screen keyboard sends Android keycodes through Lorie's existing
+key transport, which maps them to Linux/X server keycodes. Unlike a text macro,
+each touch has a separate key-down and key-up; the server's XKB state therefore
+sees held modifiers and simultaneous keys. The overlay shares touch dispatch
+with the display through Android `ViewGroup` motion-event splitting. It releases
+all of its keys and mouse buttons on cancellation, hide, focus loss, renderer
+detach, or surface loss. Bindings are restricted to keycodes present in Lorie's
+mapping plus mouse buttons and wheel steps; gamepad axis output is not part of
+this X11 input contract.
+
+References: [XKB keyboard state](https://www.x.org/archive/X11R7.7/doc/libX11/XKB/xkblib.html),
+[Android MotionEvent cancellation](https://developer.android.com/reference/android/view/MotionEvent),
+[ViewGroup split motion events](https://developer.android.com/reference/android/view/ViewGroup#setMotionEventSplittingEnabled(boolean)),
+and [Android KeyEvent](https://developer.android.com/reference/android/view/KeyEvent).
+
 ```mermaid
 flowchart LR
     Android["Android MotionEvent"] --> View["uDroid X11DisplayView"]
