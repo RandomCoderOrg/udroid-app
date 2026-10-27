@@ -224,6 +224,16 @@ fun X11SettingsDialog(
                                 onSettingsChanged(settings.copy(preferScancodes = it))
                             },
                         )
+                        SettingsSwitch(
+                            title = "Keep desktop above keyboard",
+                            subtitle =
+                                "Resize the Linux display when the Android keyboard opens. " +
+                                    "Turn off to let the keyboard cover the desktop.",
+                            checked = settings.avoidSoftKeyboard,
+                            onCheckedChange = {
+                                onSettingsChanged(settings.copy(avoidSoftKeyboard = it))
+                            },
+                        )
                         SettingsLabel(
                             title = "On-screen keys",
                             subtitle =

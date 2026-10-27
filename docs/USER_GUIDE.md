@@ -95,7 +95,10 @@ letter, number, arrow, function, navigation, supported punctuation key, mouse
 button, or scroll direction.
 
 Display settings can change resolution, scaling, sharpness, pointer speed,
-keyboard handling, and whether the screen stays awake.
+keyboard handling, and whether the screen stays awake. **Keep desktop above
+keyboard** resizes the Linux display into the space above the Android keyboard;
+turn it off if you prefer the keyboard to cover the desktop without changing
+its size.
 
 ## Audio and microphone
 

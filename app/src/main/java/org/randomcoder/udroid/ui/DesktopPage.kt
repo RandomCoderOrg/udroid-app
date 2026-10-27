@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -119,7 +120,12 @@ fun DesktopPage(
         modifier = Modifier.fillMaxSize(),
         color = Color.Black,
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+                Modifier.fillMaxSize().then(
+                    if (settings.avoidSoftKeyboard) Modifier.imePadding() else Modifier,
+                ),
+        ) {
             if (controlsExpanded) {
                 DesktopControlBar(
                     status = status,

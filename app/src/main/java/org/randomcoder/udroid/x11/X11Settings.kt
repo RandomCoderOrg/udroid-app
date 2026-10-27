@@ -33,6 +33,7 @@ data class X11Settings(
     val keepScreenOn: Boolean = true,
     val startControlsCollapsed: Boolean = false,
     val overlayKeys: List<Int> = OverlayKeyboard.defaults,
+    val avoidSoftKeyboard: Boolean = true,
 )
 
 data class X11Viewport(
@@ -143,6 +144,7 @@ class X11SettingsStore(context: Context) {
                     preferences.getString(KEY_OVERLAY_KEYS, null)
                         ?.split(',')?.mapNotNull(String::toIntOrNull).orEmpty(),
                 ),
+            avoidSoftKeyboard = preferences.getBoolean(KEY_AVOID_SOFT_KEYBOARD, true),
         )
 
     fun save(settings: X11Settings): X11Settings {
@@ -164,6 +166,9 @@ class X11SettingsStore(context: Context) {
             ).putString(
                 KEY_OVERLAY_KEYS,
                 OverlayKeyboard.normalized(settings.overlayKeys).joinToString(","),
+            ).putBoolean(
+                KEY_AVOID_SOFT_KEYBOARD,
+                settings.avoidSoftKeyboard,
             ).apply()
         return settings
     }
@@ -187,5 +192,6 @@ class X11SettingsStore(context: Context) {
         const val KEY_KEEP_SCREEN_ON = "keep-screen-on"
         const val KEY_START_CONTROLS_COLLAPSED = "start-controls-collapsed"
         const val KEY_OVERLAY_KEYS = "overlay-keys"
+        const val KEY_AVOID_SOFT_KEYBOARD = "avoid-soft-keyboard"
     }
 }
