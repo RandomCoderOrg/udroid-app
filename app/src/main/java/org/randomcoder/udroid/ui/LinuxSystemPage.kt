@@ -1390,11 +1390,13 @@ private fun compositorSummary(environment: DesktopEnvironment): String =
 private fun distributionFrom(rootfsName: String): LinuxDistribution {
     val normalized = rootfsName.lowercase()
     return when {
-        "debian" in normalized -> LinuxDistribution.DEBIAN
+        "debian" in normalized || "trixie" in normalized -> LinuxDistribution.DEBIAN
         "arch" in normalized -> LinuxDistribution.ARCH
         "alpine" in normalized -> LinuxDistribution.ALPINE
         "void" in normalized -> LinuxDistribution.VOID
-        else -> LinuxDistribution.UBUNTU
+        listOf("ubuntu", "focal", "jammy", "noble", "oracular", "plucky", "questing", "resolute")
+            .any(normalized::contains) -> LinuxDistribution.UBUNTU
+        else -> LinuxDistribution.UNKNOWN
     }
 }
 

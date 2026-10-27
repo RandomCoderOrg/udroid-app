@@ -117,7 +117,7 @@ internal object InstallProgressCodec {
                         ?.jsonPrimitive
                         ?.contentOrNull
                         ?.let { id -> LinuxDistribution.entries.firstOrNull { it.id == id } }
-                        ?: LinuxDistribution.UBUNTU,
+                        ?: LinuxDistribution.UNKNOWN,
                 provider =
                     value["provider"]
                         ?.jsonPrimitive

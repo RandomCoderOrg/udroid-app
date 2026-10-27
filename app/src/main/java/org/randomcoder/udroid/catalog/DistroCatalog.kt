@@ -21,7 +21,7 @@ data class DistroVariant(
     val architecture: String,
     val downloadUrl: String,
     val sha256: String,
-    val distribution: LinuxDistribution = LinuxDistribution.UBUNTU,
+    val distribution: LinuxDistribution = LinuxDistribution.UNKNOWN,
     val provider: DistroProvider = DistroProvider.UDROID,
     val releaseLabel: String? = null,
     val archiveStripComponents: Int = 0,
@@ -45,6 +45,8 @@ data class DistroVariant(
                             "resolute" -> "Ubuntu 26.04 LTS"
                             else -> "Ubuntu ${suite.replaceFirstChar { it.titlecase() }}"
                         }
+                    LinuxDistribution.DEBIAN -> "Debian ${suite.replaceFirstChar { it.titlecase() }}"
+                    LinuxDistribution.UNKNOWN -> "Unknown Linux"
                     else -> distribution.displayName
                 }
 
@@ -81,6 +83,7 @@ enum class LinuxDistribution(
     val id: String,
     val displayName: String,
 ) {
+    UNKNOWN("unknown", "Unknown Linux"),
     UBUNTU("ubuntu", "Ubuntu"),
     DEBIAN("debian", "Debian"),
     ARCH("arch", "Arch Linux"),
@@ -128,6 +131,10 @@ object DistroCatalogParser {
         for (suiteElement in suites) {
             val suiteName = suiteElement.jsonPrimitive.content
             val suite = root[suiteName]?.jsonObject ?: continue
+            val distribution =
+                suite["distribution"]?.jsonPrimitive?.contentOrNull
+                    ?.let { id -> LinuxDistribution.entries.firstOrNull { it.id == id } }
+                    ?: LinuxDistribution.UNKNOWN
             val variantNames = suite["varients"]?.jsonArray ?: continue
 
             for (variantElement in variantNames) {
@@ -149,6 +156,7 @@ object DistroCatalogParser {
                         architecture = architecture,
                         downloadUrl = downloadUrl,
                         sha256 = entry[shaKey]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        distribution = distribution,
                     )
             }
         }
@@ -266,6 +274,7 @@ class DistroCatalogRepository(private val context: Context) {
                         downloadUrl =
                             "https://github.com/RandomCoderOrg/udroid-download/releases/download/V3R113/jammy-raw-arm64.tar.gz",
                         sha256 = "63f8dbb323570f1bd4c149c774dd05717f611111aa5da3105a32255139f69d26",
+                        distribution = LinuxDistribution.UBUNTU,
                     )
                 "armhf" ->
                     DistroVariant(
@@ -277,6 +286,7 @@ class DistroCatalogRepository(private val context: Context) {
                         downloadUrl =
                             "https://github.com/RandomCoderOrg/udroid-download/releases/download/V3R113/jammy-raw-armhf.tar.gz",
                         sha256 = "7ef2a462747a06522db8d99e7a8c73cff4afd90275dad35b9971fea3b5ff783f",
+                        distribution = LinuxDistribution.UBUNTU,
                     )
                 "amd64" ->
                     DistroVariant(
@@ -288,6 +298,7 @@ class DistroCatalogRepository(private val context: Context) {
                         downloadUrl =
                             "https://github.com/RandomCoderOrg/udroid-download/releases/download/V3R100/jammy-raw-amd64.tar.gz",
                         sha256 = "eadbdf2bd7d4e9caecb6e57df303d32807fdc2f21fd58565682e8399ab27942c",
+                        distribution = LinuxDistribution.UBUNTU,
                     )
                 else -> error("No built-in fallback for $architecture")
             }

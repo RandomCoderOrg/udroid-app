@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 import org.randomcoder.udroid.oci.OciImageReference
 import org.randomcoder.udroid.oci.OciPlatform
 
@@ -20,6 +21,7 @@ class ResetInstallationSelectionTest {
                 architecture = "aarch64",
                 downloadUrl = "https://example.invalid/debian.tar.xz",
                 sha256 = "a".repeat(64),
+                distribution = LinuxDistribution.DEBIAN,
             )
         val progress =
             ResetInstallationSelection.initial(

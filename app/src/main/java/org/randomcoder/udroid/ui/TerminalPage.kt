@@ -650,9 +650,9 @@ private fun StoppingTerminalState(
 private fun terminalDistribution(rootfsName: String): LinuxDistribution? {
     val normalized = rootfsName.lowercase()
     return when {
-        listOf("focal", "jammy", "noble", "resolute", "ubuntu")
+        listOf("focal", "jammy", "noble", "oracular", "plucky", "questing", "resolute", "ubuntu")
             .any(normalized::contains) -> LinuxDistribution.UBUNTU
-        "debian" in normalized -> LinuxDistribution.DEBIAN
+        "debian" in normalized || "trixie" in normalized -> LinuxDistribution.DEBIAN
         "arch" in normalized -> LinuxDistribution.ARCH
         "alpine" in normalized -> LinuxDistribution.ALPINE
         "void" in normalized -> LinuxDistribution.VOID
