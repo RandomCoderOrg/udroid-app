@@ -50,6 +50,7 @@ class InstallerWorkRequestTest {
                 architecture = "aarch64",
                 downloadUrl = "https://example.test/ubuntu.tar.xz",
                 sha256 = "b".repeat(64),
+                distribution = LinuxDistribution.UBUNTU,
             )
         val expected =
             InstallerWorkRequest.Archive(

@@ -160,6 +160,7 @@ fun DistroMark(
             painter =
                 painterResource(
                     when (distribution) {
+                        LinuxDistribution.UNKNOWN -> R.drawable.distro_unknown
                         LinuxDistribution.UBUNTU -> R.drawable.distro_ubuntu
                         LinuxDistribution.DEBIAN -> R.drawable.distro_debian
                         LinuxDistribution.ARCH -> R.drawable.distro_arch

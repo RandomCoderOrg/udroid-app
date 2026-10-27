@@ -1915,11 +1915,13 @@ private fun installedSystemTitle(rootfsName: String): String =
 private fun distributionFromSystemId(systemId: String): LinuxDistribution {
     val normalized = systemId.lowercase()
     return when {
-        "debian" in normalized -> LinuxDistribution.DEBIAN
+        "debian" in normalized || "trixie" in normalized -> LinuxDistribution.DEBIAN
         "arch" in normalized -> LinuxDistribution.ARCH
         "alpine" in normalized -> LinuxDistribution.ALPINE
         "void" in normalized -> LinuxDistribution.VOID
-        else -> LinuxDistribution.UBUNTU
+        listOf("ubuntu", "focal", "jammy", "noble", "oracular", "plucky", "questing", "resolute")
+            .any(normalized::contains) -> LinuxDistribution.UBUNTU
+        else -> LinuxDistribution.UNKNOWN
     }
 }
 

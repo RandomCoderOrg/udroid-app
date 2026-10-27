@@ -13,6 +13,7 @@ class DistroCatalogParserTest {
                 {
                   "suites": ["jammy"],
                   "jammy": {
+                    "distribution": "ubuntu",
                     "varients": ["raw"],
                     "raw": {
                       "Name": "udroid-jammy-raw",
@@ -30,6 +31,41 @@ class DistroCatalogParserTest {
         assertEquals("ubuntu:jammy:raw", catalog.variants.single().id)
         assertEquals("abc123", catalog.variants.single().sha256)
         assertTrue(catalog.variants.single().recommended)
+    }
+
+    @Test
+    fun `catalogue uses declared distribution and does not guess missing or unknown ids`() {
+        val catalog =
+            DistroCatalogParser.parse(
+                """
+                {
+                  "suites": ["trixie", "future", "legacy"],
+                  "trixie": {
+                    "distribution": "debian",
+                    "varients": ["plasma"],
+                    "plasma": {"aarch64url": "https://example.test/trixie.tar.gz"}
+                  },
+                  "future": {
+                    "distribution": "other",
+                    "varients": ["raw"],
+                    "raw": {"aarch64url": "https://example.test/future.tar.gz"}
+                  },
+                  "legacy": {
+                    "varients": ["raw"],
+                    "raw": {"aarch64url": "https://example.test/legacy.tar.gz"}
+                  }
+                }
+                """.trimIndent(),
+                architecture = "aarch64",
+            )
+
+        val trixie = catalog.variants.first { it.suite == "trixie" }
+        assertEquals(LinuxDistribution.DEBIAN, trixie.distribution)
+        assertEquals("Debian Trixie", trixie.releaseName)
+        assertEquals("debian:trixie:plasma", trixie.id)
+        assertTrue(catalog.variants.filter { it.suite != "trixie" }.all {
+            it.distribution == LinuxDistribution.UNKNOWN && it.releaseName == "Unknown Linux"
+        })
     }
 
     @Test
