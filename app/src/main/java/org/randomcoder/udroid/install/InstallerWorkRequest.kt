@@ -129,7 +129,7 @@ object InstallerWorkRequestCodec {
                                     ?.let { id ->
                                         LinuxDistribution.entries.firstOrNull { it.id == id }
                                     }
-                                    ?: LinuxDistribution.UBUNTU,
+                                    ?: LinuxDistribution.UNKNOWN,
                             provider =
                                 value["provider"]
                                     ?.jsonPrimitive

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.catalog.LinuxDistribution
 
 class InstallProgressTest {
     private val distro =
@@ -15,6 +16,7 @@ class InstallProgressTest {
             architecture = "aarch64",
             downloadUrl = "https://example.test/jammy.tar.gz",
             sha256 = "abc",
+            distribution = LinuxDistribution.UBUNTU,
         )
     private val work =
         InstallerWorkRequest.Archive(
