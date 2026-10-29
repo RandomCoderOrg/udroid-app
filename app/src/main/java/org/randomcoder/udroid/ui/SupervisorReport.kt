@@ -5,6 +5,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.randomcoder.udroid.runtime.CapabilityResult
+import org.randomcoder.udroid.runtime.CapabilityStatus
 
 internal data class DiagnosticLogEntry(
     val raw: String,
@@ -14,6 +16,7 @@ internal data class DiagnosticLogEntry(
     val event: String,
     val message: String,
     val fields: String,
+    val fieldValues: Map<String, String> = emptyMap(),
 )
 
 internal fun formatDiagnosticLogEntry(entry: DiagnosticLogEntry): String =
@@ -51,6 +54,10 @@ private fun parseDiagnosticLogEntry(line: String): DiagnosticLogEntry {
     val payload = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull()
         ?: return DiagnosticLogEntry(line, "", "raw", "journal", "event", line, "")
     val fields = payload["fields"] as? JsonObject
+    val fieldValues =
+        fields
+            ?.mapValues { (_, value) -> (value as? JsonPrimitive)?.content ?: value.toString() }
+            .orEmpty()
     return DiagnosticLogEntry(
         raw = line,
         timestamp = payload.string("timestamp").replace('T', ' '),
@@ -59,14 +66,64 @@ private fun parseDiagnosticLogEntry(line: String): DiagnosticLogEntry {
         event = payload.string("event").ifBlank { "event" },
         message = payload.string("message").ifBlank { line },
         fields =
-            fields
-                ?.toSortedMap()
+            fieldValues
+                .toSortedMap()
                 ?.entries
                 ?.joinToString("  ") { (key, value) ->
-                    "$key=${(value as? JsonPrimitive)?.content ?: value}"
+                    "$key=$value"
                 }
                 .orEmpty(),
+        fieldValues = fieldValues,
     )
+}
+
+internal fun zinkCompatibilityResults(
+    newestFirstJournalLines: List<String>,
+): List<CapabilityResult> {
+    val entries = newestFirstJournalLines.map(::parseDiagnosticLogEntry)
+    val summaryIndex =
+        entries.indexOfFirst {
+            it.component == "graphics" &&
+                it.event in setOf("zink_requirements", "zink_requirements_failed")
+        }
+    if (summaryIndex < 0) return emptyList()
+
+    val summary = entries[summaryIndex]
+    val rootfs = summary.fieldValues["rootfs"]
+    return buildList {
+        add(
+            CapabilityResult(
+                name = "Zink through Venus",
+                status =
+                    if (summary.severity.equals("warning", ignoreCase = true)) {
+                        CapabilityStatus.WARNING
+                    } else {
+                        CapabilityStatus.PASS
+                    },
+                detail = listOfNotNull(summary.message, rootfs?.let { "Linux system: $it" }).joinToString(" · "),
+                required = false,
+            ),
+        )
+        entries
+            .take(summaryIndex)
+            .filter { it.component == "graphics" && it.event == "zink_profile" }
+            .asReversed()
+            .forEach { entry ->
+                val supported = entry.message.endsWith(": supported")
+                add(
+                    CapabilityResult(
+                        name = entry.message.substringBeforeLast(": "),
+                        status = if (supported) CapabilityStatus.PASS else CapabilityStatus.FAIL,
+                        detail =
+                            listOfNotNull(
+                                entry.fieldValues["profile"],
+                                rootfs?.let { "Linux system: $it" },
+                            ).joinToString(" · "),
+                        required = false,
+                    ),
+                )
+            }
+    }
 }
 
 private fun JsonObject.string(key: String): String = this[key]?.jsonPrimitive?.content.orEmpty()

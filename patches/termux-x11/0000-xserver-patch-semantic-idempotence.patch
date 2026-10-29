@@ -1,3 +1,9 @@
+termux-x11: make nested Xserver patching idempotent
+
+Later uDroid patches modify files already touched by xserver.patch, making a
+reverse dry-run unreliable. Record the base patch semantically before applying
+the rest of the stack.
+
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -20,6 +20,17 @@ find_package(Python3 REQUIRED)

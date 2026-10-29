@@ -1,0 +1,83 @@
+lorie: transfer AHardwareBuffer ownership around GPU Present
+
+AHardwareBuffer does not permit GPU writes while a CPU mapping is locked.
+The previous capability probe exercised that invalid overlap, so conforming
+devices disabled every GPU Present copy even though the renderer already
+fences completed work.
+
+End the CPU mapping before the probe writes through GLES, then reacquire it
+after glFinish to verify the result. Likewise release an idle destination
+mapping before queuing a Present copy. EXA PrepareAccess reacquires the mapping
+for later CPU work under the existing renderer state lock.
+
+diff --git a/InitOutput.c b/InitOutput.c
+--- a/InitOutput.c
++++ b/InitOutput.c
+@@ -916,5 +916,5 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+     LorieBuffer *srcBuffer, *dstBuffer;
+-    LoriePixmapPriv *priv;
++    LoriePixmapPriv *priv, *dstPriv;
+     const LorieBuffer_Desc *desc, *dstDesc;
+     LorieGpuCopyEntry *entry;
+     BoxRec fullBox;
+@@ -941,6 +941,18 @@ Bool lorieTryScheduleGpuCopy(PixmapPtr pixmap, PixmapPtr dst, RegionPtr update,
+     }
+     priv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap);
++    dstPriv = LORIE_PIXMAP_PRIV_FROM_PIXMAP(dst);
+     desc = LorieBuffer_description(srcBuffer);
+     dstDesc = LorieBuffer_description(dstBuffer);
+ 
++    /* Transfer an idle CPU mapping back to the GPU before queuing the write. */
++    if (dstDesc->type == LORIEBUFFER_AHARDWAREBUFFER && dstPriv && dstPriv->locked) {
++        if (LorieBuffer_unlock(dstPriv->buffer) != 0) {
++            gpuCopyAttempts++;
++            return FALSE;
++        }
++        dstPriv->locked = NULL;
++        dstPriv->wasLocked = false;
++        dst->devPrivate.ptr = NULL;
++    }
++
+     if (update) {
+diff --git a/renderer.c b/renderer.c
+--- a/renderer.c
++++ b/renderer.c
+@@ -457,19 +457,25 @@ static bool cpuAndGpuShareAhbMemory(EGLDisplay display) {
+                              -1, NULL, (void **) &pixels) != 0 || !pixels)
+         goto out;
+     pixels[0] = 0;
++    AHardwareBuffer_unlock(buffer, NULL);
++    pixels = NULL;
+ 
+     glClearColor(0x11 / 255.f, 0x22 / 255.f, 0x33 / 255.f, 1.f);
+     glClear(GL_COLOR_BUFFER_BIT);
+     glFinish();
+ 
+-    if ((pixels[0] & 0xffffff) != 0x332211) {
+-        loge("CPU mapping does not see GPU writes (got %08x)", pixels[0]);
+-        AHardwareBuffer_unlock(buffer, NULL);
++    if (AHardwareBuffer_lock(buffer, AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
++                             -1, NULL, (void **) &pixels) != 0 || !pixels)
++        goto out;
++    uint32_t gpuPixel = pixels[0];
++    AHardwareBuffer_unlock(buffer, NULL);
++    pixels = NULL;
++    if ((gpuPixel & 0xffffff) != 0x332211) {
++        loge("CPU mapping does not see GPU writes (got %08x)", gpuPixel);
+         result = false;
+         goto out;
+     }
+ 
+-    AHardwareBuffer_unlock(buffer, NULL);
+     {
+         uint8_t pixel[4] = {0, 0, 0, 0};
+         glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+@@ -482,6 +489,8 @@ static bool cpuAndGpuShareAhbMemory(EGLDisplay display) {
+     }
+ 
+ out:
++    if (pixels)
++        AHardwareBuffer_unlock(buffer, NULL);
+     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+     if (fbo)
+         glDeleteFramebuffers(1, &fbo);

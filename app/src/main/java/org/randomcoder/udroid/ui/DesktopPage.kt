@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,16 +28,20 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.randomcoder.udroid.runtime.RuntimePhase
@@ -58,6 +64,8 @@ fun DesktopPage(
         mutableStateOf(!settings.startControlsCollapsed)
     }
     var inputPaletteVisible by rememberSaveable { mutableStateOf(false) }
+    var displayKeysVisible by rememberSaveable { mutableStateOf(false) }
+    var arrangingDisplayKeys by rememberSaveable { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var displayView by remember { mutableStateOf<X11DisplayView?>(null) }
     BackHandler {
@@ -65,14 +73,26 @@ fun DesktopPage(
             showSettings = false
         } else if (inputPaletteVisible) {
             inputPaletteVisible = false
+        } else if (arrangingDisplayKeys) {
+            arrangingDisplayKeys = false
+        } else if (displayKeysVisible) {
+            displayKeysVisible = false
         } else {
             onExit()
         }
     }
     var status by remember { mutableStateOf("Waiting for the supervised X11 renderer") }
     val updateSettings: (X11Settings) -> Unit = { updated ->
+        if (updated.displayKeys.size > settings.displayKeys.size) displayKeysVisible = true
         settings = settingsStore.save(updated)
         displayView?.applySettings(updated)
+    }
+
+    LaunchedEffect(arrangingDisplayKeys, showSettings) {
+        if (arrangingDisplayKeys && !showSettings) {
+            withFrameNanos { }
+            displayView?.hideKeyboard()
+        }
     }
 
     DisposableEffect(service, displayView, snapshot.bootId) {
@@ -114,14 +134,26 @@ fun DesktopPage(
         modifier = Modifier.fillMaxSize(),
         color = Color.Black,
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+                Modifier.fillMaxSize().navigationBarsPadding().then(
+                    if (settings.avoidSoftKeyboard) Modifier.imePadding() else Modifier,
+                ),
+        ) {
             if (controlsExpanded) {
                 DesktopControlBar(
                     status = status,
                     inputPaletteVisible = inputPaletteVisible,
+                    displayKeysVisible = displayKeysVisible,
+                    arrangingDisplayKeys = arrangingDisplayKeys,
                     onExit = onExit,
                     onKeyboard = { displayView?.showKeyboard() },
                     onInputPalette = { inputPaletteVisible = !inputPaletteVisible },
+                    onKeyboardPalette = {
+                        if (arrangingDisplayKeys) arrangingDisplayKeys = false
+                        else if (settings.displayKeys.isEmpty()) showSettings = true
+                        else displayKeysVisible = !displayKeysVisible
+                    },
                     onSettings = { showSettings = true },
                     onCollapse = { controlsExpanded = false },
                 )
@@ -146,7 +178,15 @@ fun DesktopPage(
                     },
                     update = {
                         it.displayView.applySettings(settings)
+                        it.onDisplayKeysMoved = { moved ->
+                            updateSettings(settings.copy(displayKeys = moved))
+                        }
                         it.setPaletteVisible(inputPaletteVisible)
+                        it.setKeyboardBindings(settings.overlayKeys)
+                        it.setKeyboardStripVisible(settings.showKeyboardStrip)
+                        it.setDisplayKeys(settings.displayKeys)
+                        it.setDisplayKeysVisible(displayKeysVisible)
+                        it.setDisplayKeysArranging(arrangingDisplayKeys)
                         it.setPaletteColors(
                             primaryContainer = palettePrimary,
                             surfaceContainer = paletteSurface,
@@ -164,6 +204,12 @@ fun DesktopPage(
         X11SettingsDialog(
             settings = settings,
             onSettingsChanged = updateSettings,
+            onArrangeDisplayKeys = {
+                displayKeysVisible = true
+                arrangingDisplayKeys = true
+                controlsExpanded = true
+                showSettings = false
+            },
             onDismiss = { showSettings = false },
         )
     }
@@ -173,9 +219,12 @@ fun DesktopPage(
 private fun DesktopControlBar(
     status: String,
     inputPaletteVisible: Boolean,
+    displayKeysVisible: Boolean,
+    arrangingDisplayKeys: Boolean,
     onExit: () -> Unit,
     onKeyboard: () -> Unit,
     onInputPalette: () -> Unit,
+    onKeyboardPalette: () -> Unit,
     onSettings: () -> Unit,
     onCollapse: () -> Unit,
 ) {
@@ -206,7 +255,7 @@ private fun DesktopControlBar(
                 style = MaterialTheme.typography.labelSmall,
             )
             Text(
-                text = status.removePrefix("Display :0 "),
+                text = if (arrangingDisplayKeys) "Drag buttons to move" else status.removePrefix("Display :0 "),
                 color = UdroidTerminalText,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
@@ -234,6 +283,20 @@ private fun DesktopControlBar(
                     } else {
                         UdroidTerminalText
                     },
+            )
+        }
+        IconButton(
+            onClick = onKeyboardPalette,
+            modifier = Modifier.semantics {
+                contentDescription =
+                    if (arrangingDisplayKeys) "Done arranging display keys"
+                    else if (displayKeysVisible) "Hide display keys" else "Show display keys"
+            },
+        ) {
+            Text(
+                text = if (arrangingDisplayKeys) "Done" else "Keys",
+                color = if (displayKeysVisible) UdroidTerminalGreen else UdroidTerminalText,
+                style = MaterialTheme.typography.labelSmall,
             )
         }
         IconButton(onClick = onSettings) {

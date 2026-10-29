@@ -1,3 +1,8 @@
+lorie: expose the X server entry point to uDroid
+
+uDroid embeds libXlorie without Termux:X11's CmdEntryPoint class. Export its JNI
+name while keeping both applications on the same startup implementation.
+
 --- a/cmdentrypoint.c
 +++ b/cmdentrypoint.c
 @@ -69,8 +69,7 @@ static Bool detectTracer(void)

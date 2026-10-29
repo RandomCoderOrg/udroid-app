@@ -20,6 +20,8 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import androidx.annotation.NonNull;
 
@@ -28,6 +30,9 @@ import com.termux.x11.input.InputStub;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
+import org.randomcoder.udroid.x11.MouseButtonState.Source;
 
 /**
  * Minimal uDroid-owned Android surface for the Termux:X11 renderer.
@@ -50,8 +55,10 @@ public final class X11DisplayView extends SurfaceView
     private boolean surfaceAvailable;
     private boolean imeHasCommittedText;
     private CharSequence composingText;
-    private int pressedMouseButton = BUTTON_UNDEFINED;
-    private int paletteMouseButton = BUTTON_UNDEFINED;
+    private final MouseButtonState mouseButtons = new MouseButtonState();
+    private final Set<Integer> overlayKeysDown = new HashSet<>();
+    private Runnable onInputReset;
+    private Runnable onCompanionInput;
     private int viewportLeft;
     private int viewportTop;
     private int viewportWidth;
@@ -276,7 +283,25 @@ public final class X11DisplayView extends SurfaceView
             return super.dispatchKeyEvent(event);
         }
         if (rendererAttached) {
-            return inputSender.sendKeyEvent(event);
+            if (event.getAction() == KeyEvent.ACTION_DOWN && onCompanionInput != null) {
+                onCompanionInput.run();
+            }
+            boolean usePhysicalKeyEvents =
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_CTRL_LEFT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_CTRL_RIGHT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_ALT_LEFT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_ALT_RIGHT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_SHIFT_LEFT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_SHIFT_RIGHT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_META_LEFT) ||
+                    overlayKeysDown.contains(KeyEvent.KEYCODE_META_RIGHT);
+            boolean preferScancodes = inputSender.preferScancodes;
+            if (usePhysicalKeyEvents) inputSender.preferScancodes = true;
+            try {
+                return inputSender.sendKeyEvent(event);
+            } finally {
+                inputSender.preferScancodes = preferScancodes;
+            }
         }
         return super.dispatchKeyEvent(event);
     }
@@ -291,6 +316,9 @@ public final class X11DisplayView extends SurfaceView
         }
 
         int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN && onCompanionInput != null) {
+            onCompanionInput.run();
+        }
         if (settings.getTouchMode() == X11TouchMode.TRACKPAD) {
             return handleTrackpadTouch(event);
         }
@@ -314,8 +342,8 @@ public final class X11DisplayView extends SurfaceView
                         false,
                         false
                 );
-                if (paletteMouseButton == BUTTON_UNDEFINED) {
-                    inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, true, false);
+                if (!mouseButtons.hasExternalButton()) {
+                    setDirectTouchLeft(true);
                 }
                 return true;
             case MotionEvent.ACTION_MOVE:
@@ -336,9 +364,7 @@ public final class X11DisplayView extends SurfaceView
                         false,
                         false
                 );
-                if (paletteMouseButton == BUTTON_UNDEFINED) {
-                    releaseTouchButton();
-                }
+                releaseTouchButton();
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -458,18 +484,53 @@ public final class X11DisplayView extends SurfaceView
         post(() -> inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT));
     }
 
+    public void hideKeyboard() {
+        var controller = ViewCompat.getWindowInsetsController(this);
+        if (controller != null) controller.hide(WindowInsetsCompat.Type.ime());
+        else inputMethodManager.hideSoftInputFromWindow(getWindowToken(), 0);
+    }
+
+    public void setOnInputReset(Runnable callback) {
+        onInputReset = callback;
+    }
+
+    public void setOnCompanionInput(Runnable callback) {
+        onCompanionInput = callback;
+    }
+
+    public void setOverlayKey(int keyCode, boolean pressed) {
+        if (!rendererAttached || !connected()) return;
+        if (pressed ? overlayKeysDown.add(keyCode) : overlayKeysDown.remove(keyCode)) {
+            sendKeyEvent(0, keyCode, pressed);
+        }
+        requestFocus();
+    }
+
     public void setMouseButton(int button, boolean pressed) {
+        setExternalMouseButton(Source.PALETTE, button, pressed);
+    }
+
+    public void setOverlayMouseButton(int button, boolean pressed) {
+        setExternalMouseButton(Source.OVERLAY, button, pressed);
+    }
+
+    private void setExternalMouseButton(Source source, int button, boolean pressed) {
         if (!rendererAttached || button < BUTTON_LEFT || button > BUTTON_RIGHT) return;
         requestFocus();
-        inputSink.sendMouseEvent(0, 0, button, pressed, true);
-        if (pressed) {
-            paletteMouseButton = button;
-        } else if (paletteMouseButton == button) {
-            paletteMouseButton = BUTTON_UNDEFINED;
+        Boolean changed = mouseButtons.set(source, button, pressed);
+        if (changed != null) {
+            inputSink.sendMouseEvent(0, 0, button, changed, source != Source.PHYSICAL);
         }
         trackpadGestures.setExternalMouseButtonHeld(
-                paletteMouseButton != BUTTON_UNDEFINED
+                mouseButtons.hasExternalButton()
         );
+    }
+
+    private void setDirectTouchLeft(boolean pressed) {
+        Boolean changed = mouseButtons.set(Source.DIRECT, BUTTON_LEFT, pressed);
+        if (changed != null) {
+            inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, changed, false);
+        }
     }
 
     public void scrollMouse(float verticalDelta) {
@@ -489,6 +550,7 @@ public final class X11DisplayView extends SurfaceView
         );
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_SCROLL:
+                if (onCompanionInput != null) onCompanionInput.run();
                 inputSink.sendMouseWheelEvent(
                         -120f * event.getAxisValue(MotionEvent.AXIS_HSCROLL),
                         120f * event.getAxisValue(MotionEvent.AXIS_VSCROLL)
@@ -496,24 +558,23 @@ public final class X11DisplayView extends SurfaceView
                 return true;
             case MotionEvent.ACTION_BUTTON_PRESS:
             case MotionEvent.ACTION_DOWN:
+                if (onCompanionInput != null) onCompanionInput.run();
                 int pressed = mapButton(event);
-                if (pressed != BUTTON_UNDEFINED && pressedMouseButton != pressed) {
-                    inputSink.sendMouseEvent(0, 0, pressed, true, false);
-                    pressedMouseButton = pressed;
+                if (pressed != BUTTON_UNDEFINED) {
+                    setExternalMouseButton(Source.PHYSICAL, pressed, true);
                 }
                 return true;
             case MotionEvent.ACTION_BUTTON_RELEASE:
+                int released = event.getActionButton() == 0
+                        ? BUTTON_UNDEFINED : mapButton(event);
+                if (released != BUTTON_UNDEFINED) {
+                    setExternalMouseButton(Source.PHYSICAL, released, false);
+                }
+                return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                if (pressedMouseButton != BUTTON_UNDEFINED) {
-                    inputSink.sendMouseEvent(
-                            0,
-                            0,
-                            pressedMouseButton,
-                            false,
-                            false
-                    );
-                    pressedMouseButton = BUTTON_UNDEFINED;
+                for (int button : mouseButtons.pressedBy(Source.PHYSICAL)) {
+                    setExternalMouseButton(Source.PHYSICAL, button, false);
                 }
                 return true;
             default:
@@ -554,16 +615,20 @@ public final class X11DisplayView extends SurfaceView
     }
 
     private void releaseTouchButton() {
-        inputSink.sendMouseEvent(0, 0, BUTTON_LEFT, false, false);
+        setDirectTouchLeft(false);
     }
 
     private void releaseAllInput() {
+        for (int keyCode : overlayKeysDown) {
+            if (rendererAttached && connected()) sendKeyEvent(0, keyCode, false);
+        }
+        overlayKeysDown.clear();
         trackpadGestures.cancel();
         trackpadGestures.setExternalMouseButtonHeld(false);
         nativeTouches.cancel();
         inputSink.releaseAllInput();
-        pressedMouseButton = BUTTON_UNDEFINED;
-        paletteMouseButton = BUTTON_UNDEFINED;
+        mouseButtons.clear();
+        if (onInputReset != null) onInputReset.run();
     }
 
     @Override

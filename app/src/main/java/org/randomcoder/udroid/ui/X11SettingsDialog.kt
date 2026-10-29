@@ -9,15 +9,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -25,7 +30,13 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -36,14 +47,21 @@ import org.randomcoder.udroid.x11.X11DisplayFilter
 import org.randomcoder.udroid.x11.X11ResolutionMode
 import org.randomcoder.udroid.x11.X11Settings
 import org.randomcoder.udroid.x11.X11TouchMode
+import org.randomcoder.udroid.x11.DisplayKey
+import org.randomcoder.udroid.x11.OverlayKeyboard
 import kotlin.math.roundToInt
 
 @Composable
 fun X11SettingsDialog(
     settings: X11Settings,
     onSettingsChanged: (X11Settings) -> Unit,
+    onArrangeDisplayKeys: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var editingSlot by remember { mutableIntStateOf(-1) }
+    var editingDisplayKey by remember { mutableIntStateOf(-1) }
+    var addingDisplayKey by remember { mutableStateOf(false) }
+    var keySearch by remember { mutableStateOf("") }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -210,6 +228,102 @@ fun X11SettingsDialog(
                                 onSettingsChanged(settings.copy(preferScancodes = it))
                             },
                         )
+                        SettingsSwitch(
+                            title = "Keep desktop above keyboard",
+                            subtitle =
+                                "Resize the Linux display when the Android keyboard opens. " +
+                                    "Turn off to let the keyboard cover the desktop.",
+                            checked = settings.avoidSoftKeyboard,
+                            onCheckedChange = {
+                                onSettingsChanged(settings.copy(avoidSoftKeyboard = it))
+                            },
+                        )
+                        SettingsLabel(
+                            title = "Keyboard strip",
+                            subtitle =
+                                "These keys stay below Linux and move above the Android keyboard when it opens. " +
+                                    "Hold for chords; double-tap a modifier to lock it.",
+                        )
+                        SettingsSwitch(
+                            title = "Show keyboard strip",
+                            subtitle = "Hide the two rows to give Linux more room",
+                            checked = settings.showKeyboardStrip,
+                            onCheckedChange = {
+                                onSettingsChanged(settings.copy(showKeyboardStrip = it))
+                            },
+                        )
+                        OverlayKeyboard.normalized(settings.overlayKeys).chunked(4)
+                            .forEachIndexed { row, bindings ->
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    bindings.forEachIndexed { column, keyCode ->
+                                        val slot = row * 4 + column
+                                        OutlinedButton(
+                                            onClick = {
+                                                keySearch = ""
+                                                editingSlot = slot
+                                            },
+                                            modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp),
+                                        ) {
+                                            Text(
+                                                OverlayKeyboard.label(keyCode),
+                                                maxLines = 1,
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        TextButton(
+                            onClick = {
+                                onSettingsChanged(settings.copy(overlayKeys = OverlayKeyboard.defaults))
+                            },
+                        ) {
+                            Text("Reset keyboard strip")
+                        }
+
+                        SettingsLabel(
+                            title = "Display buttons",
+                            subtitle =
+                                "Place individual keys over Linux for shortcuts or game controls. " +
+                                    "They work without opening the Android keyboard. " +
+                                    "Use Arrange on display to move them without pressing a key.",
+                        )
+                        settings.displayKeys.forEachIndexed { index, key ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = OverlayKeyboard.label(key.keyCode),
+                                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                                )
+                                TextButton(onClick = { editingDisplayKey = index }) {
+                                    Text("Change")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        onSettingsChanged(
+                                            settings.copy(
+                                                displayKeys = settings.displayKeys.filterIndexed { i, _ -> i != index },
+                                            ),
+                                        )
+                                    },
+                                ) {
+                                    Text("Remove")
+                                }
+                            }
+                        }
+                        Row {
+                            TextButton(
+                                onClick = { addingDisplayKey = true },
+                                enabled = settings.displayKeys.size < 32,
+                            ) {
+                                Text("Add button")
+                            }
+                            if (settings.displayKeys.isNotEmpty()) {
+                                TextButton(onClick = onArrangeDisplayKeys) {
+                                    Text("Arrange on display")
+                                }
+                            }
+                        }
 
                         SettingsDivider()
                         SettingsSectionTitle("Session")
@@ -235,6 +349,75 @@ fun X11SettingsDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (editingSlot >= 0 || editingDisplayKey >= 0 || addingDisplayKey) {
+        UdroidTerminalTheme {
+            AlertDialog(
+                onDismissRequest = {
+                    editingSlot = -1
+                    editingDisplayKey = -1
+                    addingDisplayKey = false
+                },
+                title = { Text("Choose key") },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = keySearch,
+                            onValueChange = { keySearch = it },
+                            label = { Text("Search keys") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                            items(
+                                OverlayKeyboard.keys.filter {
+                                    OverlayKeyboard.label(it).contains(keySearch, ignoreCase = true)
+                                },
+                            ) { keyCode ->
+                                Text(
+                                    text = OverlayKeyboard.label(keyCode),
+                                    modifier =
+                                        Modifier.fillMaxWidth().clickable {
+                                            when {
+                                                editingSlot >= 0 -> {
+                                                    val bindings = OverlayKeyboard.normalized(settings.overlayKeys).toMutableList()
+                                                    bindings[editingSlot] = keyCode
+                                                    onSettingsChanged(settings.copy(overlayKeys = bindings))
+                                                }
+                                                editingDisplayKey >= 0 -> {
+                                                    val buttons = settings.displayKeys.toMutableList()
+                                                    buttons[editingDisplayKey] = buttons[editingDisplayKey].copy(keyCode = keyCode)
+                                                    onSettingsChanged(settings.copy(displayKeys = buttons))
+                                                }
+                                                addingDisplayKey -> {
+                                                    val index = settings.displayKeys.size
+                                                    onSettingsChanged(
+                                                        settings.copy(
+                                                            displayKeys = settings.displayKeys +
+                                                                DisplayKey(keyCode, 0.12f + (index % 4) * 0.2f, 0.4f + (index / 4) * 0.08f),
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                            editingSlot = -1
+                                            editingDisplayKey = -1
+                                            addingDisplayKey = false
+                                        }.padding(12.dp),
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        editingSlot = -1
+                        editingDisplayKey = -1
+                        addingDisplayKey = false
+                    }) { Text("Cancel") }
+                },
+            )
         }
     }
 }

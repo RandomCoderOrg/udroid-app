@@ -33,7 +33,7 @@ data class ProotRuntime(
 )
 
 object ProotRuntimeInstaller {
-    private const val PROOT_VERSION = "5.1.107.86-1"
+    private const val PROOT_VERSION = "5.1.107.101-1"
     private const val TAR_VERSION = "1.35-1"
     private val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
 

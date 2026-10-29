@@ -1,0 +1,198 @@
+present: order damage and ownership around async GPU copies
+
+Keep damage pending until the queued copy completes, drain earlier GPU work
+before a CPU fallback, and translate damage into screen coordinates. Increase
+the bounded damage list to 64 rectangles and use acquire/release ordering for
+completion state.
+
+Adapted from termux/termux-x11#1148 commits 0995bdc, e32828e, bac0460,
+4eb76e3, and 1346e1e.
+
+--- a/lorie/lorie.h
++++ b/lorie/lorie.h
+@@ -177,7 +177,7 @@
+ 
+ typedef struct { int16_t x1, y1, x2, y2; } LorieGpuCopyRect;
+ 
+-#define LORIE_GPU_COPY_MAX_RECTS 16
++#define LORIE_GPU_COPY_MAX_RECTS 64
+ #define LORIE_GPU_COPY_QUEUE_CAPACITY 8
+ 
+ typedef struct {
+--- a/lorie/InitOutput.c
++++ b/lorie/InitOutput.c
+@@ -152,7 +152,7 @@
+ 
+ typedef struct {
+     LorieBuffer *buffer;
+-    bool flipped, wasLocked, imported;
++    bool flipped, wasLocked, imported, gpuOnly;
+     void *locked;
+     void *mem;
+ } LoriePixmapPriv;
+@@ -1025,20 +1025,21 @@
+ }
+ 
+ Bool lorieGpuCopyIsDone(uint64_t serial) {
+-    return pvfb->state->gpuCopyQueue.completedSerial >= serial;
++    return __atomic_load_n(&pvfb->state->gpuCopyQueue.completedSerial, __ATOMIC_ACQUIRE) >= serial;
+ }
+ 
+-Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap) {
+-    LoriePixmapPriv *priv = pixmap ? LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap) : NULL;
+-    const LorieBuffer_Desc *desc = priv ? LorieBuffer_description(priv->buffer) : NULL;
++void lorieGpuCopyFlush(void) {
++    uint64_t serial = pvfb->gpuCopySerialCounter;
++    for (int i = 0; i < 500 && !lorieGpuCopyIsDone(serial); i++) {
++        if (!lorieConnectionAlive())
++            return;
++        usleep(200);
++    }
++}
+ 
+-    /* A DRI3 AHardwareBuffer may be allocated without CPU read/write usage. In
+-     * particular, gfxstream scanout images are valid GPU textures but Android
+-     * gralloc rejects AHardwareBuffer_lock() for them. Never let a temporarily
+-     * detached renderer turn that expected lifecycle state into a CPU-copy
+-     * fallback; Present will wait for the renderer to reconnect instead. */
+-    return priv && priv->imported && desc &&
+-           desc->type == LORIEBUFFER_AHARDWAREBUFFER;
++Bool loriePixmapIsGpuOnly(PixmapPtr pixmap) {
++    LoriePixmapPriv *priv = pixmap ? LORIE_PIXMAP_PRIV_FROM_PIXMAP(pixmap) : NULL;
++    return priv && priv->gpuOnly;
+ }
+ 
+ void lorieGpuCopyAck(PixmapPtr pixmap, void *dst_buffer) {
+@@ -1258,9 +1259,13 @@
+         if (modifier == AHARDWAREBUFFER_RGBA_SOCKET_FD)
+             LorieBuffer_setNeedsBgraSwizzle(priv->buffer, true);
+ 
++        void *probe = NULL;
++        priv->gpuOnly = LorieBuffer_lock(priv->buffer, &probe) != 0;
++        LorieBuffer_unlock(priv->buffer);
++
+         screen->ModifyPixmapHeader(pixmap, desc.width, desc.height, 0, 0, desc.stride * 4, NULL);
+         if (lorieServerDebugEnabled)
+-            log(INFO, "DRI3: imported AHardwareBuffer, modifier %llu, %ux%u stride %u", (unsigned long long) modifier, desc.width, desc.height, desc.stride);
++            log(INFO, "DRI3: imported AHardwareBuffer, modifier %llu, %ux%u stride %u%s", (unsigned long long) modifier, desc.width, desc.height, desc.stride, priv->gpuOnly ? ", not lockable" : "");
+     }
+ 
+     return pixmap;
+--- a/xserver/present/present_priv.h
++++ b/xserver/present/present_priv.h
+@@ -97,6 +97,7 @@
+     Bool                gpu_copy_pending;
+     uint64_t            gpu_copy_serial;
+     void                *gpu_copy_dst_buffer; /* opaque LorieBuffer*, held for lorieGpuCopyAck */
++    RegionPtr           gpu_copy_damage; /* reported as damaged once the GPU copy has finished */
+ };
+ 
+ /* lorie: hooks implemented in lorie/InitOutput.c, used by present_execute_copy() to offload the
+@@ -106,7 +107,9 @@
+                                      uint64_t *out_serial, void **out_dst_buffer);
+ extern Bool lorieGpuCopyIsDone(uint64_t serial);
+ extern void lorieGpuCopyAck(PixmapPtr pixmap, void *dst_buffer);
+-extern Bool loriePixmapRequiresGpuCopy(PixmapPtr pixmap);
++/* Wait for queued GPU copies before a later CPU copy can overwrite their destination. */
++extern void lorieGpuCopyFlush(void);
++extern Bool loriePixmapIsGpuOnly(PixmapPtr pixmap);
+ /* lorie: implemented in lorie/cmdentrypoint.c. Avoids waiting forever on a GPU copy that a dead renderer will never finish. */
+ extern bool lorieConnectionAlive(void);
+ 
+--- a/xserver/present/present_execute.c
++++ b/xserver/present/present_execute.c
+@@ -96,16 +96,28 @@
+     if (vblank->gpu_copy_pending) {
+         lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);
+         vblank->gpu_copy_pending = FALSE;
++        if (vblank->gpu_copy_damage) {
++            DamageDamageRegion(&window->drawable, vblank->gpu_copy_damage);
++            RegionDestroy(vblank->gpu_copy_damage);
++            vblank->gpu_copy_damage = NULL;
++        }
+     } else if (lorieTryScheduleGpuCopy(vblank->pixmap, gpuCopyDst, vblank->update, gpuCopyXOff, gpuCopyYOff,
+                                         &vblank->gpu_copy_serial, &vblank->gpu_copy_dst_buffer)) {
+         /* lorie: our GPU blit writes the destination pixmap directly, bypassing the normal GC
+          * ops that Damage tracking hooks into, so report it manually - same drawable and region
+          * present_scmd.c's flip success path already uses, so this also reaches Composite's
+-         * per-window damage for redirected windows, not just lorie's own root damage. */
+-        RegionPtr damage = vblank->update ? vblank->update : &window->clipList;
+-        if (vblank->update)
+-            RegionIntersect(damage, damage, &window->clipList);
+-        DamageDamageRegion(&window->drawable, damage);
++         * per-window damage for redirected windows, not just lorie's own root damage.
++         * vblank->update is in pixmap coordinates, damage and clipList are in screen coordinates. */
++        RegionPtr damage = RegionDuplicate(vblank->update ? vblank->update : &window->clipList);
++        if (damage) {
++            if (vblank->update) {
++                RegionTranslate(damage, vblank->x_off + window->drawable.x, vblank->y_off + window->drawable.y);
++                RegionIntersect(damage, damage, &window->clipList);
++            }
++            DamageDamageRegion(&window->drawable, damage);
++            /* A compositor may read the destination before the GPU copy completes. */
++            vblank->gpu_copy_damage = damage;
++        }
+ 
+         /* lorie: copy offloaded to the renderer's GPU context. The region was already
+          * consumed (copied into the shared command queue), so free it like
+@@ -122,17 +134,25 @@
+         /* Failed to requeue for polling (e.g. OOM) - release our extra ref and treat the
+          * presumably still in-flight GPU copy as done; same best-effort fallback as above. */
+         lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);
+-    } else if (loriePixmapRequiresGpuCopy(vblank->pixmap)) {
++        if (vblank->gpu_copy_damage) {
++            RegionDestroy(vblank->gpu_copy_damage);
++            vblank->gpu_copy_damage = NULL;
++        }
++    } else if (loriePixmapIsGpuOnly(vblank->pixmap)) {
+         /* Imported AHardwareBuffers are not guaranteed to be CPU-mappable. If
+          * the Android renderer is detached or its queue is temporarily full,
+          * preserve the Present request until a later fake-vblank instead of
+          * entering EXA's CPU path and fatally failing PrepareAccess. */
+         if (Success == screen_priv->queue_vblank(screen, window, vblank->crtc,
+                                                  vblank->event_id, crtc_msc + 1)) {
+             vblank->queued = TRUE;
+             return;
+         }
++        present_vblank_scrap(vblank);
++        screen_priv->flush(window);
++        return;
+     } else {
++        lorieGpuCopyFlush();
+         present_copy_region(&window->drawable, vblank->pixmap, vblank->update, vblank->x_off, vblank->y_off);
+ 
+         /* present_copy_region sticks the region into a scratch GC,
+--- a/xserver/present/present_vblank.c
++++ b/xserver/present/present_vblank.c
+@@ -188,6 +188,15 @@
+                   vblank->pixmap->drawable.id, vblank->window->drawable.id,
+                   vblank->crtc));
+ 
++    if (vblank->gpu_copy_pending) {
++        lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);
++        vblank->gpu_copy_pending = FALSE;
++        if (vblank->gpu_copy_damage) {
++            RegionDestroy(vblank->gpu_copy_damage);
++            vblank->gpu_copy_damage = NULL;
++        }
++    }
++
+     present_pixmap_idle(vblank->pixmap, vblank->window, vblank->serial, vblank->idle_fence);
+     present_fence_destroy(vblank->idle_fence);
+     dixDestroyPixmap(vblank->pixmap, vblank->pixmap->drawable.id);
+@@ -200,6 +209,15 @@
+ void
+ present_vblank_destroy(present_vblank_ptr vblank)
+ {
++    if (vblank->gpu_copy_pending) {
++        lorieGpuCopyAck(vblank->pixmap, vblank->gpu_copy_dst_buffer);
++        vblank->gpu_copy_pending = FALSE;
++        if (vblank->gpu_copy_damage) {
++            RegionDestroy(vblank->gpu_copy_damage);
++            vblank->gpu_copy_damage = NULL;
++        }
++    }
++
+     /* Remove vblank from window and screen lists */
+     xorg_list_del(&vblank->window_list);
+     /* Also make sure vblank is removed from event queue (wnmd) */

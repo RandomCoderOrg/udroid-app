@@ -40,8 +40,9 @@ internal data class VirglProotLaunchProfile(
                     "GALLIUM_DRIVER",
                     "-u",
                     "MESA_LOADER_DRIVER_OVERRIDE",
+                    "-u",
+                    "MESA_VK_WSI_DEBUG",
                     "VN_DEBUG=vtest",
-                    "MESA_VK_WSI_DEBUG=sw",
                 ) +
                     if (venusGuestRuntime != null) {
                         listOf(

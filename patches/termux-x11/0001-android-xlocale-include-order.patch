@@ -1,3 +1,8 @@
+libX11: use Bionic's xlocale compatibility header
+
+Including locale.h directly selects the glibc-oriented declarations. Include
+Android's compatibility header when building the embedded libX11 instead.
+
 --- a/include/X11/Xlocale.h
 +++ b/include/X11/Xlocale.h
 @@ -32,6 +32,10 @@

@@ -166,7 +166,7 @@ class VirglHostLaunchTest {
     }
 
     @Test
-    fun `selects Venus vtest with the X11 copy presentation path`() {
+    fun `selects Venus vtest with native WSI presentation`() {
         val socket = Files.createTempFile("udroid-venus", ".sock").toFile()
         val runtime = Files.createTempDirectory("udroid-venus-runtime").toFile()
         val profile =
@@ -197,8 +197,9 @@ class VirglHostLaunchTest {
                 "GALLIUM_DRIVER",
                 "-u",
                 "MESA_LOADER_DRIVER_OVERRIDE",
+                "-u",
+                "MESA_VK_WSI_DEBUG",
                 "VN_DEBUG=vtest",
-                "MESA_VK_WSI_DEBUG=sw",
                 "LD_LIBRARY_PATH=/opt/udroid/venus-mesa/lib:" +
                     "/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu",
                 "LIBGL_DRIVERS_PATH=/opt/udroid/venus-mesa/lib/dri",
@@ -226,5 +227,30 @@ class VirglHostLaunchTest {
 
         osRelease.writeText("ID=ubuntu\nVERSION_ID=\"20.04\"\n")
         assertFalse(VenusGuestRuntimeInstaller.requiresBundledMesa(rootfs))
+    }
+
+    @Test
+    fun `parses verbose Zink profile results`() {
+        val results =
+            parseZinkRequirements(
+                """
+                Checking profile VP_ZINK_gl21_baseline
+                Checking device Virtio-GPU Venus
+                Supported
+
+                Checking profile VP_ZINK_gl46_baseline
+                Checking device Virtio-GPU Venus
+                UNSUPPORTED physical device
+                """.trimIndent(),
+            )
+
+        assertEquals(
+            listOf(
+                ZinkRequirementResult("VP_ZINK_gl21_baseline", true),
+                ZinkRequirementResult("VP_ZINK_gl46_baseline", false),
+            ),
+            results,
+        )
+        assertEquals("OpenGL 2.1 baseline", results.first().label)
     }
 }
