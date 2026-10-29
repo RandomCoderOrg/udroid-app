@@ -54,6 +54,16 @@ transitions remained idempotent, XFCE rendered with normal colors, and Lorie
 reported `8/8 present copies offloaded to GPU`. This proves the intended
 transport was used for that run; it is not broad device qualification.
 
+The private Lorie AHardwareBuffer route is not equivalent to the app's
+validated gfxstream presenter protocol. It relies on Vulkan external queue
+ownership, Android DMA-BUF implicit synchronization, and X Present ordering;
+it does not carry explicit per-frame acquire/release fences, reuse-ready
+acknowledgement, or generation retirement. Compare the shared
+`docs/graphics/PRESENTATION_CONTRACT_REFERENCE.md` on
+`improvements/zink-requirements-check` before changing this path. The offload
+run and the observed desktop damage are both evidence; neither isolates the
+missing contract by itself.
+
 ## Current boundary
 
 uDroid currently consumes a manually installed `proot-sphal` guest runtime.
