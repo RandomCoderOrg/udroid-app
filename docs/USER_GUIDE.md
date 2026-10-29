@@ -74,31 +74,60 @@ shortcut always points to that application in that specific Linux system.
 
 ## Control the desktop
 
-The desktop toolbar opens the Android keyboard, mouse controls, on-screen keys,
-and display settings.
+The top toolbar opens the Android keyboard, mouse palette, display buttons
+(**Keys**), and desktop settings. Its arrow collapses the toolbar; tap the
+compact handle to bring it back.
 
-- **Direct** touch moves the pointer to your finger.
-- **Trackpad** touch moves the pointer relative to your finger and is useful
-  for precise desktop work.
-- **Native** touch sends multiple touch points directly to Linux applications
-  that support them.
-- The mouse palette provides left, middle, right, and scroll controls. Hold a
-  button while moving another finger on the display to drag.
-- **Keys** opens a movable 12-key palette. Keep a finger on a key for a real
-  hold, including WASD diagonals or a modifier plus another key or mouse action.
-  A quick tap on Ctrl, Alt, Shift, or Super locks it until you tap it again.
-  Hiding the palette releases every held or locked key.
+### Pointer and mouse
 
-Change each on-screen key in **Desktop settings → Keyboard**. The default layout
-has modifiers, WASD, and common desktop keys; you can replace any slot with a
-letter, number, arrow, function, navigation, supported punctuation key, mouse
-button, or scroll direction.
+Choose a touch mode in **Desktop settings → Pointer**:
 
-Display settings can change resolution, scaling, sharpness, pointer speed,
+- **Direct:** the pointer follows your finger.
+- **Trackpad:** move the pointer relative to your finger for finer control.
+- **Native:** send touch points to Linux apps that support touch input.
+
+The mouse palette has **L**, **M**, **R**, and scroll up/down. Tap a mouse
+button to keep it pressed; tap it again to release it. Hold a button and move
+another finger on the desktop for a temporary press-and-drag. Drag the
+palette by its **Mouse** header, or tap its **Lock** control to keep the
+palette in place. That Lock controls the palette's position, not a mouse
+button.
+
+### Keyboard strip and display buttons
+
+The two-row keyboard strip stays at the bottom even when the Android keyboard
+is closed. If **Keep desktop above keyboard** is on, the strip moves above
+the Android keyboard when it opens. Turn **Show keyboard strip** off in
+**Desktop settings → Keyboard** to reclaim the space.
+
+The strip has 12 editable slots. In **Desktop settings → Keyboard**, tap a
+slot to assign a letter, number, modifier, arrow, function or navigation key,
+supported punctuation key, mouse button, or scroll direction. **Reset keyboard
+strip** restores the default bindings.
+
+**Keys** on the toolbar shows separate translucent buttons over the Linux
+display. Add, change, or remove them in **Desktop settings → Keyboard**. To
+move one, choose **Arrange on display**, drag it to the desired place, then
+tap **Done** on the toolbar. Positions are saved. Normal use does not move
+buttons, so holding a key cannot accidentally drag it.
+
+Both the strip and display buttons use the same key gestures:
+
+| Gesture | Result |
+| --- | --- |
+| Tap a key | Press and release it once. |
+| Hold a key | Keep it pressed until your finger lifts; hold several for chords or WASD diagonals. |
+| Double-tap a modifier | Lock Ctrl, Alt, Shift, or Super on. Tap it once to unlock. |
+
+For example, hold **Ctrl** with one finger and tap **C** with another. A
+single tap on Ctrl alone sends a complete press-and-release. Hiding controls,
+changing their bindings, leaving the display, or losing the renderer releases
+held and locked inputs.
+
+Desktop settings also control resolution, scaling, sharpness, pointer speed,
 keyboard handling, and whether the screen stays awake. **Keep desktop above
-keyboard** resizes the Linux display into the space above the Android keyboard;
-turn it off if you prefer the keyboard to cover the desktop without changing
-its size.
+keyboard** resizes Linux into the space above the Android keyboard; turn it
+off if you prefer the keyboard to cover the desktop without resizing it.
 
 ## Audio and microphone
 

@@ -2,6 +2,8 @@ package org.randomcoder.udroid.x11
 
 import android.view.KeyEvent
 
+data class DisplayKey(val keyCode: Int, val x: Float, val y: Float)
+
 object OverlayKeyboard {
     const val MOUSE_LEFT = -1
     const val MOUSE_MIDDLE = -2
@@ -36,15 +38,21 @@ object OverlayKeyboard {
         listOf(
             KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_ALT_LEFT,
             KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_META_LEFT,
-            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_W,
-            KeyEvent.KEYCODE_TAB, KeyEvent.KEYCODE_SPACE,
-            KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_S,
-            KeyEvent.KEYCODE_D, KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_TAB,
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_MOVE_HOME, KeyEvent.KEYCODE_MOVE_END,
         )
 
     fun normalized(saved: List<Int>): List<Int> =
         defaults.indices.map { index ->
             saved.getOrNull(index)?.takeIf { it in keys } ?: defaults[index]
+        }
+
+    fun normalizedDisplayKeys(saved: List<DisplayKey>): List<DisplayKey> =
+        saved.take(32).mapNotNull { key ->
+            key.takeIf { it.keyCode in keys && it.x.isFinite() && it.y.isFinite() }
+                ?.copy(x = key.x.coerceIn(0f, 1f), y = key.y.coerceIn(0f, 1f))
         }
 
     fun isModifier(keyCode: Int): Boolean =

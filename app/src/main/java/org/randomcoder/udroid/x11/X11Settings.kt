@@ -1,6 +1,8 @@
 package org.randomcoder.udroid.x11
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONException
 import kotlin.math.roundToInt
 
 enum class X11ResolutionMode {
@@ -33,6 +35,8 @@ data class X11Settings(
     val keepScreenOn: Boolean = true,
     val startControlsCollapsed: Boolean = false,
     val overlayKeys: List<Int> = OverlayKeyboard.defaults,
+    val displayKeys: List<DisplayKey> = emptyList(),
+    val showKeyboardStrip: Boolean = true,
     val avoidSoftKeyboard: Boolean = true,
 )
 
@@ -144,6 +148,8 @@ class X11SettingsStore(context: Context) {
                     preferences.getString(KEY_OVERLAY_KEYS, null)
                         ?.split(',')?.mapNotNull(String::toIntOrNull).orEmpty(),
                 ),
+            displayKeys = loadDisplayKeys(preferences.getString(KEY_DISPLAY_KEYS, null)),
+            showKeyboardStrip = preferences.getBoolean(KEY_SHOW_KEYBOARD_STRIP, true),
             avoidSoftKeyboard = preferences.getBoolean(KEY_AVOID_SOFT_KEYBOARD, true),
         )
 
@@ -167,8 +173,18 @@ class X11SettingsStore(context: Context) {
                 KEY_OVERLAY_KEYS,
                 OverlayKeyboard.normalized(settings.overlayKeys).joinToString(","),
             ).putBoolean(
+                KEY_SHOW_KEYBOARD_STRIP,
+                settings.showKeyboardStrip,
+            ).putBoolean(
                 KEY_AVOID_SOFT_KEYBOARD,
                 settings.avoidSoftKeyboard,
+            ).putString(
+                KEY_DISPLAY_KEYS,
+                JSONArray().apply {
+                    OverlayKeyboard.normalizedDisplayKeys(settings.displayKeys).forEach { key ->
+                        put(JSONArray().put(key.keyCode).put(key.x.toDouble()).put(key.y.toDouble()))
+                    }
+                }.toString(),
             ).apply()
         return settings
     }
@@ -177,6 +193,20 @@ class X11SettingsStore(context: Context) {
         value: String?,
         fallback: T,
     ): T = enumValues<T>().firstOrNull { it.name == value } ?: fallback
+
+    private fun loadDisplayKeys(raw: String?): List<DisplayKey> =
+        try {
+            val saved = JSONArray(raw ?: "[]")
+            OverlayKeyboard.normalizedDisplayKeys(
+                (0 until saved.length()).map { index ->
+                    saved.getJSONArray(index).let { key ->
+                        DisplayKey(key.getInt(0), key.getDouble(1).toFloat(), key.getDouble(2).toFloat())
+                    }
+                },
+            )
+        } catch (_: JSONException) {
+            emptyList()
+        }
 
     private companion object {
         const val PREFERENCES_NAME = "embedded-x11-settings"
@@ -192,6 +222,8 @@ class X11SettingsStore(context: Context) {
         const val KEY_KEEP_SCREEN_ON = "keep-screen-on"
         const val KEY_START_CONTROLS_COLLAPSED = "start-controls-collapsed"
         const val KEY_OVERLAY_KEYS = "overlay-keys"
+        const val KEY_DISPLAY_KEYS = "display-keys"
+        const val KEY_SHOW_KEYBOARD_STRIP = "show-keyboard-strip"
         const val KEY_AVOID_SOFT_KEYBOARD = "avoid-soft-keyboard"
     }
 }

@@ -20,6 +20,8 @@ import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import androidx.annotation.NonNull;
 
@@ -480,6 +482,12 @@ public final class X11DisplayView extends SurfaceView
     public void showKeyboard() {
         requestFocus();
         post(() -> inputMethodManager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT));
+    }
+
+    public void hideKeyboard() {
+        var controller = ViewCompat.getWindowInsetsController(this);
+        if (controller != null) controller.hide(WindowInsetsCompat.Type.ime());
+        else inputMethodManager.hideSoftInputFromWindow(getWindowToken(), 0);
     }
 
     public void setOnInputReset(Runnable callback) {

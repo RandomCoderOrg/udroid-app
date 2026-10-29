@@ -47,6 +47,7 @@ import org.randomcoder.udroid.x11.X11DisplayFilter
 import org.randomcoder.udroid.x11.X11ResolutionMode
 import org.randomcoder.udroid.x11.X11Settings
 import org.randomcoder.udroid.x11.X11TouchMode
+import org.randomcoder.udroid.x11.DisplayKey
 import org.randomcoder.udroid.x11.OverlayKeyboard
 import kotlin.math.roundToInt
 
@@ -54,9 +55,12 @@ import kotlin.math.roundToInt
 fun X11SettingsDialog(
     settings: X11Settings,
     onSettingsChanged: (X11Settings) -> Unit,
+    onArrangeDisplayKeys: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var editingSlot by remember { mutableIntStateOf(-1) }
+    var editingDisplayKey by remember { mutableIntStateOf(-1) }
+    var addingDisplayKey by remember { mutableStateOf(false) }
     var keySearch by remember { mutableStateOf("") }
     Dialog(
         onDismissRequest = onDismiss,
@@ -235,11 +239,18 @@ fun X11SettingsDialog(
                             },
                         )
                         SettingsLabel(
-                            title = "On-screen keys",
+                            title = "Keyboard strip",
                             subtitle =
-                                "Hold a key while touching the display or another key. " +
-                                    "Tap a modifier to lock it; tap again to release it. " +
-                                    "Slots can also be mouse buttons or scroll.",
+                                "These keys stay below Linux and move above the Android keyboard when it opens. " +
+                                    "Hold for chords; double-tap a modifier to lock it.",
+                        )
+                        SettingsSwitch(
+                            title = "Show keyboard strip",
+                            subtitle = "Hide the two rows to give Linux more room",
+                            checked = settings.showKeyboardStrip,
+                            onCheckedChange = {
+                                onSettingsChanged(settings.copy(showKeyboardStrip = it))
+                            },
                         )
                         OverlayKeyboard.normalized(settings.overlayKeys).chunked(4)
                             .forEachIndexed { row, bindings ->
@@ -268,7 +279,50 @@ fun X11SettingsDialog(
                                 onSettingsChanged(settings.copy(overlayKeys = OverlayKeyboard.defaults))
                             },
                         ) {
-                            Text("Reset on-screen keys")
+                            Text("Reset keyboard strip")
+                        }
+
+                        SettingsLabel(
+                            title = "Display buttons",
+                            subtitle =
+                                "Place individual keys over Linux for shortcuts or game controls. " +
+                                    "They work without opening the Android keyboard. " +
+                                    "Use Arrange on display to move them without pressing a key.",
+                        )
+                        settings.displayKeys.forEachIndexed { index, key ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = OverlayKeyboard.label(key.keyCode),
+                                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                                )
+                                TextButton(onClick = { editingDisplayKey = index }) {
+                                    Text("Change")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        onSettingsChanged(
+                                            settings.copy(
+                                                displayKeys = settings.displayKeys.filterIndexed { i, _ -> i != index },
+                                            ),
+                                        )
+                                    },
+                                ) {
+                                    Text("Remove")
+                                }
+                            }
+                        }
+                        Row {
+                            TextButton(
+                                onClick = { addingDisplayKey = true },
+                                enabled = settings.displayKeys.size < 32,
+                            ) {
+                                Text("Add button")
+                            }
+                            if (settings.displayKeys.isNotEmpty()) {
+                                TextButton(onClick = onArrangeDisplayKeys) {
+                                    Text("Arrange on display")
+                                }
+                            }
                         }
 
                         SettingsDivider()
@@ -298,11 +352,15 @@ fun X11SettingsDialog(
         }
     }
 
-    if (editingSlot >= 0) {
+    if (editingSlot >= 0 || editingDisplayKey >= 0 || addingDisplayKey) {
         UdroidTerminalTheme {
             AlertDialog(
-                onDismissRequest = { editingSlot = -1 },
-                title = { Text("Choose key ${editingSlot + 1}") },
+                onDismissRequest = {
+                    editingSlot = -1
+                    editingDisplayKey = -1
+                    addingDisplayKey = false
+                },
+                title = { Text("Choose key") },
                 text = {
                     Column {
                         OutlinedTextField(
@@ -322,10 +380,30 @@ fun X11SettingsDialog(
                                     text = OverlayKeyboard.label(keyCode),
                                     modifier =
                                         Modifier.fillMaxWidth().clickable {
-                                            val bindings = OverlayKeyboard.normalized(settings.overlayKeys).toMutableList()
-                                            bindings[editingSlot] = keyCode
-                                            onSettingsChanged(settings.copy(overlayKeys = bindings))
+                                            when {
+                                                editingSlot >= 0 -> {
+                                                    val bindings = OverlayKeyboard.normalized(settings.overlayKeys).toMutableList()
+                                                    bindings[editingSlot] = keyCode
+                                                    onSettingsChanged(settings.copy(overlayKeys = bindings))
+                                                }
+                                                editingDisplayKey >= 0 -> {
+                                                    val buttons = settings.displayKeys.toMutableList()
+                                                    buttons[editingDisplayKey] = buttons[editingDisplayKey].copy(keyCode = keyCode)
+                                                    onSettingsChanged(settings.copy(displayKeys = buttons))
+                                                }
+                                                addingDisplayKey -> {
+                                                    val index = settings.displayKeys.size
+                                                    onSettingsChanged(
+                                                        settings.copy(
+                                                            displayKeys = settings.displayKeys +
+                                                                DisplayKey(keyCode, 0.12f + (index % 4) * 0.2f, 0.4f + (index / 4) * 0.08f),
+                                                        ),
+                                                    )
+                                                }
+                                            }
                                             editingSlot = -1
+                                            editingDisplayKey = -1
+                                            addingDisplayKey = false
                                         }.padding(12.dp),
                                 )
                             }
@@ -333,7 +411,11 @@ fun X11SettingsDialog(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { editingSlot = -1 }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        editingSlot = -1
+                        editingDisplayKey = -1
+                        addingDisplayKey = false
+                    }) { Text("Cancel") }
                 },
             )
         }

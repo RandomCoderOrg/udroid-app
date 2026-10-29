@@ -18,6 +18,18 @@ class OverlayKeyboardTest {
     }
 
     @Test
+    fun displayButtonsKeepValidKeysAndClampTheirPositions() {
+        val buttons = OverlayKeyboard.normalizedDisplayKeys(
+            listOf(
+                DisplayKey(KeyEvent.KEYCODE_W, -1f, 2f),
+                DisplayKey(-100, 0.5f, 0.5f),
+                DisplayKey(KeyEvent.KEYCODE_A, Float.NaN, 0.5f),
+            ),
+        )
+        assertEquals(listOf(DisplayKey(KeyEvent.KEYCODE_W, 0f, 1f)), buttons)
+    }
+
+    @Test
     fun modifierClassificationDoesNotIncludeOrdinaryKeys() {
         assertTrue(OverlayKeyboard.isModifier(KeyEvent.KEYCODE_CTRL_LEFT))
         assertTrue(OverlayKeyboard.isModifier(KeyEvent.KEYCODE_META_RIGHT))
