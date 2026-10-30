@@ -47,7 +47,7 @@ installed, uDroid can check for updates from **About**.
 User guide: [Using uDroid](docs/USER_GUIDE.md).
 
 Developer reference: [builds and releases](docs/DEVELOPMENT.md),
-[product scope](docs/PRODUCT_SCOPE.md), [Linux systems](docs/DISTRIBUTION_CATALOGUE.md),
+[Linux systems](docs/DISTRIBUTION_CATALOGUE.md),
 [Linux apps](docs/LINUX_APPLICATION_LAUNCHER.md),
 [desktop](docs/X11_RUNTIME_ARCHITECTURE.md), [audio](docs/AUDIO_RUNTIME.md),
 [updates](docs/APP_UPDATES.md), and [performance](docs/PERFORMANCE.md).
