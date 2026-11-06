@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.termux.terminal.TerminalColors
+import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -61,9 +62,10 @@ class RuntimeSupervisorService : Service() {
     private val binder = RuntimeBinder()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val terminalTabs = TerminalTabRegistry<TerminalSession>()
-    private val closingTerminalIds = mutableSetOf<String>()
     private var nextTerminalNumber = 1
     private var terminalCreationInFlight = false
+    private var terminalTabsRefreshPending = false
+    private var terminalCursorStyle = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
@@ -94,6 +96,13 @@ class RuntimeSupervisorService : Service() {
 
             override fun onTitleChanged(changedSession: TerminalSession) {
                 onTextChanged(changedSession)
+                val title = normalizeTerminalTitle(changedSession.title)
+                mainHandler.post {
+                    val tab = terminalTabs.findByValue(changedSession) ?: return@post
+                    if (terminalTabs.updateShellTitle(tab.id, title) != null) {
+                        scheduleTerminalTabsChanged()
+                    }
+                }
             }
 
             override fun onSessionFinished(finishedSession: TerminalSession) {
@@ -152,7 +161,8 @@ class RuntimeSupervisorService : Service() {
                 attachedViews.forEach(TerminalView::invalidate)
             }
 
-            override fun getTerminalCursorStyle(): Int? = null
+            override fun getTerminalCursorStyle(): Int =
+                this@RuntimeSupervisorService.terminalCursorStyle
 
             override fun logError(
                 tag: String,
@@ -197,6 +207,7 @@ class RuntimeSupervisorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        terminalCursorStyle = TerminalTypographyStore(this).load().cursorStyle.emulatorValue()
         createNotificationChannel()
         app.journal.append(
             component = "supervisor",
@@ -257,7 +268,6 @@ class RuntimeSupervisorService : Service() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
         terminalTabs.clear().forEach { it.value.finishIfRunning() }
-        closingTerminalIds.clear()
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
@@ -285,10 +295,13 @@ class RuntimeSupervisorService : Service() {
             TerminalTabSnapshot(
                 id = tab.id,
                 title = tab.title,
+                hasCustomTitle = tab.customTitle != null,
                 rootfsName = tab.rootfsName,
                 pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
                 running = tab.value.isRunning,
                 active = tab.id == terminalTabs.activeId,
+                closeState = tab.closeState,
+                closeError = tab.closeError,
             )
         }
 
@@ -375,6 +388,12 @@ class RuntimeSupervisorService : Service() {
     }
 
     fun selectTerminalTab(id: String): Boolean {
+        val requested = terminalTabs.get(id) ?: return false
+        if (requested.closeState == TerminalTabCloseState.CLOSING ||
+            requested.closeState == TerminalTabCloseState.FORCE_CLOSING
+        ) {
+            return false
+        }
         val tab = terminalTabs.select(id) ?: return false
         attachedViews.forEach { view ->
             if (view.mTermSession !== tab.value) view.attachSession(tab.value)
@@ -388,8 +407,7 @@ class RuntimeSupervisorService : Service() {
         id: String,
         requestedTitle: String,
     ): Boolean {
-        val title = requestedTitle.trim().take(MAX_TERMINAL_TITLE_CHARS)
-        if (title.isBlank()) return false
+        val title = normalizeTerminalTitle(requestedTitle) ?: return false
         val tab = terminalTabs.rename(id, title) ?: return false
         publishTerminalTabState("Renamed terminal to ${tab.title}")
         app.journal.append(
@@ -403,14 +421,29 @@ class RuntimeSupervisorService : Service() {
         return true
     }
 
+    fun followTerminalShellTitle(id: String): Boolean {
+        val tab = terminalTabs.followShellTitle(id) ?: return false
+        publishTerminalTabState("Following shell title for ${tab.title}")
+        app.journal.append(
+            component = "terminal",
+            severity = "info",
+            event = "tab_title_followed",
+            message = "Terminal tab now follows its shell title",
+            bootId = app.runtimeState.current().bootId,
+            fields = mapOf("tab_id" to id, "title" to tab.title),
+        )
+        return true
+    }
+
     fun closeTerminalTab(id: String): Boolean {
-        val tab = terminalTabs.get(id) ?: return false
+        if (terminalTabs.get(id) == null) return false
         if (terminalTabs.size() == 1) {
             stopRuntime(userRequested = true)
             return true
         }
-        closingTerminalIds += id
-        terminateTerminalTab(tab)
+        val closingTab = terminalTabs.beginClose(id) ?: return false
+        publishTerminalCloseState("Closing ${closingTab.title}")
+        terminateTerminalTab(closingTab)
         return true
     }
 
@@ -496,6 +529,26 @@ class RuntimeSupervisorService : Service() {
 
     fun writeToTerminal(text: String) {
         currentTerminalSession()?.takeIf(TerminalSession::isRunning)?.write(text)
+    }
+
+    fun updateTerminalAppearance(profile: TerminalColorProfile) {
+        mainHandler.post {
+            configureTerminalColors(profile)
+            terminalTabs.all().forEach { tab ->
+                tab.value.emulator?.mColors?.reset()
+                tab.value.onColorsChanged()
+            }
+        }
+    }
+
+    fun updateTerminalTypography(state: TerminalTypographyState) {
+        mainHandler.post {
+            terminalCursorStyle = state.cursorStyle.emulatorValue()
+            terminalTabs.all().forEach { tab ->
+                tab.value.emulator?.setCursorStyle()
+                terminalClient.onTextChanged(tab.value)
+            }
+        }
     }
 
     fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
@@ -1443,7 +1496,6 @@ class RuntimeSupervisorService : Service() {
             return
         }
         terminalTabs.clear().forEach { it.value.finishIfRunning() }
-        closingTerminalIds.clear()
         nextTerminalNumber = 1
 
         val bootId = UUID.randomUUID().toString()
@@ -1577,7 +1629,7 @@ class RuntimeSupervisorService : Service() {
         val tab =
             TerminalTab(
                 id = session.mHandle,
-                title = title,
+                defaultTitle = title,
                 rootfsName = launch.rootfs.name,
                 value = session,
             )
@@ -1621,22 +1673,24 @@ class RuntimeSupervisorService : Service() {
         publishState(next)
     }
 
-    private fun configureTerminalColors() {
+    private fun configureTerminalColors(
+        profile: TerminalColorProfile = TerminalProfileStore(this).load().selectedProfile,
+    ) {
         TerminalColors.COLOR_SCHEME.updateWith(
             Properties().apply {
-                setProperty("foreground", "#E3E7EF")
-                setProperty("background", "#11131F")
-                setProperty("cursor", "#43D292")
-                setProperty("color2", "#43D292")
-                setProperty("color3", "#E8B86D")
-                setProperty("color4", "#65A7D8")
+                setProperty("foreground", formatTerminalColor(profile.foreground))
+                setProperty("background", formatTerminalColor(profile.background))
+                setProperty("cursor", formatTerminalColor(profile.cursor))
+                profile.ansiColors.forEachIndexed { index, color ->
+                    setProperty("color$index", formatTerminalColor(color))
+                }
             },
         )
     }
 
     private fun handleSessionFinished(session: TerminalSession) {
         val tab = terminalTabs.findByValue(session) ?: return
-        val individuallyClosed = closingTerminalIds.remove(tab.id)
+        val individuallyClosed = tab.closeState != TerminalTabCloseState.OPEN
         terminalTabs.remove(tab.id)
         val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
@@ -1749,7 +1803,7 @@ class RuntimeSupervisorService : Service() {
             return
         }
         sessions.forEach { tab ->
-            closingTerminalIds += tab.id
+            terminalTabs.beginClose(tab.id)
             terminateTerminalTab(tab)
         }
     }
@@ -1771,28 +1825,75 @@ class RuntimeSupervisorService : Service() {
                 bootId = app.runtimeState.current().bootId,
                 fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
             )
+            forceCloseTerminalTab(tab, session)
+            return
         }
         mainHandler.postDelayed(
             {
                 if (terminalTabs.get(tab.id)?.value === session && session.isRunning) {
-                    app.journal.append(
-                        component = "supervisor",
-                        severity = "warning",
-                        event = "terminal_force_stop",
-                        message = "${tab.title} ignored SIGTERM; forcing it to stop",
-                        bootId = app.runtimeState.current().bootId,
-                        fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
-                    )
-                    session.finishIfRunning()
+                    forceCloseTerminalTab(tab, session)
                 }
             },
             GRACEFUL_STOP_TIMEOUT_MS,
         )
     }
 
+    private fun forceCloseTerminalTab(
+        tab: TerminalTab<TerminalSession>,
+        session: TerminalSession,
+    ) {
+        if (terminalTabs.get(tab.id)?.value !== session || !session.isRunning) return
+        terminalTabs.markForceClosing(tab.id)
+        publishTerminalCloseState("${tab.title} did not close; forcing it to stop")
+        app.journal.append(
+            component = "supervisor",
+            severity = "warning",
+            event = "terminal_force_stop",
+            message = "${tab.title} did not exit after SIGTERM; forcing it to stop",
+            bootId = app.runtimeState.current().bootId,
+            fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
+        )
+        session.finishIfRunning()
+        mainHandler.postDelayed(
+            {
+                if (terminalTabs.get(tab.id)?.value === session && session.isRunning) {
+                    val message = "${tab.title} is still running after force stop"
+                    terminalTabs.markCloseFailed(tab.id, message)
+                    publishTerminalCloseState(message)
+                    app.journal.append(
+                        component = "supervisor",
+                        severity = "error",
+                        event = "terminal_stop_failed",
+                        message = message,
+                        bootId = app.runtimeState.current().bootId,
+                        fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
+                    )
+                }
+            },
+            FORCE_STOP_TIMEOUT_MS,
+        )
+    }
+
+    private fun publishTerminalCloseState(message: String) {
+        publishState(app.runtimeState.update { it.copy(message = message) })
+    }
+
+    private fun scheduleTerminalTabsChanged() {
+        if (terminalTabsRefreshPending) return
+        terminalTabsRefreshPending = true
+        mainHandler.postDelayed(
+            {
+                terminalTabsRefreshPending = false
+                sendBroadcast(
+                    Intent(ACTION_TERMINAL_TABS_CHANGED).setPackage(packageName),
+                )
+            },
+            TERMINAL_TITLE_REFRESH_INTERVAL_MS,
+        )
+    }
+
     private fun publishStoppedState() {
         terminalTabs.clear()
-        closingTerminalIds.clear()
         val stopped =
             app.runtimeState.update {
                 it.copy(
@@ -2033,6 +2134,8 @@ class RuntimeSupervisorService : Service() {
 
     companion object {
         const val ACTION_STATE_CHANGED = "org.randomcoder.udroid.action.STATE_CHANGED"
+        const val ACTION_TERMINAL_TABS_CHANGED =
+            "org.randomcoder.udroid.action.TERMINAL_TABS_CHANGED"
         const val EXTRA_PHASE = "phase"
         const val EXTRA_UPDATED_AT = "updated-at"
         const val EXTRA_ROOTFS_NAME = "rootfs-name"
@@ -2044,6 +2147,8 @@ class RuntimeSupervisorService : Service() {
         private const val NOTIFICATION_CHANNEL = "runtime-supervisor"
         private const val NOTIFICATION_ID = 1001
         private const val GRACEFUL_STOP_TIMEOUT_MS = 3_000L
+        private const val FORCE_STOP_TIMEOUT_MS = 3_000L
+        private const val TERMINAL_TITLE_REFRESH_INTERVAL_MS = 50L
         private const val TRANSCRIPT_ROWS = 8_000
         private const val DEFAULT_COLUMNS = 80
         private const val DEFAULT_ROWS = 24
@@ -2052,7 +2157,6 @@ class RuntimeSupervisorService : Service() {
         private const val MAX_APP_OUTPUT_CHARS = 2_000
         private const val MAX_APP_OUTPUT_LINES = 200
         private const val MAX_DESKTOP_OUTPUT_LINES = 400
-        private const val MAX_TERMINAL_TITLE_CHARS = 40
         private const val DISPLAY_NUMBER = 0
 
         fun start(
@@ -2094,3 +2198,10 @@ class RuntimeSupervisorService : Service() {
         val mounts: List<ResolvedProotMount>,
     )
 }
+
+private fun TerminalCursorStyle.emulatorValue(): Int =
+    when (this) {
+        TerminalCursorStyle.BLOCK -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK
+        TerminalCursorStyle.BAR -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR
+        TerminalCursorStyle.UNDERLINE -> TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE
+    }

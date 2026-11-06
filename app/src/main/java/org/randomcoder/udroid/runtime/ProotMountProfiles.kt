@@ -150,12 +150,13 @@ object ProotMountResolver {
             } else {
                 emptyList()
             }
-        val selinuxMount =
-            prepareSelinuxMount(runtimeDirectory(context, rootfs).resolve("sysdata"))
-                ?.takeIf {
-                    profile.isDefaultEnabled("android.sys") &&
-                        !isShadowedByCustomTarget(it.guestTarget, customTargets)
-                }
+        val systemCompatibilityMounts =
+            if (profile.isDefaultEnabled("android.sys")) {
+                prepareSystemCompatibilityMounts(runtimeDirectory(context, rootfs).resolve("sysdata"))
+                    .filterNot { isShadowedByCustomTarget(it.guestTarget, customTargets) }
+            } else {
+                emptyList()
+            }
         val sharedMemoryMount =
             prepareSharedMemoryMount(runtimeDirectory(context, rootfs).resolve("shm"))
                 .takeIf { !isShadowedByCustomTarget(it.guestTarget, customTargets) }
@@ -164,7 +165,8 @@ object ProotMountResolver {
             sessionMounts =
                 sessionMounts +
                     compatibilityMounts +
-                    listOfNotNull(selinuxMount, sharedMemoryMount),
+                    systemCompatibilityMounts +
+                    listOfNotNull(sharedMemoryMount),
         )
     }
 
@@ -253,49 +255,63 @@ object ProotMountResolver {
     @Synchronized
     internal fun prepareCompatibilityMounts(
         directory: File,
+        nowEpochSeconds: Long = System.currentTimeMillis() / 1_000L,
+        cpuCount: Int = Runtime.getRuntime().availableProcessors(),
         readable: (String) -> Boolean = ::isReadable,
     ): List<ResolvedProotMount> {
         if (!prepareDirectory(directory)) return emptyList()
-        return COMPATIBILITY_FILES.mapNotNull { entry ->
+        val files = compatibilityFiles(nowEpochSeconds, cpuCount.coerceAtLeast(1)).mapNotNull { entry ->
             if (readable(entry.guestTarget)) return@mapNotNull null
             val source = File(directory, entry.name)
-            val staging = runCatching {
-                Files.createTempFile(directory.toPath(), ".compat-", ".tmp").toFile()
-            }.getOrNull() ?: return@mapNotNull null
-            try {
-                FileOutputStream(staging).use { output ->
-                    output.write(entry.contents.toByteArray(Charsets.UTF_8))
-                    output.fd.sync()
-                }
-                moveReplacing(staging, source)
-            } catch (_: Exception) {
-                return@mapNotNull null
-            } finally {
-                staging.delete()
-            }
-            if (!Files.isRegularFile(source.toPath(), LinkOption.NOFOLLOW_LINKS)) {
-                return@mapNotNull null
-            }
+            if (!writeCompatibilityFile(directory, source, entry.contents)) return@mapNotNull null
             ResolvedProotMount(
                 hostSource = source.absolutePath,
                 guestTarget = entry.guestTarget,
                 origin = "runtime:compatibility",
             )
         }
+        val procNet =
+            if (readable("/proc/net/dev")) {
+                null
+            } else {
+                val source = File(directory, "proc_net")
+                val dev = File(source, "dev")
+                if (
+                    prepareDirectory(source) &&
+                    writeCompatibilityFile(source, dev, PROC_NET_DEV_HEADER)
+                ) {
+                    ResolvedProotMount(
+                        hostSource = source.absolutePath,
+                        guestTarget = "/proc/net",
+                        origin = "runtime:compatibility",
+                    )
+                } else {
+                    null
+                }
+            }
+        return files + listOfNotNull(procNet)
     }
 
-    private fun prepareSelinuxMount(directory: File): ResolvedProotMount? {
-        if (!prepareDirectory(directory)) return null
-        val empty = File(directory, "sys_empty")
-        if (Files.isSymbolicLink(empty.toPath()) || (empty.exists() && !empty.isDirectory)) {
-            if (!empty.delete()) return null
+    @Synchronized
+    internal fun prepareSystemCompatibilityMounts(
+        directory: File,
+        readable: (String) -> Boolean = ::isDirectoryReadable,
+    ): List<ResolvedProotMount> {
+        if (!prepareDirectory(directory)) return emptyList()
+        return listOf(
+            Triple("sys_empty", "/sys/fs/selinux", false),
+            Triple("sys_block", "/sys/block", true),
+            Triple("power_supply", "/sys/class/power_supply", true),
+        ).mapNotNull { (name, guestTarget, checkReadable) ->
+            if (checkReadable && readable(guestTarget)) return@mapNotNull null
+            val source = File(directory, name)
+            if (!prepareDirectory(source)) return@mapNotNull null
+            ResolvedProotMount(
+                hostSource = source.absolutePath,
+                guestTarget = guestTarget,
+                origin = "runtime:compatibility",
+            )
         }
-        if (!empty.mkdirs() && !empty.isDirectory) return null
-        return ResolvedProotMount(
-            hostSource = empty.absolutePath,
-            guestTarget = "/sys/fs/selinux",
-            origin = "runtime:compatibility",
-        )
     }
 
     private fun prepareDirectory(directory: File): Boolean =
@@ -323,6 +339,8 @@ object ProotMountResolver {
 
     private fun isReadable(path: String): Boolean =
         runCatching { File(path).inputStream().use { it.read() } }.isSuccess
+
+    private fun isDirectoryReadable(path: String): Boolean = File(path).list() != null
 
     fun defaults(
         x11SocketDirectory: String? = null,
@@ -379,17 +397,35 @@ object ProotMountResolver {
         val contents: String,
     )
 
-    private val COMPATIBILITY_FILES =
+    private fun compatibilityFiles(
+        nowEpochSeconds: Long,
+        cpuCount: Int,
+    ) =
         listOf(
             CompatibilityFile("loadavg", "/proc/loadavg", "0.00 0.00 0.00 1/1 1\n"),
-            CompatibilityFile("stat", "/proc/stat", "cpu  1 0 1 1 0 0 0 0 0 0\n"),
+            CompatibilityFile(
+                "stat",
+                "/proc/stat",
+                buildString {
+                    append("cpu  $cpuCount 0 $cpuCount $cpuCount 0 0 0 0 0 0\n")
+                    repeat(cpuCount) { index ->
+                        append("cpu$index 1 0 1 1 0 0 0 0 0 0\n")
+                    }
+                    append("btime $nowEpochSeconds\n")
+                },
+            ),
             CompatibilityFile("uptime", "/proc/uptime", "0.00 0.00\n"),
             CompatibilityFile(
                 "version",
                 "/proc/version",
                 "Linux version 5.4.0-udroid-faked (udroid@android)\n",
             ),
-            CompatibilityFile("vmstat", "/proc/vmstat", "nr_free_pages 0\n"),
+            CompatibilityFile(
+                "vmstat",
+                "/proc/vmstat",
+                "nr_free_pages 0\npswpin 0\npswpout 0\n",
+            ),
+            CompatibilityFile("filesystems", "/proc/filesystems", ""),
             CompatibilityFile("cap_last_cap", "/proc/sys/kernel/cap_last_cap", "40\n"),
             CompatibilityFile(
                 "inotify_max_user_watches",
@@ -401,7 +437,33 @@ object ProotMountResolver {
             CompatibilityFile("pci_devices", "/proc/bus/pci/devices", ""),
         )
 
+    private fun writeCompatibilityFile(
+        directory: File,
+        target: File,
+        contents: String,
+    ): Boolean {
+        val staging = runCatching {
+            Files.createTempFile(directory.toPath(), ".compat-", ".tmp").toFile()
+        }.getOrNull() ?: return false
+        return try {
+            FileOutputStream(staging).use { output ->
+                output.write(contents.toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            moveReplacing(staging, target)
+            Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS)
+        } catch (_: Exception) {
+            false
+        } finally {
+            staging.delete()
+        }
+    }
+
     private val SAFE_SYSTEM_ID = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
+    private const val PROC_NET_DEV_HEADER =
+        "Inter-|   Receive                                                |  Transmit\n" +
+            " face |bytes    packets errs drop fifo frame compressed multicast|" +
+            "bytes    packets errs drop fifo colls carrier compressed\n"
 }
 
 class ProotMountProfileStore(context: Context) {

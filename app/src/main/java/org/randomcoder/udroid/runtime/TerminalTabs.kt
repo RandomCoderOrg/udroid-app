@@ -3,11 +3,21 @@ package org.randomcoder.udroid.runtime
 data class TerminalTabSnapshot(
     val id: String,
     val title: String,
+    val hasCustomTitle: Boolean,
     val rootfsName: String,
     val pid: Long?,
     val running: Boolean,
     val active: Boolean,
+    val closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
+    val closeError: String? = null,
 )
+
+enum class TerminalTabCloseState {
+    OPEN,
+    CLOSING,
+    FORCE_CLOSING,
+    FAILED,
+}
 
 fun terminalDistroTitle(rawName: String?): String =
     when {
@@ -26,10 +36,17 @@ fun terminalDistroTitle(rawName: String?): String =
 
 internal data class TerminalTab<T>(
     val id: String,
-    var title: String,
+    val defaultTitle: String,
     val rootfsName: String,
     val value: T,
-)
+    var shellTitle: String? = null,
+    var customTitle: String? = null,
+    var closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
+    var closeError: String? = null,
+) {
+    val title: String
+        get() = customTitle ?: shellTitle ?: defaultTitle
+}
 
 internal class TerminalTabRegistry<T> {
     private val tabs = LinkedHashMap<String, TerminalTab<T>>()
@@ -64,9 +81,52 @@ internal class TerminalTabRegistry<T> {
         title: String,
     ): TerminalTab<T>? {
         val tab = tabs[id] ?: return null
-        tab.title = title
+        tab.customTitle = title
         return tab
     }
+
+    fun updateShellTitle(
+        id: String,
+        title: String?,
+    ): TerminalTab<T>? {
+        val tab = tabs[id] ?: return null
+        if (tab.shellTitle == title) return null
+        tab.shellTitle = title
+        return tab
+    }
+
+    fun followShellTitle(id: String): TerminalTab<T>? {
+        val tab = tabs[id]?.takeIf { it.customTitle != null } ?: return null
+        tab.customTitle = null
+        return tab
+    }
+
+    fun beginClose(id: String): TerminalTab<T>? {
+        val tab = tabs[id] ?: return null
+        if (tab.closeState == TerminalTabCloseState.CLOSING ||
+            tab.closeState == TerminalTabCloseState.FORCE_CLOSING
+        ) {
+            return null
+        }
+        tab.closeState = TerminalTabCloseState.CLOSING
+        tab.closeError = null
+        return tab
+    }
+
+    fun markForceClosing(id: String): TerminalTab<T>? =
+        tabs[id]?.also {
+            it.closeState = TerminalTabCloseState.FORCE_CLOSING
+            it.closeError = null
+        }
+
+    fun markCloseFailed(
+        id: String,
+        message: String,
+    ): TerminalTab<T>? =
+        tabs[id]?.also {
+            it.closeState = TerminalTabCloseState.FAILED
+            it.closeError = message
+        }
 
     fun remove(id: String): TerminalTab<T>? {
         val index = tabs.keys.indexOf(id)
@@ -86,3 +146,14 @@ internal class TerminalTabRegistry<T> {
 
     fun size(): Int = tabs.size
 }
+
+internal fun normalizeTerminalTitle(rawTitle: String?): String? =
+    rawTitle
+        ?.filter { character ->
+            !character.isISOControl() &&
+                Character.getType(character) != Character.FORMAT.toInt()
+        }?.trim()
+        ?.take(MAX_TERMINAL_TITLE_CHARS)
+        ?.ifEmpty { null }
+
+internal const val MAX_TERMINAL_TITLE_CHARS = 40
