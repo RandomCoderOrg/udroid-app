@@ -66,6 +66,9 @@ import org.randomcoder.udroid.runtime.ProotMountResolver
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.RootfsShortcutContract
+import org.randomcoder.udroid.runtime.RootfsShortcutPublisher
+import org.randomcoder.udroid.runtime.RootfsShortcutTarget
 import org.randomcoder.udroid.runtime.RootfsStorageUsage
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
@@ -95,6 +98,10 @@ private data class PendingDesktopStart(
     val configuration: DesktopConfiguration,
 )
 
+private data class PendingTerminalShortcut(
+    val tabId: String,
+    val rootfsName: String,
+)
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
         get() = application as UdroidApplication
@@ -132,11 +139,13 @@ class MainActivity : ComponentActivity() {
     private var pendingLinuxApplication: PendingLinuxApplication? = null
     private var pendingLinuxApplicationId: String? = null
     private var pendingDesktopStart: PendingDesktopStart? = null
+    private var pendingDesktopShortcutRootfsName: String? = null
     private var pendingShortcutRootfsName: String? = null
     private var pendingTerminalRootfsName: String? = null
     private var pendingDebugDesktop: DebugCommand? = null
     private var pendingDebugStopDesktop = false
     private var pendingMicrophoneRootfsName: String? = null
+    private var pendingTerminalShortcut: PendingTerminalShortcut? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
     private var ociTagsLoadGeneration = 0L
@@ -324,7 +333,9 @@ class MainActivity : ComponentActivity() {
         loadCatalogue()
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
-        if (!handleShortcutIntent(intent)) loadLinuxApplications()
+        if (!handleRootfsShortcutIntent(intent) && !handleShortcutIntent(intent)) {
+            loadLinuxApplications()
+        }
         handleDebugCommand()
     }
 
@@ -333,7 +344,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
-        handleShortcutIntent(intent)
+        if (!handleRootfsShortcutIntent(intent)) handleShortcutIntent(intent)
         handleDebugCommand()
     }
 
@@ -378,6 +389,12 @@ class MainActivity : ComponentActivity() {
             ).destination
         selectedDestination = resolvedDestination
         applySystemBars(resolvedDestination)
+        if (resolvedDestination != UdroidDestination.SYSTEM) {
+            pendingDesktopShortcutRootfsName = null
+        }
+        if (resolvedDestination != UdroidDestination.TERMINAL) {
+            pendingTerminalShortcut = null
+        }
         if (resolvedDestination == UdroidDestination.APPS) loadLinuxApplications()
         if (resolvedDestination == UdroidDestination.SYSTEM) {
             selectedSystemRootfsName?.let(::loadDesktopEnvironments)
@@ -481,6 +498,7 @@ class MainActivity : ComponentActivity() {
         }
         launchPendingLinuxApplication()
         launchPendingDesktop()
+        selectPendingTerminalShortcut()
     }
 
     private fun loadCatalogue() {
@@ -866,6 +884,10 @@ class MainActivity : ComponentActivity() {
                     .disableForRootfs(rootfsName)
             }.exceptionOrNull()
                 ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
+            runCatching {
+                RootfsShortcutPublisher(this@MainActivity).disableForRootfs(rootfsName)
+            }.exceptionOrNull()
+                ?.let { cleanupWarnings += it.message ?: "terminal and display shortcuts" }
 
             if (resetWork == null) {
                 runCatching { ProotEnvironmentProfileStore(this@MainActivity).remove(rootfsName) }
@@ -907,7 +929,11 @@ class MainActivity : ComponentActivity() {
 
             pendingLinuxApplication = null
             pendingDesktopStart = null
+            pendingDesktopShortcutRootfsName = null
             pendingTerminalRootfsName = null
+            if (pendingTerminalShortcut?.rootfsName == rootfsName) {
+                pendingTerminalShortcut = null
+            }
             linuxApplicationsLoadGeneration++
             desktopScanGeneration++
             rootfsMaintenanceName = null
@@ -988,6 +1014,7 @@ class MainActivity : ComponentActivity() {
                                 if (environments.size == 1) " detected" else "s detected"
                         }
                     launchPendingDebugDesktop(rootfsName)
+                    launchPendingDesktopShortcut(rootfsName)
                 },
                 onFailure = {
                     desktopEnvironments = emptyList()
@@ -1002,6 +1029,9 @@ class MainActivity : ComponentActivity() {
                         debugCommandError(desktopScanMessage ?: "Desktop detection failed")
                     }
                     pendingDebugDesktop = null
+                    if (pendingDesktopShortcutRootfsName == rootfsName) {
+                        pendingDesktopShortcutRootfsName = null
+                    }
                 },
             )
         }
@@ -1056,6 +1086,14 @@ class MainActivity : ComponentActivity() {
             debugCommandError("No desktop session is installed in $rootfsName")
             return
         }
+        startSelectedDesktop()
+        selectDestination(UdroidDestination.DESKTOP)
+    }
+
+    private fun launchPendingDesktopShortcut(rootfsName: String) {
+        if (pendingDesktopShortcutRootfsName != rootfsName) return
+        pendingDesktopShortcutRootfsName = null
+        if (desktopEnvironments.isEmpty()) return
         startSelectedDesktop()
         selectDestination(UdroidDestination.DESKTOP)
     }
@@ -1354,6 +1392,46 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
+    private fun handleRootfsShortcutIntent(intent: Intent?): Boolean {
+        if (intent?.action != RootfsShortcutContract.ACTION_OPEN) return false
+        val rootfsName =
+            intent
+                .getStringExtra(RootfsShortcutContract.EXTRA_ROOTFS_NAME)
+                ?.takeIf(String::isNotBlank)
+        val target =
+            intent
+                .getStringExtra(RootfsShortcutContract.EXTRA_TARGET)
+                ?.let { runCatching { RootfsShortcutTarget.valueOf(it) }.getOrNull() }
+        val terminalTabId =
+            intent
+                .getStringExtra(RootfsShortcutContract.EXTRA_TERMINAL_TAB_ID)
+                ?.takeIf(String::isNotBlank)
+        intent.removeExtra(RootfsShortcutContract.EXTRA_ROOTFS_NAME)
+        intent.removeExtra(RootfsShortcutContract.EXTRA_TARGET)
+        intent.removeExtra(RootfsShortcutContract.EXTRA_TERMINAL_TAB_ID)
+        if (rootfsName == null || target == null) return true
+        if (installedRootfses.none { it.name == rootfsName }) {
+            rootfsMaintenanceMessage = "The Linux system for this shortcut is no longer installed"
+            selectDestination(UdroidDestination.DISTROS)
+            return true
+        }
+        when (target) {
+            RootfsShortcutTarget.TERMINAL -> openRootfsTerminal(rootfsName, terminalTabId)
+            RootfsShortcutTarget.DISPLAY -> {
+                if (
+                    snapshot.desktop.rootfsName == rootfsName &&
+                    snapshot.desktop.phase == DesktopSessionPhase.RUNNING
+                ) {
+                    selectDestination(UdroidDestination.DESKTOP)
+                } else {
+                    pendingDesktopShortcutRootfsName = rootfsName
+                    openSystemDetails(rootfsName)
+                }
+            }
+        }
+        return true
+    }
+
     private fun resolveShortcutApplication(state: LinuxApplicationsState) {
         val applicationId = pendingLinuxApplicationId ?: return
         when (state) {
@@ -1440,9 +1518,27 @@ class MainActivity : ComponentActivity() {
         selectDestination(UdroidDestination.APPS)
     }
 
-    private fun openRootfsTerminal(rootfsName: String) {
+    private fun openRootfsTerminal(
+        rootfsName: String,
+        terminalTabId: String? = null,
+    ) {
         setActiveRootfs(rootfsName)
         ensureNotificationPermission()
+        pendingTerminalShortcut =
+            terminalTabId?.let { PendingTerminalShortcut(it, rootfsName) }
+        val requestedTab =
+            runtimeService
+                ?.terminalTabSnapshots()
+                ?.firstOrNull {
+                    it.rootfsName == rootfsName &&
+                        (terminalTabId == null || it.id == terminalTabId)
+                }
+        if (requestedTab != null && runtimeService?.selectTerminalTab(requestedTab.id) == true) {
+            pendingTerminalShortcut = null
+            pendingTerminalRootfsName = null
+            selectDestination(UdroidDestination.TERMINAL)
+            return
+        }
         val runningSession = runtimeService?.currentTerminalSession()
         if (runningSession?.isRunning == true && runningSession.mSessionName != rootfsName) {
             pendingTerminalRootfsName = rootfsName
@@ -1454,6 +1550,23 @@ class MainActivity : ComponentActivity() {
         selectDestination(UdroidDestination.TERMINAL)
     }
 
+    private fun selectPendingTerminalShortcut() {
+        val pending = pendingTerminalShortcut ?: return
+        val service = runtimeService ?: return
+        val requestedTab =
+            service
+                .terminalTabSnapshots()
+                .firstOrNull { it.id == pending.tabId && it.rootfsName == pending.rootfsName }
+        if (requestedTab != null) {
+            service.selectTerminalTab(requestedTab.id)
+            pendingTerminalShortcut = null
+        } else if (
+            snapshot.phase == RuntimePhase.RUNNING &&
+            service.currentTerminalSession()?.isRunning == true
+        ) {
+            pendingTerminalShortcut = null
+        }
+    }
     private fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
