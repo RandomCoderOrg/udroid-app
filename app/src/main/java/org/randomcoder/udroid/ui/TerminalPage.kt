@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -119,8 +120,12 @@ fun InteractiveTerminalPage(
     onSaveProfile: (TerminalColorProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onTypographyChanged: (TerminalTypographyState) -> Unit,
+    uploadingTabId: String?,
+    uploadMessage: String?,
+    uploadFailed: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onUploadFile: (TerminalTabSnapshot) -> Unit,
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -189,9 +194,11 @@ fun InteractiveTerminalPage(
             session = session,
             activeTab = activeTab,
             stopping = stopping,
+            uploading = uploadingTabId != null,
             onExit = onExit,
             onChooseDistro = { showDistroPicker = true },
             onShowSettings = { showSettings = true },
+            onUpload = { activeTab?.let(onUploadFile) },
             onStop = {
                 stopRequested = true
                 onStop()
@@ -226,6 +233,20 @@ fun InteractiveTerminalPage(
                         .background(UdroidTerminalSurface)
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                 color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+            )
+        }
+
+        uploadMessage?.let { message ->
+            Text(
+                text = message,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(UdroidTerminalSurface)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                color = if (uploadFailed) MaterialTheme.colorScheme.error else UdroidTerminalGreen,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 2,
             )
@@ -319,9 +340,11 @@ private fun TerminalSessionBar(
     session: TerminalSession?,
     activeTab: TerminalTabSnapshot?,
     stopping: Boolean,
+    uploading: Boolean,
     onExit: () -> Unit,
     onChooseDistro: () -> Unit,
     onShowSettings: () -> Unit,
+    onUpload: () -> Unit,
     onStop: () -> Unit,
 ) {
     val tabClosing =
@@ -397,6 +420,31 @@ private fun TerminalSessionBar(
                         contentDescription = "Choose installed Linux system",
                         modifier = Modifier.size(20.dp),
                         tint = UdroidTerminalMuted,
+                    )
+                }
+            }
+        }
+        if (running) {
+            if (uploading) {
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = UdroidTerminalGreen,
+                        strokeWidth = 2.dp,
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = onUpload,
+                    enabled = activeTab != null,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.UploadFile,
+                        contentDescription = "Upload file to terminal",
+                        tint = UdroidTerminalText,
                     )
                 }
             }
