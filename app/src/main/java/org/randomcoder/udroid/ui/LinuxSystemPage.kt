@@ -1,5 +1,6 @@
 package org.randomcoder.udroid.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -77,6 +78,8 @@ import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
+import org.randomcoder.udroid.runtime.RootfsShortcutPublisher
+import org.randomcoder.udroid.runtime.RootfsShortcutTarget
 import org.randomcoder.udroid.runtime.VirglServerMode
 import java.text.DateFormat
 import java.util.Date
@@ -143,6 +146,20 @@ fun LinuxSystemPage(
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
             ?: environments.firstOrNull()
+    val systemLabel = distro?.releaseName ?: systemTitle(rootfs.name)
+    fun pinShortcut(target: RootfsShortcutTarget) {
+        val destination =
+            if (target == RootfsShortcutTarget.TERMINAL) "Terminal" else "Display"
+        RootfsShortcutPublisher(context)
+            .publishAndRequestPin(rootfs.name, "$systemLabel $destination", target)
+            .onFailure {
+                Toast.makeText(
+                    context,
+                    it.message ?: "Could not add the shortcut",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+    }
     val desktop = snapshot.desktop
     val runtimeOwnsSystem =
         snapshot.rootfsName == rootfs.name &&
@@ -261,6 +278,32 @@ fun LinuxSystemPage(
                     enabled = desktopRunning,
                     onClick = onOpenDisplay,
                 )
+            }
+        }
+
+        item(key = "home-shortcuts-label") {
+            UdroidSectionLabel("Home screen")
+        }
+        item(key = "home-shortcuts") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = { pinShortcut(RootfsShortcutTarget.TERMINAL) },
+                ) {
+                    Icon(Icons.Rounded.Terminal, contentDescription = null)
+                    Text("Add terminal", modifier = Modifier.padding(start = 6.dp))
+                }
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = selectedEnvironment != null,
+                    onClick = { pinShortcut(RootfsShortcutTarget.DISPLAY) },
+                ) {
+                    Icon(Icons.Rounded.DesktopWindows, contentDescription = null)
+                    Text("Add display", modifier = Modifier.padding(start = 6.dp))
+                }
             }
         }
 

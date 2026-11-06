@@ -77,6 +77,8 @@ import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.RootfsShortcutPublisher
+import org.randomcoder.udroid.runtime.RootfsShortcutTarget
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
@@ -91,6 +93,7 @@ fun InteractiveTerminalPage(
     onStop: () -> Unit,
     onExit: () -> Unit,
 ) {
+    val context = LocalContext.current
     val tabs = service?.terminalTabSnapshots().orEmpty()
     val activeTab = tabs.firstOrNull(TerminalTabSnapshot::active)
     val session = service?.currentTerminalSession()
@@ -141,6 +144,20 @@ fun InteractiveTerminalPage(
                 tabs = tabs,
                 onSelect = { id -> service?.selectTerminalTab(id) },
                 onRename = { tab -> renamingTab = tab },
+                onPin = { tab ->
+                    RootfsShortcutPublisher(context)
+                        .publishAndRequestPin(
+                            rootfsName = tab.rootfsName,
+                            label = tab.title,
+                            target = RootfsShortcutTarget.TERMINAL,
+                            terminalTabId = tab.id,
+                        ).fold(
+                            onSuccess = { tabError = null },
+                            onFailure = {
+                                tabError = it.message ?: "Could not add the terminal shortcut"
+                            },
+                        )
+                },
                 onClose = { id -> service?.closeTerminalTab(id) },
                 creatingTab = creatingTab,
                 onClone = { createTab(activeTab?.rootfsName) },
@@ -318,6 +335,7 @@ private fun TerminalTabsRow(
     tabs: List<TerminalTabSnapshot>,
     onSelect: (String) -> Unit,
     onRename: (TerminalTabSnapshot) -> Unit,
+    onPin: (TerminalTabSnapshot) -> Unit,
     onClose: (String) -> Unit,
     creatingTab: Boolean,
     onClone: () -> Unit,
@@ -360,6 +378,7 @@ private fun TerminalTabsRow(
                     tab = tab,
                     onSelect = { onSelect(tab.id) },
                     onRename = { onRename(tab) },
+                    onPin = { onPin(tab) },
                     onClose = { onClose(tab.id) },
                 )
             }
@@ -401,6 +420,7 @@ private fun TerminalTabChip(
     tab: TerminalTabSnapshot,
     onSelect: () -> Unit,
     onRename: () -> Unit,
+    onPin: () -> Unit,
     onClose: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -459,6 +479,16 @@ private fun TerminalTabChip(
                         onClick = {
                             menuExpanded = false
                             onRename()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Add to Home screen") },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Terminal, contentDescription = null)
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onPin()
                         },
                     )
                     DropdownMenuItem(
