@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,6 +77,7 @@ internal fun TerminalWorkspaceBar(
     canCreate: Boolean,
     creatingTab: Boolean,
     stopping: Boolean,
+    uploading: Boolean,
     onNew: () -> Unit,
     onNewInDistro: (String) -> Unit,
     onSelect: (TerminalTabSnapshot) -> Unit,
@@ -85,6 +87,7 @@ internal fun TerminalWorkspaceBar(
     onExit: () -> Unit,
     onOpenDisplay: () -> Unit,
     onShowSettings: () -> Unit,
+    onUpload: () -> Unit,
     onStop: () -> Unit,
 ) {
     var showTabs by remember(tabs.isEmpty()) { mutableStateOf(false) }
@@ -213,6 +216,22 @@ internal fun TerminalWorkspaceBar(
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         if (activeTab != null) {
+                            DropdownMenuItem(
+                                text = { Text(if (uploading) "Uploading file…" else "Upload file") },
+                                enabled = !uploading,
+                                leadingIcon = {
+                                    if (uploading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            color = UdroidTerminalGreen,
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Icon(Icons.Outlined.UploadFile, null)
+                                    }
+                                },
+                                onClick = { menuAction(onUpload) },
+                            )
                             DropdownMenuItem(text = { Text("Session details") }, onClick = { menuAction { showDetails = true } })
                         }
                         DropdownMenuItem(text = { Text("Terminal settings") }, onClick = { menuAction(onShowSettings) })

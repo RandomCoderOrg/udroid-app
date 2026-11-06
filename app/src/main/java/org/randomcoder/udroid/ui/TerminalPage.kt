@@ -130,8 +130,12 @@ fun InteractiveTerminalPage(
     onSaveProfile: (TerminalColorProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onTypographyChanged: (TerminalTypographyState) -> Unit,
+    uploadingTabId: String?,
+    uploadMessage: String?,
+    uploadFailed: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onUploadFile: (TerminalTabSnapshot) -> Unit,
     onExit: () -> Unit,
     onOpenDisplay: () -> Unit,
     scrollbackRows: MutableMap<TerminalSession, Int>,
@@ -210,6 +214,8 @@ fun InteractiveTerminalPage(
             onClose = { tab ->
                 if (tabs.size == 1 || tab.commandRunning) pendingCloseTabId = tab.id else closeTab(tab.id)
             },
+            uploading = uploadingTabId != null,
+            onUpload = { activeTab?.let(onUploadFile) },
             onExit = onExit,
             onOpenDisplay = onOpenDisplay,
             onShowSettings = { showSettings = true },
@@ -227,6 +233,20 @@ fun InteractiveTerminalPage(
                         .background(UdroidTerminalSurface)
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                 color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+            )
+        }
+
+        uploadMessage?.let { message ->
+            Text(
+                text = message,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(UdroidTerminalSurface)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                color = if (uploadFailed) MaterialTheme.colorScheme.error else UdroidTerminalGreen,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 2,
             )
