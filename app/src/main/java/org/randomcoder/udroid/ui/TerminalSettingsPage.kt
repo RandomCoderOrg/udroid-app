@@ -530,7 +530,7 @@ private fun TerminalTypographySettingsPage(
                             valueLabel = "${state.textSizeSp.formatValue()} sp",
                             value = state.textSizeSp,
                             range = TERMINAL_TEXT_SIZE_MIN_SP..TERMINAL_TEXT_SIZE_MAX_SP,
-                            steps = 19,
+                            steps = (TERMINAL_TEXT_SIZE_MAX_SP - TERMINAL_TEXT_SIZE_MIN_SP).roundToInt() - 1,
                             onValueChange = { onChanged(state.copy(textSizeSp = it)) },
                         )
                         HorizontalDivider(color = UdroidTerminalLine)

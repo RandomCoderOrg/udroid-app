@@ -12,8 +12,8 @@ import java.nio.charset.Charset
 import java.util.Base64
 import java.util.UUID
 
-const val TERMINAL_TEXT_SIZE_MIN_SP = 10f
-const val TERMINAL_TEXT_SIZE_MAX_SP = 30f
+const val TERMINAL_TEXT_SIZE_MIN_SP = 4f
+const val TERMINAL_TEXT_SIZE_MAX_SP = 96f
 const val TERMINAL_LINE_SPACING_MIN = 0.8f
 const val TERMINAL_LINE_SPACING_MAX = 1.6f
 const val TERMINAL_CURSOR_BLINK_RATE_DEFAULT_MS = 600

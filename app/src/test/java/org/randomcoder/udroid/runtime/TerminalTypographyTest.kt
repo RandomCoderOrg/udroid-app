@@ -29,6 +29,10 @@ class TerminalTypographyTest {
 
         assertEquals(TerminalFonts.system.id, state.selectedFontId)
         assertEquals(TERMINAL_TEXT_SIZE_MAX_SP, state.textSizeSp)
+        assertEquals(
+            TERMINAL_TEXT_SIZE_MIN_SP,
+            TerminalTypographyState(textSizeSp = 0f).normalized().textSizeSp,
+        )
         assertEquals(TERMINAL_LINE_SPACING_MIN, state.lineSpacing)
         assertEquals(TERMINAL_CURSOR_BLINK_RATE_MIN_MS, state.cursorBlinkRateMs)
     }
