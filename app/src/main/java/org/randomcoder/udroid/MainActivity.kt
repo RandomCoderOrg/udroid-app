@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,12 +68,13 @@ import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.RootfsStorageUsage
+import org.randomcoder.udroid.runtime.TerminalProfileStore
+import org.randomcoder.udroid.runtime.TerminalProfiles
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDarkCanvas
 import org.randomcoder.udroid.ui.UdroidDestination
-import org.randomcoder.udroid.ui.UdroidTerminal
 import org.randomcoder.udroid.ui.UdroidTheme
 import org.randomcoder.udroid.ui.workspaceJourney
 import org.randomcoder.udroid.update.AppUpdateContract
@@ -248,6 +250,9 @@ class MainActivity : ComponentActivity() {
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
                     runtimeService = runtimeService,
+                    onTerminalAppearanceChanged = {
+                        applySystemBars(UdroidDestination.TERMINAL)
+                    },
                     onDestinationSelected = ::selectDestination,
                     onPrimaryDestinationSelected = ::selectPrimaryDestination,
                     onStart = {
@@ -400,19 +405,30 @@ class MainActivity : ComponentActivity() {
         val terminal =
             destination == UdroidDestination.TERMINAL ||
                 destination == UdroidDestination.DESKTOP
-        val terminalScrim = UdroidTerminal.toArgb()
+        val terminalScrim =
+            if (destination == UdroidDestination.TERMINAL) {
+                TerminalProfileStore(this).load().selectedProfile.background
+            } else {
+                TerminalProfiles.udroid.background
+            }
+        val terminalStyle =
+            if (ColorUtils.calculateLuminance(terminalScrim) < 0.5) {
+                SystemBarStyle.dark(terminalScrim)
+            } else {
+                SystemBarStyle.light(terminalScrim, TerminalProfiles.udroid.background)
+            }
         val lightScrim = UdroidCanvas.toArgb()
         val darkScrim = UdroidDarkCanvas.toArgb()
         enableEdgeToEdge(
             statusBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(terminalScrim)
+                    terminalStyle
                 } else {
                     SystemBarStyle.auto(lightScrim, darkScrim)
                 },
             navigationBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(terminalScrim)
+                    terminalStyle
                 } else {
                     SystemBarStyle.auto(lightScrim, darkScrim)
                 },

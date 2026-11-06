@@ -527,6 +527,16 @@ class RuntimeSupervisorService : Service() {
         currentTerminalSession()?.takeIf(TerminalSession::isRunning)?.write(text)
     }
 
+    fun updateTerminalAppearance(profile: TerminalColorProfile) {
+        mainHandler.post {
+            configureTerminalColors(profile)
+            terminalTabs.all().forEach { tab ->
+                tab.value.emulator?.mColors?.reset()
+                tab.value.onColorsChanged()
+            }
+        }
+    }
+
     fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
         x11Controller.requestRendererConnection(callback)
     }
@@ -1649,15 +1659,17 @@ class RuntimeSupervisorService : Service() {
         publishState(next)
     }
 
-    private fun configureTerminalColors() {
+    private fun configureTerminalColors(
+        profile: TerminalColorProfile = TerminalProfileStore(this).load().selectedProfile,
+    ) {
         TerminalColors.COLOR_SCHEME.updateWith(
             Properties().apply {
-                setProperty("foreground", "#E3E7EF")
-                setProperty("background", "#11131F")
-                setProperty("cursor", "#43D292")
-                setProperty("color2", "#43D292")
-                setProperty("color3", "#E8B86D")
-                setProperty("color4", "#65A7D8")
+                setProperty("foreground", formatTerminalColor(profile.foreground))
+                setProperty("background", formatTerminalColor(profile.background))
+                setProperty("cursor", formatTerminalColor(profile.cursor))
+                profile.ansiColors.forEachIndexed { index, color ->
+                    setProperty("color$index", formatTerminalColor(color))
+                }
             },
         )
     }

@@ -59,6 +59,17 @@ Termux application code is not part of this checkpoint. The source is built
 inside this Gradle project so the APK and its native PTY bridge are
 reproducible from the checked-in tree.
 
+## Terminal color profiles
+
+- Project: <https://github.com/termux/termux-styling>
+- Source commit: `79338cb19f4b86cae4d2e81e6de60ba7f613bb9b`
+- Imported profiles: Catppuccin Mocha, Gruvbox Dark, Nord, Tokyo Night,
+  Rosé Pine, and Ubuntu
+- License: GNU General Public License version 3
+
+The built-in values follow the corresponding Termux:Styling color profile
+files. Theme names may identify their respective upstream projects.
+
 ## Termux:X11
 
 - Project: <https://github.com/termux/termux-x11>

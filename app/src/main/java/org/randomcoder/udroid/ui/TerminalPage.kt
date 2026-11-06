@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,7 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +78,8 @@ import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.TerminalColorProfile
+import org.randomcoder.udroid.runtime.TerminalProfileState
 import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.MAX_TERMINAL_TITLE_CHARS
@@ -89,6 +92,10 @@ fun InteractiveTerminalPage(
     snapshot: RuntimeSnapshot,
     service: RuntimeSupervisorService?,
     installedRootfses: List<InstalledRootfs>,
+    profileState: TerminalProfileState,
+    onSelectProfile: (String) -> Unit,
+    onSaveProfile: (TerminalColorProfile) -> Unit,
+    onDeleteProfile: (String) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onExit: () -> Unit,
@@ -101,6 +108,7 @@ fun InteractiveTerminalPage(
     var renamingTab by remember { mutableStateOf<TerminalTabSnapshot?>(null) }
     var creatingTab by remember { mutableStateOf(false) }
     var showDistroPicker by remember { mutableStateOf(false) }
+    var showAppearance by remember { mutableStateOf(false) }
     val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
 
     fun createTab(rootfsName: String?) {
@@ -119,6 +127,18 @@ fun InteractiveTerminalPage(
         }
     }
 
+    if (showAppearance) {
+        TerminalSettingsPage(
+            modifier = modifier,
+            state = profileState,
+            onBack = { showAppearance = false },
+            onSelectProfile = onSelectProfile,
+            onSaveProfile = onSaveProfile,
+            onDeleteProfile = onDeleteProfile,
+        )
+        return
+    }
+
     Column(
         modifier =
             modifier
@@ -132,6 +152,7 @@ fun InteractiveTerminalPage(
             stopping = stopping,
             onExit = onExit,
             onChooseDistro = { showDistroPicker = true },
+            onShowAppearance = { showAppearance = true },
             onStop = {
                 stopRequested = true
                 onStop()
@@ -225,6 +246,7 @@ private fun TerminalSessionBar(
     stopping: Boolean,
     onExit: () -> Unit,
     onChooseDistro: () -> Unit,
+    onShowAppearance: () -> Unit,
     onStop: () -> Unit,
 ) {
     val tabClosing =
@@ -325,6 +347,13 @@ private fun TerminalSessionBar(
             }
         } else {
             Spacer(Modifier.width(48.dp))
+        }
+        IconButton(onClick = onShowAppearance) {
+            Icon(
+                imageVector = Icons.Outlined.Palette,
+                contentDescription = "Terminal appearance",
+                tint = UdroidTerminalMuted,
+            )
         }
     }
 }
@@ -804,6 +833,7 @@ private fun LiveTerminal(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val terminalBackground = UdroidTerminal.toArgb()
     val modifiers = remember { TerminalModifierState() }
     val preferences =
         remember(context) {
@@ -832,7 +862,7 @@ private fun LiveTerminal(
     val terminalView =
         remember {
             TerminalView(context, null).apply {
-                setBackgroundColor(android.graphics.Color.rgb(17, 19, 31))
+                setBackgroundColor(terminalBackground)
                 setTextSize(initialTextSize)
                 setTypeface(Typeface.MONOSPACE)
                 isFocusable = true
@@ -853,6 +883,7 @@ private fun LiveTerminal(
         AndroidView(
             factory = { terminalView },
             update = { view ->
+                view.setBackgroundColor(terminalBackground)
                 if (view.mTermSession !== session) {
                     view.attachSession(session)
                 }
@@ -923,7 +954,7 @@ private fun TerminalKey(
                 .background(
                     color =
                         if (active) {
-                            Color(0xFF164A39)
+                            MaterialTheme.colorScheme.primaryContainer
                         } else {
                             UdroidTerminalRaised
                         },

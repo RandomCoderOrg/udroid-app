@@ -45,6 +45,47 @@ The terminal stays alive when you move between uDroid pages. Use **Stop** on the
 system page when you want to end Linux or change settings that require it to be
 stopped.
 
+### Terminal colors
+
+Select the palette button in **Terminal** to open **Terminal appearance**. You
+can choose a built-in profile, create one, or customize a built-in profile as
+an editable copy. Changes apply to the running terminal and are kept for new
+terminal sessions. Built-in choices include uDroid, Breeze, Solarized,
+Dracula, Catppuccin Mocha, Gruvbox Dark, Nord, Tokyo Night, Rosé Pine, and
+Ubuntu.
+
+**Import** accepts these common palette formats:
+
+- Termux `colors.properties` files with `background`, `foreground`, optional
+  `cursor`, and `color0` through `color15`.
+- Ghostty theme files with `background`, `foreground`, optional `cursor-color`,
+  and `palette = 0` through `palette = 15` entries.
+- iTerm2 `.itermcolors` files.
+
+The foreground, background, and all 16 ANSI colors must be present. If the
+cursor color is omitted, uDroid uses the foreground color. Other settings in a
+theme file—such as fonts, key bindings, commands, or window options—are ignored
+and never executed. Imported files must be no larger than 1 MiB. The imported
+palette becomes an editable custom profile and is selected immediately.
+
+**Export selected** always writes a Termux-compatible `colors.properties`
+file. Export a built-in profile first if you want a known-good template to edit
+or share.
+
+You can find compatible palettes here:
+
+- [Termux:Styling colors](https://github.com/termux/termux-styling/tree/master/app/src/main/assets/colors)
+  are ready-to-import `colors.properties` files.
+- [iTerm2 Color Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes/releases)
+  publishes downloadable Termux, Ghostty, and iTerm2 theme archives.
+- [Ghostty themes](https://ghostty.org/docs/features/theme) explains Ghostty's
+  theme format and built-in theme collection.
+
+Base16 and Base24 scheme files are not imported directly. Use a Termux,
+Ghostty, or iTerm2 version of the scheme instead. Programs may temporarily
+change colors in their own terminal session; the saved profile remains the
+base appearance for the next session.
+
 ### Desktop
 
 uDroid can start X11 desktop sessions installed inside Linux.
