@@ -79,6 +79,7 @@ import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
+import org.randomcoder.udroid.runtime.MAX_TERMINAL_TITLE_CHARS
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
 
@@ -142,6 +143,7 @@ fun InteractiveTerminalPage(
                 tabs = tabs,
                 onSelect = { id -> service?.selectTerminalTab(id) },
                 onRename = { tab -> renamingTab = tab },
+                onFollowTitle = { id -> service?.followTerminalShellTitle(id) },
                 onClose = { id ->
                     if (service?.closeTerminalTab(id) != true) {
                         tabError = "Could not close terminal"
@@ -333,6 +335,7 @@ private fun TerminalTabsRow(
     tabs: List<TerminalTabSnapshot>,
     onSelect: (String) -> Unit,
     onRename: (TerminalTabSnapshot) -> Unit,
+    onFollowTitle: (String) -> Unit,
     onClose: (String) -> Unit,
     creatingTab: Boolean,
     onClone: () -> Unit,
@@ -375,6 +378,7 @@ private fun TerminalTabsRow(
                     tab = tab,
                     onSelect = { onSelect(tab.id) },
                     onRename = { onRename(tab) },
+                    onFollowTitle = { onFollowTitle(tab.id) },
                     onClose = { onClose(tab.id) },
                     stopsLinux = tabs.size == 1,
                 )
@@ -417,6 +421,7 @@ private fun TerminalTabChip(
     tab: TerminalTabSnapshot,
     onSelect: () -> Unit,
     onRename: () -> Unit,
+    onFollowTitle: () -> Unit,
     onClose: () -> Unit,
     stopsLinux: Boolean,
 ) {
@@ -503,6 +508,15 @@ private fun TerminalTabChip(
                                 onRename()
                             },
                         )
+                        if (tab.hasCustomTitle) {
+                            DropdownMenuItem(
+                                text = { Text("Follow shell title") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onFollowTitle()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = {
                                 Text(
@@ -642,7 +656,7 @@ private fun RenameTerminalDialog(
         text = {
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it.take(40) },
+                onValueChange = { title = it.take(MAX_TERMINAL_TITLE_CHARS) },
                 label = { Text("Terminal name") },
                 singleLine = true,
             )

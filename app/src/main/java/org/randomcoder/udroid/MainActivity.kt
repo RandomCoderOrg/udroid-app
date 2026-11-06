@@ -206,7 +206,11 @@ class MainActivity : ComponentActivity() {
                 context: Context?,
                 intent: Intent?,
             ) {
-                refreshFromDisk()
+                if (intent?.action == RuntimeSupervisorService.ACTION_TERMINAL_TABS_CHANGED) {
+                    snapshot = snapshot.copy(updatedAtEpochMs = System.currentTimeMillis())
+                } else {
+                    refreshFromDisk()
+                }
             }
         }
 
@@ -344,6 +348,7 @@ class MainActivity : ComponentActivity() {
             stateReceiver,
             IntentFilter().apply {
                 addAction(RuntimeSupervisorService.ACTION_STATE_CHANGED)
+                addAction(RuntimeSupervisorService.ACTION_TERMINAL_TABS_CHANGED)
                 addAction(InstallerService.ACTION_STATE_CHANGED)
                 addAction(AppUpdateContract.ACTION_STATE_CHANGED)
             },

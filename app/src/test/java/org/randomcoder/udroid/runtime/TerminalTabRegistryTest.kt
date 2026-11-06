@@ -52,6 +52,43 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `custom title overrides shell updates until automatic titles are restored`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+
+        registry.updateShellTitle("one", "root@localhost: ~")
+        assertEquals("root@localhost: ~", registry.get("one")?.title)
+
+        registry.rename("one", "Server")
+        registry.updateShellTitle("one", "htop")
+        assertEquals("Server", registry.get("one")?.title)
+
+        registry.followShellTitle("one")
+        assertEquals("htop", registry.get("one")?.title)
+    }
+
+    @Test
+    fun `empty shell title falls back to default title`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.updateShellTitle("one", "htop")
+
+        registry.updateShellTitle("one", null)
+
+        assertEquals("Terminal one", registry.get("one")?.title)
+    }
+
+    @Test
+    fun `terminal titles drop controls and remain bounded`() {
+        val title = "\u001B]0;\u202Eroot@localhost\n" + "x".repeat(50)
+
+        assertEquals(
+            " ]0;root@localhost".trim() + "x".repeat(23),
+            normalizeTerminalTitle(title),
+        )
+    }
+
+    @Test
     fun `removing last tab clears active id`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))
@@ -104,7 +141,7 @@ class TerminalTabRegistryTest {
     ) =
         TerminalTab(
             id = id,
-            title = "Terminal $id",
+            defaultTitle = "Terminal $id",
             rootfsName = rootfsName,
             value = Any(),
         )

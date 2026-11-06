@@ -63,6 +63,7 @@ class RuntimeSupervisorService : Service() {
     private val terminalTabs = TerminalTabRegistry<TerminalSession>()
     private var nextTerminalNumber = 1
     private var terminalCreationInFlight = false
+    private var terminalTabsRefreshPending = false
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
@@ -93,6 +94,13 @@ class RuntimeSupervisorService : Service() {
 
             override fun onTitleChanged(changedSession: TerminalSession) {
                 onTextChanged(changedSession)
+                val title = normalizeTerminalTitle(changedSession.title)
+                mainHandler.post {
+                    val tab = terminalTabs.findByValue(changedSession) ?: return@post
+                    if (terminalTabs.updateShellTitle(tab.id, title) != null) {
+                        scheduleTerminalTabsChanged()
+                    }
+                }
             }
 
             override fun onSessionFinished(finishedSession: TerminalSession) {
@@ -283,6 +291,7 @@ class RuntimeSupervisorService : Service() {
             TerminalTabSnapshot(
                 id = tab.id,
                 title = tab.title,
+                hasCustomTitle = tab.customTitle != null,
                 rootfsName = tab.rootfsName,
                 pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
                 running = tab.value.isRunning,
@@ -394,8 +403,7 @@ class RuntimeSupervisorService : Service() {
         id: String,
         requestedTitle: String,
     ): Boolean {
-        val title = requestedTitle.trim().take(MAX_TERMINAL_TITLE_CHARS)
-        if (title.isBlank()) return false
+        val title = normalizeTerminalTitle(requestedTitle) ?: return false
         val tab = terminalTabs.rename(id, title) ?: return false
         publishTerminalTabState("Renamed terminal to ${tab.title}")
         app.journal.append(
@@ -405,6 +413,20 @@ class RuntimeSupervisorService : Service() {
             message = "Renamed terminal tab",
             bootId = app.runtimeState.current().bootId,
             fields = mapOf("tab_id" to id, "title" to title),
+        )
+        return true
+    }
+
+    fun followTerminalShellTitle(id: String): Boolean {
+        val tab = terminalTabs.followShellTitle(id) ?: return false
+        publishTerminalTabState("Following shell title for ${tab.title}")
+        app.journal.append(
+            component = "terminal",
+            severity = "info",
+            event = "tab_title_followed",
+            message = "Terminal tab now follows its shell title",
+            bootId = app.runtimeState.current().bootId,
+            fields = mapOf("tab_id" to id, "title" to tab.title),
         )
         return true
     }
@@ -1583,7 +1605,7 @@ class RuntimeSupervisorService : Service() {
         val tab =
             TerminalTab(
                 id = session.mHandle,
-                title = title,
+                defaultTitle = title,
                 rootfsName = launch.rootfs.name,
                 value = session,
             )
@@ -1830,6 +1852,20 @@ class RuntimeSupervisorService : Service() {
         publishState(app.runtimeState.update { it.copy(message = message) })
     }
 
+    private fun scheduleTerminalTabsChanged() {
+        if (terminalTabsRefreshPending) return
+        terminalTabsRefreshPending = true
+        mainHandler.postDelayed(
+            {
+                terminalTabsRefreshPending = false
+                sendBroadcast(
+                    Intent(ACTION_TERMINAL_TABS_CHANGED).setPackage(packageName),
+                )
+            },
+            TERMINAL_TITLE_REFRESH_INTERVAL_MS,
+        )
+    }
+
     private fun publishStoppedState() {
         terminalTabs.clear()
         val stopped =
@@ -2072,6 +2108,8 @@ class RuntimeSupervisorService : Service() {
 
     companion object {
         const val ACTION_STATE_CHANGED = "org.randomcoder.udroid.action.STATE_CHANGED"
+        const val ACTION_TERMINAL_TABS_CHANGED =
+            "org.randomcoder.udroid.action.TERMINAL_TABS_CHANGED"
         const val EXTRA_PHASE = "phase"
         const val EXTRA_UPDATED_AT = "updated-at"
         const val EXTRA_ROOTFS_NAME = "rootfs-name"
@@ -2084,6 +2122,7 @@ class RuntimeSupervisorService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val GRACEFUL_STOP_TIMEOUT_MS = 3_000L
         private const val FORCE_STOP_TIMEOUT_MS = 3_000L
+        private const val TERMINAL_TITLE_REFRESH_INTERVAL_MS = 50L
         private const val TRANSCRIPT_ROWS = 8_000
         private const val DEFAULT_COLUMNS = 80
         private const val DEFAULT_ROWS = 24
@@ -2092,7 +2131,6 @@ class RuntimeSupervisorService : Service() {
         private const val MAX_APP_OUTPUT_CHARS = 2_000
         private const val MAX_APP_OUTPUT_LINES = 200
         private const val MAX_DESKTOP_OUTPUT_LINES = 400
-        private const val MAX_TERMINAL_TITLE_CHARS = 40
         private const val DISPLAY_NUMBER = 0
 
         fun start(
