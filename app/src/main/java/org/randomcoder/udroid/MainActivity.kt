@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -67,6 +68,8 @@ import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.RootfsStorageUsage
+import org.randomcoder.udroid.runtime.TerminalFileImporter
+import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
@@ -93,6 +96,11 @@ private data class PendingDesktopStart(
     val rootfsName: String,
     val environment: DesktopEnvironment,
     val configuration: DesktopConfiguration,
+)
+
+private data class PendingTerminalUpload(
+    val tabId: String,
+    val rootfsName: String,
 )
 
 class MainActivity : ComponentActivity() {
@@ -129,6 +137,9 @@ class MainActivity : ComponentActivity() {
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
+    private var terminalUploadTabId by mutableStateOf<String?>(null)
+    private var terminalUploadMessage by mutableStateOf<String?>(null)
+    private var terminalUploadFailed by mutableStateOf(false)
     private var pendingLinuxApplication: PendingLinuxApplication? = null
     private var pendingLinuxApplicationId: String? = null
     private var pendingDesktopStart: PendingDesktopStart? = null
@@ -137,6 +148,7 @@ class MainActivity : ComponentActivity() {
     private var pendingDebugDesktop: DebugCommand? = null
     private var pendingDebugStopDesktop = false
     private var pendingMicrophoneRootfsName: String? = null
+    private var pendingTerminalUpload: PendingTerminalUpload? = null
     private var linuxApplicationsLoadGeneration = 0L
     private var desktopScanGeneration = 0L
     private var ociTagsLoadGeneration = 0L
@@ -168,6 +180,49 @@ class MainActivity : ComponentActivity() {
                     audioConfigurationMessage =
                         "Microphone access was not granted. Linux input remains off."
                 }
+            }
+        }
+
+    private val terminalFilePicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val target = pendingTerminalUpload
+            pendingTerminalUpload = null
+            if (uri == null || target == null) return@registerForActivityResult
+
+            terminalUploadTabId = target.tabId
+            terminalUploadMessage = null
+            lifecycleScope.launch {
+                val result =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            val rootfs =
+                                app.rootfsRegistry
+                                    .all()
+                                    .firstOrNull { it.name == target.rootfsName }
+                                    ?.directory
+                                    ?: error(
+                                        "Linux system ${target.rootfsName} is not installed or ready",
+                                    )
+                            val sourceName = terminalUploadDisplayName(uri)
+                            val source =
+                                contentResolver.openInputStream(uri)
+                                    ?: error("The selected file could not be opened")
+                            source.use {
+                                TerminalFileImporter.import(rootfs, sourceName, it)
+                            }
+                        }
+                    }
+                terminalUploadTabId = null
+                result.fold(
+                    onSuccess = {
+                        terminalUploadFailed = false
+                        terminalUploadMessage = "Uploaded to $it"
+                    },
+                    onFailure = {
+                        terminalUploadFailed = true
+                        terminalUploadMessage = it.message ?: "The selected file could not be uploaded"
+                    },
+                )
             }
         }
 
@@ -244,6 +299,9 @@ class MainActivity : ComponentActivity() {
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
                     runtimeService = runtimeService,
+                    terminalUploadTabId = terminalUploadTabId,
+                    terminalUploadMessage = terminalUploadMessage,
+                    terminalUploadFailed = terminalUploadFailed,
                     onDestinationSelected = ::selectDestination,
                     onPrimaryDestinationSelected = ::selectPrimaryDestination,
                     onStart = {
@@ -252,6 +310,7 @@ class MainActivity : ComponentActivity() {
                         selectDestination(UdroidDestination.TERMINAL)
                     },
                     onStop = { RuntimeSupervisorService.stop(this) },
+                    onUploadTerminalFile = ::uploadTerminalFile,
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
@@ -1453,6 +1512,31 @@ class MainActivity : ComponentActivity() {
         }
         selectDestination(UdroidDestination.TERMINAL)
     }
+
+    private fun uploadTerminalFile(tab: TerminalTabSnapshot) {
+        if (pendingTerminalUpload != null || terminalUploadTabId != null) {
+            terminalUploadFailed = true
+            terminalUploadMessage = "Wait for the current upload to finish"
+            return
+        }
+        pendingTerminalUpload = PendingTerminalUpload(tab.id, tab.rootfsName)
+        terminalUploadMessage = null
+        terminalFilePicker.launch(arrayOf("*/*"))
+    }
+
+    private fun terminalUploadDisplayName(uri: Uri): String? =
+        runCatching {
+            contentResolver
+                .query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+        }.getOrNull() ?: uri.lastPathSegment
 
     private fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33 &&

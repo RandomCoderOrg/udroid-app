@@ -117,6 +117,7 @@ import org.randomcoder.udroid.runtime.ProotMountProfileStore
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateState
@@ -201,10 +202,14 @@ fun UdroidApp(
     linuxApplicationMessage: String?,
     showInstallTerminal: Boolean,
     runtimeService: RuntimeSupervisorService?,
+    terminalUploadTabId: String?,
+    terminalUploadMessage: String?,
+    terminalUploadFailed: Boolean,
     onDestinationSelected: (UdroidDestination) -> Unit,
     onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onUploadTerminalFile: (TerminalTabSnapshot) -> Unit,
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
@@ -291,8 +296,12 @@ fun UdroidApp(
                     snapshot = snapshot,
                     service = runtimeService,
                     installedRootfses = installedRootfses,
+                    uploadingTabId = terminalUploadTabId,
+                    uploadMessage = terminalUploadMessage,
+                    uploadFailed = terminalUploadFailed,
                     onStart = onStart,
                     onStop = onStop,
+                    onUploadFile = onUploadTerminalFile,
                     onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
                 )
             }
