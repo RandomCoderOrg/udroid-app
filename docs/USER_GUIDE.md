@@ -47,10 +47,11 @@ stopped.
 
 ### Terminal colors
 
-Select the palette button in **Terminal** to open **Terminal appearance**. You
-can choose a built-in profile, create one, or customize a built-in profile as
-an editable copy. Changes apply to the running terminal and are kept for new
-terminal sessions. Built-in choices include uDroid, Breeze, Solarized,
+Select the palette button in **Terminal** to open **Terminal appearance**, then
+choose **Colors**. You can choose a built-in profile, create one, or customize
+a built-in profile as an editable copy. Changes apply to the running terminal
+and are kept for new terminal sessions. Built-in choices include uDroid,
+Breeze, Solarized,
 Dracula, Catppuccin Mocha, Gruvbox Dark, Nord, Tokyo Night, Rosé Pine, and
 Ubuntu.
 
@@ -85,6 +86,28 @@ Base16 and Base24 scheme files are not imported directly. Use a Termux,
 Ghostty, or iTerm2 version of the scheme instead. Programs may temporarily
 change colors in their own terminal session; the saved profile remains the
 base appearance for the next session.
+
+### Terminal font and text
+
+Open **Terminal appearance**, then **Font & text**, to change the terminal font,
+text size, line height, cursor shape, and cursor blinking. The preview shows the
+selected settings before you return to the terminal. Pinch inside the terminal
+to change the same saved text-size setting.
+
+The app includes JetBrains Mono, Fira Code, and Source Code Pro. You can also
+import a `.ttf` or `.otf` font from **Fonts**.
+
+**Import font** accepts one or more TTF and OTF files up to 16 MiB each. uDroid
+uses the name stored inside each font, validates it, and copies it into the
+app's private storage. Moving or deleting the original download does not remove
+it from the terminal. Use a monospaced font to keep columns and terminal
+interfaces aligned. Imported fonts can be removed from the font list; **Reset
+font & text** selects Android's system monospace and restores the other defaults
+without deleting imported fonts.
+
+[Google Fonts](https://fonts.google.com/?categoryFilters=Appearance:%2FMonospace%2FMonospace)
+provides downloadable monospaced fonts. Check a font's license before sharing
+or redistributing its file.
 
 ### Desktop
 

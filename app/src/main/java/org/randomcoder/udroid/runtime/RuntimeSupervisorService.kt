@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.termux.terminal.TerminalColors
+import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
@@ -64,6 +65,7 @@ class RuntimeSupervisorService : Service() {
     private var nextTerminalNumber = 1
     private var terminalCreationInFlight = false
     private var terminalTabsRefreshPending = false
+    private var terminalCursorStyle = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
@@ -159,7 +161,8 @@ class RuntimeSupervisorService : Service() {
                 attachedViews.forEach(TerminalView::invalidate)
             }
 
-            override fun getTerminalCursorStyle(): Int? = null
+            override fun getTerminalCursorStyle(): Int =
+                this@RuntimeSupervisorService.terminalCursorStyle
 
             override fun logError(
                 tag: String,
@@ -204,6 +207,7 @@ class RuntimeSupervisorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        terminalCursorStyle = TerminalTypographyStore(this).load().cursorStyle.emulatorValue()
         createNotificationChannel()
         app.journal.append(
             component = "supervisor",
@@ -533,6 +537,16 @@ class RuntimeSupervisorService : Service() {
             terminalTabs.all().forEach { tab ->
                 tab.value.emulator?.mColors?.reset()
                 tab.value.onColorsChanged()
+            }
+        }
+    }
+
+    fun updateTerminalTypography(state: TerminalTypographyState) {
+        mainHandler.post {
+            terminalCursorStyle = state.cursorStyle.emulatorValue()
+            terminalTabs.all().forEach { tab ->
+                tab.value.emulator?.setCursorStyle()
+                terminalClient.onTextChanged(tab.value)
             }
         }
     }
@@ -2184,3 +2198,10 @@ class RuntimeSupervisorService : Service() {
         val mounts: List<ResolvedProotMount>,
     )
 }
+
+private fun TerminalCursorStyle.emulatorValue(): Int =
+    when (this) {
+        TerminalCursorStyle.BLOCK -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK
+        TerminalCursorStyle.BAR -> TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR
+        TerminalCursorStyle.UNDERLINE -> TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE
+    }

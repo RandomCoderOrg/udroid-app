@@ -20,6 +20,7 @@ public final class TerminalRenderer {
 
     final int mTextSize;
     final Typeface mTypeface;
+    final float mLineSpacingMultiplier;
     private final Paint mTextPaint = new Paint();
 
     /** The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'. */
@@ -34,14 +35,19 @@ public final class TerminalRenderer {
     private final float[] asciiMeasures = new float[127];
 
     public TerminalRenderer(int textSize, Typeface typeface) {
+        this(textSize, typeface, 1.0f);
+    }
+
+    public TerminalRenderer(int textSize, Typeface typeface, float lineSpacingMultiplier) {
         mTextSize = textSize;
         mTypeface = typeface;
+        mLineSpacingMultiplier = Math.max(0.5f, Math.min(2.0f, lineSpacingMultiplier));
 
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
 
-        mFontLineSpacing = (int) Math.ceil(mTextPaint.getFontSpacing());
+        mFontLineSpacing = (int) Math.ceil(mTextPaint.getFontSpacing() * mLineSpacingMultiplier);
         mFontAscent = (int) Math.ceil(mTextPaint.ascent());
         mFontLineSpacingAndAscent = mFontLineSpacing + mFontAscent;
         mFontWidth = mTextPaint.measureText("X");

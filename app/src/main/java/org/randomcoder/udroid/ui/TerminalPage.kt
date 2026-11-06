@@ -1,7 +1,6 @@
 package org.randomcoder.udroid.ui
 
 import android.content.Context
-import android.graphics.Typeface
 import android.os.Build
 import android.util.Log
 import android.view.KeyEvent
@@ -58,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -80,9 +80,13 @@ import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.TerminalColorProfile
 import org.randomcoder.udroid.runtime.TerminalProfileState
+import org.randomcoder.udroid.runtime.TerminalTypographyState
+import org.randomcoder.udroid.runtime.TerminalTypographyStore
 import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.MAX_TERMINAL_TITLE_CHARS
+import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MAX_SP
+import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MIN_SP
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
 
@@ -93,9 +97,11 @@ fun InteractiveTerminalPage(
     service: RuntimeSupervisorService?,
     installedRootfses: List<InstalledRootfs>,
     profileState: TerminalProfileState,
+    typographyState: TerminalTypographyState,
     onSelectProfile: (String) -> Unit,
     onSaveProfile: (TerminalColorProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
+    onTypographyChanged: (TerminalTypographyState) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onExit: () -> Unit,
@@ -131,10 +137,12 @@ fun InteractiveTerminalPage(
         TerminalSettingsPage(
             modifier = modifier,
             state = profileState,
+            typographyState = typographyState,
             onBack = { showAppearance = false },
             onSelectProfile = onSelectProfile,
             onSaveProfile = onSaveProfile,
             onDeleteProfile = onDeleteProfile,
+            onTypographyChanged = onTypographyChanged,
         )
         return
     }
@@ -206,6 +214,8 @@ fun InteractiveTerminalPage(
                 modifier = Modifier.weight(1f),
                 service = service,
                 session = session,
+                typography = typographyState,
+                onTypographyChanged = onTypographyChanged,
             )
         }
     }
@@ -237,7 +247,6 @@ fun InteractiveTerminalPage(
         )
     }
 }
-
 @Composable
 private fun TerminalSessionBar(
     snapshot: RuntimeSnapshot,
@@ -357,7 +366,6 @@ private fun TerminalSessionBar(
         }
     }
 }
-
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun TerminalTabsRow(
@@ -830,41 +838,42 @@ private fun LiveTerminal(
     modifier: Modifier = Modifier,
     service: RuntimeSupervisorService,
     session: TerminalSession,
+    typography: TerminalTypographyState,
+    onTypographyChanged: (TerminalTypographyState) -> Unit,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val terminalBackground = UdroidTerminal.toArgb()
     val modifiers = remember { TerminalModifierState() }
-    val preferences =
-        remember(context) {
-            context.applicationContext.getSharedPreferences(
-                TERMINAL_PREFERENCES,
-                Context.MODE_PRIVATE,
-            )
-        }
-    val initialTextSize = remember(density) {
-        preferences.getInt(
-            KEY_TEXT_SIZE_PX,
-            with(density) { 15.sp.toPx().roundToInt() },
-        ).coerceIn(MIN_TEXT_SIZE_PX.toInt(), MAX_TEXT_SIZE_PX.toInt())
-    }
+    val typographyStore = remember(context) { TerminalTypographyStore(context) }
+    val typeface = remember(typography.selectedFont) { typographyStore.loadTypeface(typography.selectedFont) }
+    val textSizePx = with(density) { typography.textSizeSp.sp.toPx().roundToInt() }
+    val minimumTextSizePx = with(density) { TERMINAL_TEXT_SIZE_MIN_SP.sp.toPx() }
+    val maximumTextSizePx = with(density) { TERMINAL_TEXT_SIZE_MAX_SP.sp.toPx() }
+    val currentTypography by rememberUpdatedState(typography)
+    val currentOnTypographyChanged by rememberUpdatedState(onTypographyChanged)
     val client =
-        remember {
+        remember(context, density) {
             UdroidTerminalViewClient(
                 context = context,
                 modifiers = modifiers,
-                initialTextSize = initialTextSize,
+                initialTextSize = textSizePx,
+                minimumTextSize = minimumTextSizePx,
+                maximumTextSize = maximumTextSizePx,
                 onTextSizeChanged = {
-                    preferences.edit().putInt(KEY_TEXT_SIZE_PX, it).apply()
+                    currentOnTypographyChanged(
+                        currentTypography.copy(
+                            textSizeSp = with(density) { it.toSp().value },
+                        ),
+                    )
                 },
             )
         }
     val terminalView =
-        remember {
+        remember(context) {
             TerminalView(context, null).apply {
                 setBackgroundColor(terminalBackground)
-                setTextSize(initialTextSize)
-                setTypeface(Typeface.MONOSPACE)
+                setTextAppearance(textSizePx, typeface, typography.lineSpacing)
                 isFocusable = true
                 isFocusableInTouchMode = true
                 setTerminalViewClient(client)
@@ -872,9 +881,16 @@ private fun LiveTerminal(
             }
         }
 
+    LaunchedEffect(terminalView, typeface, textSizePx, typography.lineSpacing, typography.cursorBlinkRateMs) {
+        client.updateTextSize(textSizePx)
+        terminalView.setTextAppearance(textSizePx, typeface, typography.lineSpacing)
+        client.updateCursorBlinkRate(typography.cursorBlinkRateMs)
+    }
+
     DisposableEffect(service, terminalView) {
         service.attachTerminalView(terminalView)
         onDispose {
+            client.stopCursorBlinking()
             service.detachTerminalView(terminalView)
         }
     }
@@ -980,17 +996,40 @@ private class UdroidTerminalViewClient(
     private val context: Context,
     private val modifiers: TerminalModifierState,
     initialTextSize: Int,
+    private val minimumTextSize: Float,
+    private val maximumTextSize: Float,
     private val onTextSizeChanged: (Int) -> Unit,
 ) : TerminalViewClient {
     private var terminalView: TerminalView? = null
     private var textSize = initialTextSize.toFloat()
+    private var cursorBlinkRate = 0
 
     fun attach(view: TerminalView) {
         terminalView = view
     }
 
+    fun updateTextSize(textSize: Int) {
+        this.textSize = textSize.toFloat()
+    }
+
+    fun updateCursorBlinkRate(rate: Int) {
+        cursorBlinkRate = rate
+        applyCursorBlinking()
+    }
+
+    fun stopCursorBlinking() {
+        terminalView?.setTerminalCursorBlinkerState(false, true)
+    }
+
+    private fun applyCursorBlinking() {
+        terminalView?.let { view ->
+            view.setTerminalCursorBlinkerRate(cursorBlinkRate)
+            view.setTerminalCursorBlinkerState(cursorBlinkRate > 0, true)
+        }
+    }
+
     override fun onScale(scale: Float): Float {
-        textSize = (textSize * scale).coerceIn(MIN_TEXT_SIZE_PX, MAX_TEXT_SIZE_PX)
+        textSize = (textSize * scale).coerceIn(minimumTextSize, maximumTextSize)
         val roundedTextSize = textSize.roundToInt()
         terminalView?.setTextSize(roundedTextSize)
         onTextSizeChanged(roundedTextSize)
@@ -1048,7 +1087,9 @@ private class UdroidTerminalViewClient(
         return false
     }
 
-    override fun onEmulatorSet() = Unit
+    override fun onEmulatorSet() {
+        applyCursorBlinking()
+    }
 
     override fun logError(
         tag: String,
@@ -1100,8 +1141,3 @@ private class UdroidTerminalViewClient(
         Log.e(tag, error.message, error)
     }
 }
-
-private const val TERMINAL_PREFERENCES = "terminal-view"
-private const val KEY_TEXT_SIZE_PX = "text-size-px"
-private const val MIN_TEXT_SIZE_PX = 20f
-private const val MAX_TEXT_SIZE_PX = 64f

@@ -121,6 +121,8 @@ import org.randomcoder.udroid.runtime.TerminalColorProfile
 import org.randomcoder.udroid.runtime.TerminalProfileState
 import org.randomcoder.udroid.runtime.TerminalProfileStore
 import org.randomcoder.udroid.runtime.TerminalProfiles
+import org.randomcoder.udroid.runtime.TerminalTypographyState
+import org.randomcoder.udroid.runtime.TerminalTypographyStore
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateState
@@ -250,8 +252,12 @@ fun UdroidApp(
 ) {
     val context = LocalContext.current
     val terminalProfileStore = remember(context) { TerminalProfileStore(context) }
+    val terminalTypographyStore = remember(context) { TerminalTypographyStore(context) }
     var terminalProfileState by remember(context) {
         mutableStateOf(terminalProfileStore.load())
+    }
+    var terminalTypographyState by remember(context) {
+        mutableStateOf(terminalTypographyStore.load())
     }
     var mountConfigurationSourceSystemId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedMountProfileSystemId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -291,6 +297,12 @@ fun UdroidApp(
             runtimeService?.updateTerminalAppearance(state.selectedProfile)
             onTerminalAppearanceChanged()
         }
+        fun applyTerminalTypography(state: TerminalTypographyState) {
+            val normalized = state.normalized()
+            terminalTypographyStore.save(normalized)
+            terminalTypographyState = normalized
+            runtimeService?.updateTerminalTypography(normalized)
+        }
         UdroidTerminalTheme(terminalProfileState.selectedProfile) {
             BackHandler {
                 onDestinationSelected(UdroidDestination.SYSTEM)
@@ -308,6 +320,7 @@ fun UdroidApp(
                     service = runtimeService,
                     installedRootfses = installedRootfses,
                     profileState = terminalProfileState,
+                    typographyState = terminalTypographyState,
                     onSelectProfile = { profileId ->
                         applyTerminalProfiles(terminalProfileState.copy(selectedProfileId = profileId))
                     },
@@ -330,6 +343,7 @@ fun UdroidApp(
                             ),
                         )
                     },
+                    onTypographyChanged = ::applyTerminalTypography,
                     onStart = onStart,
                     onStop = onStop,
                     onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
