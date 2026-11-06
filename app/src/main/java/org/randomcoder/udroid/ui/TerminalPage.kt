@@ -77,6 +77,7 @@ import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
+import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
@@ -141,13 +142,18 @@ fun InteractiveTerminalPage(
                 tabs = tabs,
                 onSelect = { id -> service?.selectTerminalTab(id) },
                 onRename = { tab -> renamingTab = tab },
-                onClose = { id -> service?.closeTerminalTab(id) },
+                onClose = { id ->
+                    if (service?.closeTerminalTab(id) != true) {
+                        tabError = "Could not close terminal"
+                    }
+                },
                 creatingTab = creatingTab,
                 onClone = { createTab(activeTab?.rootfsName) },
             )
         }
 
-        tabError?.let { message ->
+        val closeError = tabs.firstOrNull { it.closeState == TerminalTabCloseState.FAILED }?.closeError
+        (tabError ?: closeError)?.let { message ->
             Text(
                 text = message,
                 modifier =
@@ -219,7 +225,10 @@ private fun TerminalSessionBar(
     onChooseDistro: () -> Unit,
     onStop: () -> Unit,
 ) {
-    val running = session?.isRunning == true && !stopping
+    val tabClosing =
+        activeTab?.closeState == TerminalTabCloseState.CLOSING ||
+            activeTab?.closeState == TerminalTabCloseState.FORCE_CLOSING
+    val running = session?.isRunning == true && !stopping && !tabClosing
     Row(
         modifier =
             Modifier
@@ -267,6 +276,12 @@ private fun TerminalSessionBar(
                     Text(
                         when {
                             stopping -> "Stopping terminal…"
+                            activeTab?.closeState == TerminalTabCloseState.CLOSING ->
+                                "Closing terminal…"
+                            activeTab?.closeState == TerminalTabCloseState.FORCE_CLOSING ->
+                                "Force closing terminal…"
+                            activeTab?.closeState == TerminalTabCloseState.FAILED ->
+                                activeTab.closeError ?: "Could not close terminal"
                             running ->
                                 "root  •  ${Build.SUPPORTED_ABIS.firstOrNull().orEmpty()}" +
                                     "  •  PID ${session?.pid}"
@@ -361,6 +376,7 @@ private fun TerminalTabsRow(
                     onSelect = { onSelect(tab.id) },
                     onRename = { onRename(tab) },
                     onClose = { onClose(tab.id) },
+                    stopsLinux = tabs.size == 1,
                 )
             }
         }
@@ -402,14 +418,18 @@ private fun TerminalTabChip(
     onSelect: () -> Unit,
     onRename: () -> Unit,
     onClose: () -> Unit,
+    stopsLinux: Boolean,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val closing =
+        tab.closeState == TerminalTabCloseState.CLOSING ||
+            tab.closeState == TerminalTabCloseState.FORCE_CLOSING
     Surface(
         modifier =
             modifier
                 .width(144.dp)
                 .height(46.dp)
-                .clickable(onClick = onSelect),
+                .clickable(enabled = !closing, onClick = onSelect),
         color = if (tab.active) UdroidTerminal else UdroidTerminalRaised,
         shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
         border =
@@ -423,54 +443,88 @@ private fun TerminalTabChip(
             modifier = Modifier.padding(start = 10.dp, end = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Terminal,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = if (tab.active) UdroidTerminalGreen else UdroidTerminalMuted,
-            )
+            if (closing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = UdroidTerminalGreen,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Terminal,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint =
+                        if (tab.closeState == TerminalTabCloseState.FAILED) {
+                            MaterialTheme.colorScheme.error
+                        } else if (tab.active) {
+                            UdroidTerminalGreen
+                        } else {
+                            UdroidTerminalMuted
+                        },
+                )
+            }
             Spacer(Modifier.width(7.dp))
             Text(
-                text = tab.title,
+                text =
+                    when (tab.closeState) {
+                        TerminalTabCloseState.CLOSING -> "${tab.title} · closing"
+                        TerminalTabCloseState.FORCE_CLOSING -> "${tab.title} · force closing"
+                        TerminalTabCloseState.FAILED -> "${tab.title} · close failed"
+                        TerminalTabCloseState.OPEN -> tab.title
+                    },
                 modifier = Modifier.weight(1f),
                 color = if (tab.active) UdroidTerminalText else UdroidTerminalMuted,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Box {
-                IconButton(
-                    modifier = Modifier.size(36.dp),
-                    onClick = { menuExpanded = true },
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.MoreVert,
-                        contentDescription = "${tab.title} settings",
-                        modifier = Modifier.size(18.dp),
-                        tint = UdroidTerminalMuted,
-                    )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Rename") },
-                        onClick = {
-                            menuExpanded = false
-                            onRename()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Close terminal") },
-                        leadingIcon = {
-                            Icon(Icons.Outlined.Close, contentDescription = null)
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onClose()
-                        },
-                    )
+            if (!closing) {
+                Box {
+                    IconButton(
+                        modifier = Modifier.size(36.dp),
+                        onClick = { menuExpanded = true },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.MoreVert,
+                            contentDescription = "${tab.title} settings",
+                            modifier = Modifier.size(18.dp),
+                            tint = UdroidTerminalMuted,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            onClick = {
+                                menuExpanded = false
+                                onRename()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    when {
+                                        tab.closeState == TerminalTabCloseState.FAILED -> "Retry close"
+                                        stopsLinux -> "Stop Linux"
+                                        else -> "Close tab"
+                                    },
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    if (stopsLinux) Icons.Filled.StopCircle else Icons.Outlined.Close,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onClose()
+                            },
+                        )
+                    }
                 }
             }
         }

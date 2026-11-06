@@ -74,6 +74,25 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `closing state prevents duplicate close and supports retry after failure`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+
+        assertEquals(TerminalTabCloseState.CLOSING, registry.beginClose("one")?.closeState)
+        assertNull(registry.beginClose("one"))
+        assertEquals(
+            TerminalTabCloseState.FORCE_CLOSING,
+            registry.markForceClosing("one")?.closeState,
+        )
+        assertEquals(
+            TerminalTabCloseState.FAILED,
+            registry.markCloseFailed("one", "Could not close")?.closeState,
+        )
+        assertEquals(TerminalTabCloseState.CLOSING, registry.beginClose("one")?.closeState)
+        assertNull(registry.get("one")?.closeError)
+    }
+
+    @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))

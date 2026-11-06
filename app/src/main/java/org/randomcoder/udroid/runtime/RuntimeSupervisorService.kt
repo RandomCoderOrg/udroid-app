@@ -61,7 +61,6 @@ class RuntimeSupervisorService : Service() {
     private val binder = RuntimeBinder()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val terminalTabs = TerminalTabRegistry<TerminalSession>()
-    private val closingTerminalIds = mutableSetOf<String>()
     private var nextTerminalNumber = 1
     private var terminalCreationInFlight = false
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
@@ -257,7 +256,6 @@ class RuntimeSupervisorService : Service() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
         terminalTabs.clear().forEach { it.value.finishIfRunning() }
-        closingTerminalIds.clear()
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
@@ -289,6 +287,8 @@ class RuntimeSupervisorService : Service() {
                 pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
                 running = tab.value.isRunning,
                 active = tab.id == terminalTabs.activeId,
+                closeState = tab.closeState,
+                closeError = tab.closeError,
             )
         }
 
@@ -375,6 +375,12 @@ class RuntimeSupervisorService : Service() {
     }
 
     fun selectTerminalTab(id: String): Boolean {
+        val requested = terminalTabs.get(id) ?: return false
+        if (requested.closeState == TerminalTabCloseState.CLOSING ||
+            requested.closeState == TerminalTabCloseState.FORCE_CLOSING
+        ) {
+            return false
+        }
         val tab = terminalTabs.select(id) ?: return false
         attachedViews.forEach { view ->
             if (view.mTermSession !== tab.value) view.attachSession(tab.value)
@@ -404,13 +410,14 @@ class RuntimeSupervisorService : Service() {
     }
 
     fun closeTerminalTab(id: String): Boolean {
-        val tab = terminalTabs.get(id) ?: return false
+        if (terminalTabs.get(id) == null) return false
         if (terminalTabs.size() == 1) {
             stopRuntime(userRequested = true)
             return true
         }
-        closingTerminalIds += id
-        terminateTerminalTab(tab)
+        val closingTab = terminalTabs.beginClose(id) ?: return false
+        publishTerminalCloseState("Closing ${closingTab.title}")
+        terminateTerminalTab(closingTab)
         return true
     }
 
@@ -1443,7 +1450,6 @@ class RuntimeSupervisorService : Service() {
             return
         }
         terminalTabs.clear().forEach { it.value.finishIfRunning() }
-        closingTerminalIds.clear()
         nextTerminalNumber = 1
 
         val bootId = UUID.randomUUID().toString()
@@ -1636,7 +1642,7 @@ class RuntimeSupervisorService : Service() {
 
     private fun handleSessionFinished(session: TerminalSession) {
         val tab = terminalTabs.findByValue(session) ?: return
-        val individuallyClosed = closingTerminalIds.remove(tab.id)
+        val individuallyClosed = tab.closeState != TerminalTabCloseState.OPEN
         terminalTabs.remove(tab.id)
         val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
@@ -1749,7 +1755,7 @@ class RuntimeSupervisorService : Service() {
             return
         }
         sessions.forEach { tab ->
-            closingTerminalIds += tab.id
+            terminalTabs.beginClose(tab.id)
             terminateTerminalTab(tab)
         }
     }
@@ -1771,28 +1777,61 @@ class RuntimeSupervisorService : Service() {
                 bootId = app.runtimeState.current().bootId,
                 fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
             )
+            forceCloseTerminalTab(tab, session)
+            return
         }
         mainHandler.postDelayed(
             {
                 if (terminalTabs.get(tab.id)?.value === session && session.isRunning) {
-                    app.journal.append(
-                        component = "supervisor",
-                        severity = "warning",
-                        event = "terminal_force_stop",
-                        message = "${tab.title} ignored SIGTERM; forcing it to stop",
-                        bootId = app.runtimeState.current().bootId,
-                        fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
-                    )
-                    session.finishIfRunning()
+                    forceCloseTerminalTab(tab, session)
                 }
             },
             GRACEFUL_STOP_TIMEOUT_MS,
         )
     }
 
+    private fun forceCloseTerminalTab(
+        tab: TerminalTab<TerminalSession>,
+        session: TerminalSession,
+    ) {
+        if (terminalTabs.get(tab.id)?.value !== session || !session.isRunning) return
+        terminalTabs.markForceClosing(tab.id)
+        publishTerminalCloseState("${tab.title} did not close; forcing it to stop")
+        app.journal.append(
+            component = "supervisor",
+            severity = "warning",
+            event = "terminal_force_stop",
+            message = "${tab.title} did not exit after SIGTERM; forcing it to stop",
+            bootId = app.runtimeState.current().bootId,
+            fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
+        )
+        session.finishIfRunning()
+        mainHandler.postDelayed(
+            {
+                if (terminalTabs.get(tab.id)?.value === session && session.isRunning) {
+                    val message = "${tab.title} is still running after force stop"
+                    terminalTabs.markCloseFailed(tab.id, message)
+                    publishTerminalCloseState(message)
+                    app.journal.append(
+                        component = "supervisor",
+                        severity = "error",
+                        event = "terminal_stop_failed",
+                        message = message,
+                        bootId = app.runtimeState.current().bootId,
+                        fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
+                    )
+                }
+            },
+            FORCE_STOP_TIMEOUT_MS,
+        )
+    }
+
+    private fun publishTerminalCloseState(message: String) {
+        publishState(app.runtimeState.update { it.copy(message = message) })
+    }
+
     private fun publishStoppedState() {
         terminalTabs.clear()
-        closingTerminalIds.clear()
         val stopped =
             app.runtimeState.update {
                 it.copy(
@@ -2044,6 +2083,7 @@ class RuntimeSupervisorService : Service() {
         private const val NOTIFICATION_CHANNEL = "runtime-supervisor"
         private const val NOTIFICATION_ID = 1001
         private const val GRACEFUL_STOP_TIMEOUT_MS = 3_000L
+        private const val FORCE_STOP_TIMEOUT_MS = 3_000L
         private const val TRANSCRIPT_ROWS = 8_000
         private const val DEFAULT_COLUMNS = 80
         private const val DEFAULT_ROWS = 24

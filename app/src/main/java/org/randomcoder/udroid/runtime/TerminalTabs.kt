@@ -7,7 +7,16 @@ data class TerminalTabSnapshot(
     val pid: Long?,
     val running: Boolean,
     val active: Boolean,
+    val closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
+    val closeError: String? = null,
 )
+
+enum class TerminalTabCloseState {
+    OPEN,
+    CLOSING,
+    FORCE_CLOSING,
+    FAILED,
+}
 
 fun terminalDistroTitle(rawName: String?): String =
     when {
@@ -29,6 +38,8 @@ internal data class TerminalTab<T>(
     var title: String,
     val rootfsName: String,
     val value: T,
+    var closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
+    var closeError: String? = null,
 )
 
 internal class TerminalTabRegistry<T> {
@@ -67,6 +78,33 @@ internal class TerminalTabRegistry<T> {
         tab.title = title
         return tab
     }
+
+    fun beginClose(id: String): TerminalTab<T>? {
+        val tab = tabs[id] ?: return null
+        if (tab.closeState == TerminalTabCloseState.CLOSING ||
+            tab.closeState == TerminalTabCloseState.FORCE_CLOSING
+        ) {
+            return null
+        }
+        tab.closeState = TerminalTabCloseState.CLOSING
+        tab.closeError = null
+        return tab
+    }
+
+    fun markForceClosing(id: String): TerminalTab<T>? =
+        tabs[id]?.also {
+            it.closeState = TerminalTabCloseState.FORCE_CLOSING
+            it.closeError = null
+        }
+
+    fun markCloseFailed(
+        id: String,
+        message: String,
+    ): TerminalTab<T>? =
+        tabs[id]?.also {
+            it.closeState = TerminalTabCloseState.FAILED
+            it.closeError = message
+        }
 
     fun remove(id: String): TerminalTab<T>? {
         val index = tabs.keys.indexOf(id)
