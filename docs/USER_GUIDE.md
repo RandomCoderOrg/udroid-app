@@ -218,6 +218,23 @@ terminal, app, and desktop launches. Restart Linux when an existing terminal
 needs the new values. **Reset** restores uDroid-managed values without removing
 your custom variables.
 
+Advanced users can add global PRoot arguments in
+`/storage/emulated/0/udroid-launch-flags.txt`. Put one complete argument on each
+line; blank lines and lines beginning with `#` are ignored. Options with a value
+use two lines, for example:
+
+```text
+-b
+/storage/emulated/0/Projects:/mnt/projects
+```
+
+The file is read again for every terminal, desktop, and Linux app launch. It
+requires Android storage access. Arguments are passed to PRoot without policy
+restrictions after uDroid's own PRoot options, so duplicate options can override
+uDroid defaults and invalid arguments can break the complete launch command.
+Keep the file under your control because another app with all-files access
+could edit it.
+
 ## Reset or delete a system
 
 Stop its terminal and desktop first.

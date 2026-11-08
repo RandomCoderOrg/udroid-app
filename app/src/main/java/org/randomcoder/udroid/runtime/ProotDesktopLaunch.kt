@@ -35,6 +35,7 @@ object ProotDesktopLaunchBuilder {
             )
         val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
         val compatibility = ProotCompatibilityConfigurationStore(context).load(rootfs.name)
+        val additionalProotArguments = ProotLaunchFlags.load()
         val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
         val managedEnvironment =
             ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
@@ -49,6 +50,7 @@ object ProotDesktopLaunchBuilder {
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
                 compatibility = compatibility,
+                additionalProotArguments = additionalProotArguments,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
                 managedEnvironment = managedEnvironment,
@@ -94,6 +96,7 @@ object ProotDesktopLaunchBuilder {
         audioAuthDirectory: String? = null,
         launchProfile: ProotLaunchProfile? = null,
         compatibility: ProotCompatibilityConfiguration = ProotCompatibilityConfiguration(),
+        additionalProotArguments: List<String> = emptyList(),
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
@@ -109,6 +112,7 @@ object ProotDesktopLaunchBuilder {
             addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
             add("--cwd=$guestHome")
+            addAll(additionalProotArguments)
             add("/usr/bin/env")
             add("-i")
             add("HOME=$guestHome")
