@@ -45,6 +45,109 @@ The terminal stays alive when you move between uDroid pages. Use **Stop** on the
 system page when you want to end Linux or change settings that require it to be
 stopped.
 
+### Terminal colors
+
+Select the palette button in **Terminal** to open **Terminal appearance**, then
+choose **Colors**. You can choose a built-in profile, create one, or customize
+a built-in profile as an editable copy. Changes apply to the running terminal
+and are kept for new terminal sessions. Built-in choices include uDroid,
+Breeze, Solarized,
+Dracula, Catppuccin Mocha, Gruvbox Dark, Nord, Tokyo Night, Rosé Pine, and
+Ubuntu.
+
+**Import** accepts these common palette formats:
+
+- Termux `colors.properties` files with `background`, `foreground`, optional
+  `cursor`, and `color0` through `color15`.
+- Ghostty theme files with `background`, `foreground`, optional `cursor-color`,
+  and `palette = 0` through `palette = 15` entries.
+- iTerm2 `.itermcolors` files.
+
+The foreground, background, and all 16 ANSI colors must be present. If the
+cursor color is omitted, uDroid uses the foreground color. Other settings in a
+theme file—such as fonts, key bindings, commands, or window options—are ignored
+and never executed. Imported files must be no larger than 1 MiB. The imported
+palette becomes an editable custom profile and is selected immediately.
+
+**Export selected** always writes a Termux-compatible `colors.properties`
+file. Export a built-in profile first if you want a known-good template to edit
+or share.
+
+You can find compatible palettes here:
+
+- [Termux:Styling colors](https://github.com/termux/termux-styling/tree/master/app/src/main/assets/colors)
+  are ready-to-import `colors.properties` files.
+- [iTerm2 Color Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes/releases)
+  publishes downloadable Termux, Ghostty, and iTerm2 theme archives.
+- [Ghostty themes](https://ghostty.org/docs/features/theme) explains Ghostty's
+  theme format and built-in theme collection.
+
+Base16 and Base24 scheme files are not imported directly. Use a Termux,
+Ghostty, or iTerm2 version of the scheme instead. Programs may temporarily
+change colors in their own terminal session; the saved profile remains the
+base appearance for the next session.
+
+### Terminal font and text
+
+Open **Terminal appearance**, then **Font & text**, to change the terminal font,
+text size, line height, cursor shape, and cursor blinking. The preview shows the
+selected settings before you return to the terminal. Pinch inside the terminal
+to change the same saved text-size setting.
+
+The app includes JetBrains Mono, Fira Code, and Source Code Pro. You can also
+import a `.ttf` or `.otf` font from **Fonts**.
+
+**Import font** accepts one or more TTF and OTF files up to 16 MiB each. uDroid
+uses the name stored inside each font, validates it, and copies it into the
+app's private storage. Moving or deleting the original download does not remove
+it from the terminal. Use a monospaced font to keep columns and terminal
+interfaces aligned. Imported fonts can be removed from the font list; **Reset
+font & text** selects Android's system monospace and restores the other defaults
+without deleting imported fonts.
+
+[Google Fonts](https://fonts.google.com/?categoryFilters=Appearance:%2FMonospace%2FMonospace)
+provides downloadable monospaced fonts. Check a font's license before sharing
+or redistributing its file.
+
+### Terminal OSC compatibility
+
+Terminal programs use Operating System Command (OSC) sequences to communicate
+with the terminal outside the normal text grid. uDroid currently supports:
+
+| Sequence | Support | uDroid behavior |
+| --- | --- | --- |
+| OSC 0, 1, 2 | Supported | Sets the shell title. A manually renamed tab keeps its name until **Follow shell title** is selected. |
+| OSC 4 | Supported | Changes indexed terminal colors for the current session. |
+| OSC 10, 11, 12 | Supported | Changes the current foreground, background, and cursor colors. |
+| OSC 52 | Write only | Copies Base64-encoded text from a terminal program to the Android clipboard. |
+| OSC 104, 110, 111, 112 | Supported | Resets indexed colors, foreground, background, or cursor color. |
+| OSC 133 A/B/C/D | Bash, Zsh, and Fish | Tracks whether the foreground command is running so uDroid can warn before closing its tab. |
+| OSC 7 | Bash, Zsh, and Fish | Tracks the guest working directory so a new tab for the same Linux system opens in the current directory. |
+| OSC 8 | Supported | Underlines hyperlinks and offers **Open** or **Copy** when selected. |
+| OSC 9, 777 | Not supported | Terminal programs cannot create Android notifications. |
+| OSC 9;4 | Not supported | Terminal progress is not shown in the Android UI. |
+| OSC 1337 images | Not supported | Inline image rendering is not implemented by the embedded Termux terminal. |
+
+Supported OSC sequences may end with either BEL or ST. OSC 133 command
+tracking is automatically configured for interactive Bash, Zsh, and Fish
+shells. OSC 7 working-directory tracking is configured for the same shells and
+accepts local `file://` and `kitty-shell-cwd://` URIs. Remote hosts, unsafe
+paths, and directories that no longer exist fall back to the Linux home
+directory. A newly installed Zsh or Fish is detected when the next uDroid
+terminal starts. Tracking cannot detect background jobs after the prompt
+returns, and a prompt framework that replaces the shell's registered hooks may
+disable it.
+The exit status carried by OSC 133 D is accepted but is not shown or saved.
+
+OSC 52 lets command output replace the Android clipboard, so run untrusted
+terminal programs with the same care as programs that can print arbitrary
+terminal control sequences. OSC 8 opens only `http`, `https`, and `mailto`
+links after confirmation; other link types can still be copied. See the
+[xterm control-sequence reference](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)
+for title, color, and clipboard sequences, and
+[VS Code shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)
+for the OSC 133 A/B/C/D protocol used by the Bash integration.
+
 ### Desktop
 
 uDroid can start X11 desktop sessions installed inside Linux.
@@ -145,6 +248,10 @@ Open **File access** to choose which Android and system paths Linux can see.
 Internal shared storage can be exposed at `/mnt/shared`. Custom mounts are for
 other Android paths the app can read.
 
+Android's Files app also lists each installed Linux system as a read-only
+location. Use it to browse or open Linux files without sharing the whole
+filesystem with Android apps; file changes still belong in Linux.
+
 Stop Linux before changing mounts. Session mounts used by the display, audio,
 or graphics features are added automatically only when those features need
 them.
@@ -153,6 +260,23 @@ Open **Environment variables** to view or change the values used by new
 terminal, app, and desktop launches. Restart Linux when an existing terminal
 needs the new values. **Reset** restores uDroid-managed values without removing
 your custom variables.
+
+Advanced users can add global PRoot arguments in
+`/storage/emulated/0/udroid-launch-flags.txt`. Put one complete argument on each
+line; blank lines and lines beginning with `#` are ignored. Options with a value
+use two lines, for example:
+
+```text
+-b
+/storage/emulated/0/Projects:/mnt/projects
+```
+
+The file is read again for every terminal, desktop, and Linux app launch. It
+requires Android storage access. Arguments are passed to PRoot without policy
+restrictions after uDroid's own PRoot options, so duplicate options can override
+uDroid defaults and invalid arguments can break the complete launch command.
+Keep the file under your control because another app with all-files access
+could edit it.
 
 ## Reset or delete a system
 

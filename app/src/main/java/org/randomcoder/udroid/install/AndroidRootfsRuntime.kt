@@ -21,7 +21,16 @@ import java.io.InterruptedIOException
 import java.io.InputStreamReader
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import kotlin.math.max
@@ -308,25 +317,33 @@ class ProotTarExtractor(
 
 class AndroidRootfsConfigurator : RootfsConfigurator {
     override fun configure(rootfs: File) {
+        val writer = RootfsWriter(rootfs.toPath())
         listOf("dev", "dev/shm", "proc", "sys", "tmp", "etc", "etc/profile.d").forEach {
-            check(File(rootfs, it).mkdirs() || File(rootfs, it).isDirectory) {
-                "Could not prepare /$it"
-            }
+            writer.ensureDirectory(it)
         }
-        replaceFile(
-            File(rootfs, "etc/hosts"),
+        writer.replaceFile(
+            "etc/hosts",
             """
             127.0.0.1 localhost
             127.0.0.1 localhost.localdomain
             ::1 localhost ip6-localhost ip6-loopback
             """.trimIndent() + "\n",
         )
-        replaceFile(
-            File(rootfs, "etc/resolv.conf"),
+        writer.replaceFile(
+            "etc/resolv.conf",
             "nameserver 1.1.1.1\nnameserver 8.8.8.8\n",
         )
-        replaceFile(
-            File(rootfs, "etc/profile.d/udroid.sh"),
+        configureShellProfile(rootfs)
+        appendAndroidGroups(writer)
+        writer.makeExecutableIfRegular("usr/bin/sudo")
+    }
+
+    fun configureShellProfile(rootfs: File) {
+        val writer = RootfsWriter(rootfs.toPath())
+        writer.ensureDirectory("etc/profile.d")
+        writer.ensureDirectory("etc/udroid/shell-integration")
+        writer.replaceFile(
+            "etc/profile.d/udroid.sh",
             """
             export ANDROID_ART_ROOT=${'$'}{ANDROID_ART_ROOT-}
             export ANDROID_DATA=${'$'}{ANDROID_DATA-}
@@ -339,15 +356,140 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
             export PULSE_SERVER=127.0.0.1
             export TERM=${'$'}{TERM-xterm-256color}
             export TMPDIR=/tmp
+
+            if [ -n "${'$'}{BASH_VERSION-}" ] && [ -r /etc/udroid/shell-integration/udroid.bash ]; then
+                . /etc/udroid/shell-integration/udroid.bash
+            fi
             """.trimIndent() + "\n",
             executable = true,
         )
-        appendAndroidGroups(File(rootfs, "etc/group"))
-        File(rootfs, "usr/bin/sudo").takeIf(File::exists)?.setExecutable(true, false)
+        writer.replaceFile(
+            "etc/udroid/shell-integration/udroid.bash",
+            """
+            case ${'$'}- in
+                *i*) ;;
+                *) return ;;
+            esac
+            [ -z "${'$'}{UDROID_BASH_INTEGRATION-}" ] || return
+            UDROID_BASH_INTEGRATION=1
+
+            __udroid_prompt_end='\[\e]133;B\a\]'
+            __udroid_last_cwd=
+            __udroid_prompt_command() {
+                __udroid_status=${'$'}?
+                printf '\033]133;D;%s\033\\\033]133;A\033\\' "${'$'}__udroid_status"
+                __udroid_cwd=${'$'}{PWD//[[:cntrl:]]/}
+                __udroid_cwd=${'$'}{__udroid_cwd//%/%25}
+                if [ "${'$'}__udroid_cwd" != "${'$'}__udroid_last_cwd" ]; then
+                    printf '\033]7;kitty-shell-cwd://localhost%s\033\\' "${'$'}__udroid_cwd"
+                    __udroid_last_cwd=${'$'}__udroid_cwd
+                fi
+                case ${'$'}PS1 in
+                    *"${'$'}__udroid_prompt_end"*) ;;
+                    *) PS1="${'$'}PS1${'$'}__udroid_prompt_end" ;;
+                esac
+            }
+            PS0="${'$'}{PS0-}"'\[\e]133;C\a\]'
+            case "${'$'}(declare -p PROMPT_COMMAND 2>/dev/null)" in
+                "declare -a"*) PROMPT_COMMAND+=(__udroid_prompt_command) ;;
+                *)
+                    if [ -n "${'$'}{PROMPT_COMMAND-}" ]; then
+                        PROMPT_COMMAND="${'$'}PROMPT_COMMAND;__udroid_prompt_command"
+                    else
+                        PROMPT_COMMAND=__udroid_prompt_command
+                    fi
+                    ;;
+            esac
+            """.trimIndent() + "\n",
+        )
+
+        if (listOf("bin/zsh", "usr/bin/zsh").any { File(rootfs, it).exists() }) {
+            writer.ensureDirectory("etc/zsh")
+            writer.replaceFile(
+                "etc/udroid/shell-integration/udroid.zsh",
+                """
+                [[ -o interactive ]] || return
+                [[ -z "${'$'}{UDROID_ZSH_INTEGRATION-}" ]] || return
+                typeset -g UDROID_ZSH_INTEGRATION=1
+                typeset -gi __udroid_command_running=0
+                typeset -g __udroid_last_cwd=
+                autoload -Uz add-zsh-hook
+
+                __udroid_report_cwd() {
+                    local cwd=${'$'}{PWD//[[:cntrl:]]/}
+                    cwd=${'$'}{cwd//%/%25}
+                    [[ "${'$'}cwd" == "${'$'}__udroid_last_cwd" ]] && return
+                    builtin print -n -- "\e]7;kitty-shell-cwd://localhost${'$'}cwd\e\\"
+                    __udroid_last_cwd=${'$'}cwd
+                }
+
+                __udroid_prompt_command() {
+                    local command_status=${'$'}?
+                    if (( __udroid_command_running )); then
+                        builtin print -n -- "\e]133;D;${'$'}command_status\a"
+                    fi
+                    builtin print -n -- "\e]133;A\a"
+                    __udroid_command_running=0
+                    __udroid_report_cwd
+                }
+
+                __udroid_preexec() {
+                    builtin print -n -- "\e]133;B\a\e]133;C\a"
+                    __udroid_command_running=1
+                }
+
+                add-zsh-hook precmd __udroid_prompt_command
+                add-zsh-hook preexec __udroid_preexec
+                add-zsh-hook chpwd __udroid_report_cwd
+                """.trimIndent() + "\n",
+            )
+            writer.ensureLine(
+                "etc/zsh/zshrc",
+                "[[ -r /etc/udroid/shell-integration/udroid.zsh ]] && builtin source /etc/udroid/shell-integration/udroid.zsh",
+            )
+        }
+
+        if (listOf("bin/fish", "usr/bin/fish").any { File(rootfs, it).exists() }) {
+            writer.ensureDirectory("etc/fish/conf.d")
+            writer.replaceFile(
+                "etc/fish/conf.d/udroid.fish",
+                """
+                status is-interactive; or return
+                set -q UDROID_FISH_INTEGRATION; and return
+                set -g UDROID_FISH_INTEGRATION 1
+                set -g __udroid_command_running 0
+
+                function __udroid_report_cwd --on-variable PWD
+                    status is-command-substitution; and return
+                    printf '\e]7;file://localhost%s\a' (string escape --style=url ${'$'}PWD)
+                end
+
+                function __udroid_prompt_command --on-event fish_prompt
+                    if test "${'$'}__udroid_command_running" = 1
+                        printf '\e]133;D\a'
+                    end
+                    printf '\e]133;A\a'
+                    set -g __udroid_command_running 0
+                end
+
+                function __udroid_preexec --on-event fish_preexec
+                    printf '\e]133;B\a\e]133;C\a'
+                    set -g __udroid_command_running 1
+                end
+
+                function __udroid_postexec --on-event fish_postexec
+                    printf '\e]133;D;%s\a' ${'$'}status
+                    set -g __udroid_command_running 0
+                end
+
+                __udroid_report_cwd
+                """.trimIndent() + "\n",
+            )
+        }
     }
 
-    private fun appendAndroidGroups(groupFile: File) {
-        val existing = if (groupFile.isFile) groupFile.readLines() else emptyList()
+    private fun appendAndroidGroups(writer: RootfsWriter) {
+        val existing = writer.readText("etc/group")?.lines().orEmpty()
         val existingGids =
             existing.mapNotNull { line -> line.split(':').getOrNull(2)?.toIntOrNull() }.toSet()
         val gids =
@@ -363,32 +505,147 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                 ?.distinct()
                 .orEmpty()
         if (gids.isEmpty()) return
-        groupFile.parentFile?.mkdirs()
-        groupFile.appendText(
-            gids.joinToString(separator = "", transform = { "aid_$it:x:$it:root\n" }),
+        writer.replaceFile(
+            "etc/group",
+            buildString {
+                append(existing.joinToString("\n"))
+                if (isNotEmpty() && !endsWith('\n')) append('\n')
+                append(gids.joinToString(separator = "", transform = { "aid_$it:x:$it:root\n" }))
+            },
         )
     }
+}
 
-    private fun replaceFile(
-        target: File,
+private class RootfsWriter(rootfs: Path) {
+    private val root = rootfs.toAbsolutePath().normalize()
+
+    init {
+        require(Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(root)) {
+            "Rootfs is not a real directory: $root"
+        }
+    }
+
+    fun ensureDirectory(relative: String) {
+        var current = root
+        relativePath(relative).forEach { component ->
+            current = current.resolve(component)
+            if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
+                check(Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(current)) {
+                    "Rootfs path is not a real directory: $current"
+                }
+            } else {
+                Files.createDirectory(current)
+            }
+        }
+    }
+
+    fun readText(relative: String): String? {
+        val target = resolveExistingFile(relative) ?: return null
+        check(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(target)) {
+            "Rootfs path is not a regular file: $target"
+        }
+        return String(Files.readAllBytes(target), StandardCharsets.UTF_8)
+    }
+
+    fun ensureLine(
+        relative: String,
+        line: String,
+    ) {
+        val existing = readText(relative).orEmpty()
+        if (existing.lineSequence().any { it == line }) return
+        replaceFile(relative, existing + (if (existing.isEmpty() || existing.endsWith('\n')) "" else "\n") + line + "\n")
+    }
+
+    fun replaceFile(
+        relative: String,
         contents: String,
         executable: Boolean = false,
     ) {
-        target.parentFile?.mkdirs()
-        if (target.exists() || target.isSymbolicLink()) {
-            check(target.delete()) { "Could not replace ${target.path}" }
+        val target = resolveFile(relative)
+        val parent = checkNotNull(target.parent)
+        val existingPermissions =
+            target
+                .takeIf { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(it) }
+                ?.let { Files.getPosixFilePermissions(it, LinkOption.NOFOLLOW_LINKS) }
+                ?: DEFAULT_FILE_PERMISSIONS
+        val targetPermissions =
+            if (executable) existingPermissions + EXECUTE_PERMISSIONS else existingPermissions
+        val staging = Files.createTempFile(parent, ".udroid-", ".tmp")
+        try {
+            FileChannel.open(staging, StandardOpenOption.WRITE).use { channel ->
+                val bytes = contents.toByteArray()
+                var buffer = ByteBuffer.wrap(bytes)
+                while (buffer.hasRemaining()) channel.write(buffer)
+                channel.force(true)
+            }
+            Files.setPosixFilePermissions(staging, targetPermissions)
+            Files.move(
+                staging,
+                target,
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } finally {
+            Files.deleteIfExists(staging)
         }
-        FileOutputStream(target).use { output ->
-            output.write(contents.toByteArray())
-            output.fd.sync()
-        }
-        target.setReadable(true, false)
-        target.setWritable(true, true)
-        if (executable) target.setExecutable(true, false)
     }
 
-    private fun File.isSymbolicLink(): Boolean =
-        Files.isSymbolicLink(toPath())
+    fun makeExecutableIfRegular(relative: String) {
+        val target = resolveExistingFile(relative) ?: return
+        check(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(target)) {
+            "Rootfs path is not a regular file: $target"
+        }
+        Files.setPosixFilePermissions(
+            target,
+            Files.getPosixFilePermissions(target, LinkOption.NOFOLLOW_LINKS) + EXECUTE_PERMISSIONS,
+        )
+    }
+
+    private fun resolveFile(relative: String): Path {
+        val relativePath = relativePath(relative)
+        val parent = relativePath.parent?.toString().orEmpty()
+        if (parent.isNotEmpty()) ensureDirectory(parent)
+        return root.resolve(relativePath)
+    }
+
+    private fun resolveExistingFile(relative: String): Path? {
+        val relativePath = relativePath(relative)
+        var current = root
+        relativePath.forEachIndexed { index, component ->
+            current = current.resolve(component)
+            if (!Files.exists(current, LinkOption.NOFOLLOW_LINKS)) return null
+            if (index < relativePath.nameCount - 1) {
+                check(Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(current)) {
+                    "Rootfs path is not a real directory: $current"
+                }
+            }
+        }
+        return current
+    }
+
+    private fun relativePath(relative: String): Path {
+        val path = Paths.get(relative)
+        require(!path.isAbsolute && path.none { it.toString() == ".." }) {
+            "Rootfs path must stay relative: $relative"
+        }
+        return path.normalize()
+    }
+
+    private companion object {
+        val DEFAULT_FILE_PERMISSIONS =
+            setOf(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.OTHERS_READ,
+            )
+        val EXECUTE_PERMISSIONS =
+            setOf(
+                PosixFilePermission.OWNER_EXECUTE,
+                PosixFilePermission.GROUP_EXECUTE,
+                PosixFilePermission.OTHERS_EXECUTE,
+            )
+    }
 }
 
 class ProotRootfsHealthCheck(

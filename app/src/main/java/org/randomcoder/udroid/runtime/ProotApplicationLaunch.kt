@@ -42,6 +42,8 @@ object ProotApplicationLaunchBuilder {
                     ),
             )
         val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val compatibility = ProotCompatibilityConfigurationStore(context).load(rootfs.name)
+        val additionalProotArguments = ProotLaunchFlags.load()
         val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
         val managedEnvironment =
             ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
@@ -56,6 +58,8 @@ object ProotApplicationLaunchBuilder {
                     listOf(application.executable) + application.arguments,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
+                compatibility = compatibility,
+                additionalProotArguments = additionalProotArguments,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
                 managedEnvironment = managedEnvironment,
@@ -96,6 +100,8 @@ object ProotApplicationLaunchBuilder {
         applicationArguments: List<String>,
         audioAuthDirectory: String? = null,
         launchProfile: ProotLaunchProfile? = null,
+        compatibility: ProotCompatibilityConfiguration = ProotCompatibilityConfiguration(),
+        additionalProotArguments: List<String> = emptyList(),
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
@@ -107,10 +113,12 @@ object ProotApplicationLaunchBuilder {
             add("--link2symlink")
             add("--kill-on-exit")
             add("--root-id")
+            addProotCompatibilityOptions(compatibility)
             add("--rootfs=$rootfsPath")
             addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
             add("--cwd=$guestWorkingDirectory")
+            addAll(additionalProotArguments)
             add("/usr/bin/env")
             add("-i")
             add("HOME=$guestHome")

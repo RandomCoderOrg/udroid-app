@@ -2,6 +2,7 @@ package org.randomcoder.udroid.runtime
 
 import android.content.Context
 import org.randomcoder.udroid.UdroidApplication
+import org.randomcoder.udroid.filesystem.notifyRootfsDocumentsChanged
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
 import java.io.IOException
@@ -84,6 +85,7 @@ class InstalledRootfsRegistry(context: Context) {
                 "Failed to clear the active Linux system"
             }
         }
+        notifyRootfsDocumentsChanged(appContext)
     }
 
     private fun persistActive(name: String) {

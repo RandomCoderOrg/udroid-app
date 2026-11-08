@@ -92,6 +92,17 @@
                 android:resource="@xml/update_file_paths" />
         </provider>
 
+        <provider
+            android:name=".filesystem.RootfsDocumentsProvider"
+            android:authorities="${applicationId}.linux-files"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <service
             android:name=".runtime.RuntimeSupervisorService"
             android:description="@string/supervisor_description"

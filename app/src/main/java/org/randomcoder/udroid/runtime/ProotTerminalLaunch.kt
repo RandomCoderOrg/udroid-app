@@ -1,7 +1,9 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import android.util.Log
 import org.randomcoder.udroid.audio.AudioEndpoint
+import org.randomcoder.udroid.install.AndroidRootfsConfigurator
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
@@ -14,6 +16,7 @@ data class ProotTerminalLaunch(
     val environment: Array<String>,
     val rootfs: File,
     val mounts: List<ResolvedProotMount>,
+    val guestWorkingDirectory: String,
 )
 
 object InstalledRootfsResolver {
@@ -31,10 +34,15 @@ object ProotTerminalLaunchBuilder {
         x11SocketDirectory: File? = null,
         audioEndpoint: AudioEndpoint? = null,
         launchProfile: ProotLaunchProfile? = null,
+        requestedWorkingDirectory: String? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
         }
+        runCatching { AndroidRootfsConfigurator().configureShellProfile(rootfs) }
+            .onFailure { error ->
+                Log.w("uDroidTerminal", "Could not refresh guest shell integration", error)
+            }
         val linker = AndroidExecutableCommand.systemLinkerPath()
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {
@@ -63,9 +71,13 @@ object ProotTerminalLaunchBuilder {
                     ),
             )
         val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val compatibility = ProotCompatibilityConfigurationStore(context).load(rootfs.name)
+        val additionalProotArguments = ProotLaunchFlags.load()
         val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
         val managedEnvironment =
             ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
+        val guestWorkingDirectory =
+            resolveGuestWorkingDirectory(rootfs, mounts, requestedWorkingDirectory, guestHome)
 
         val arguments =
             buildArguments(
@@ -73,10 +85,13 @@ object ProotTerminalLaunchBuilder {
                 prootPath = runtime.executable.absolutePath,
                 rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                 guestHome = guestHome,
+                guestWorkingDirectory = guestWorkingDirectory,
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
+                compatibility = compatibility,
+                additionalProotArguments = additionalProotArguments,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
                 managedEnvironment = managedEnvironment,
@@ -95,6 +110,7 @@ object ProotTerminalLaunchBuilder {
             environment = environment,
             rootfs = rootfs,
             mounts = mounts,
+            guestWorkingDirectory = guestWorkingDirectory,
         )
     }
 
@@ -103,10 +119,13 @@ object ProotTerminalLaunchBuilder {
         prootPath: String,
         rootfsPath: String,
         guestHome: String,
+        guestWorkingDirectory: String = guestHome,
         guestShell: String,
         x11SocketDirectory: String? = null,
         audioAuthDirectory: String? = null,
         launchProfile: ProotLaunchProfile? = null,
+        compatibility: ProotCompatibilityConfiguration = ProotCompatibilityConfiguration(),
+        additionalProotArguments: List<String> = emptyList(),
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
@@ -119,10 +138,12 @@ object ProotTerminalLaunchBuilder {
             add("--link2symlink")
             add("--kill-on-exit")
             add("--root-id")
+            addProotCompatibilityOptions(compatibility)
             add("--rootfs=$rootfsPath")
             addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
-            add("--cwd=$guestHome")
+            add("--cwd=$guestWorkingDirectory")
+            addAll(additionalProotArguments)
             add("/usr/bin/env")
             add("-i")
             add("HOME=$guestHome")
@@ -169,4 +190,37 @@ object ProotTerminalLaunchBuilder {
                     candidate.isFile || Files.isSymbolicLink(candidate.toPath())
                 }
             }
+
+    internal fun resolveGuestWorkingDirectory(
+        rootfs: File,
+        mounts: List<ResolvedProotMount>,
+        requestedPath: String?,
+        fallback: String,
+    ): String {
+        if (requestedPath == null ||
+            requestedPath.length > 4096 ||
+            !requestedPath.startsWith('/') ||
+            requestedPath.any(Char::isISOControl) ||
+            requestedPath.split('/').any { it == "." || it == ".." }
+        ) {
+            return fallback
+        }
+        val mount =
+            mounts
+                .filter {
+                    requestedPath == it.guestTarget ||
+                        requestedPath.startsWith("${it.guestTarget.trimEnd('/')}/")
+                }
+                .maxByOrNull { it.guestTarget.length }
+        val hostPath =
+            if (mount == null) {
+                File(rootfs, requestedPath.removePrefix("/"))
+            } else {
+                File(
+                    mount.hostSource,
+                    requestedPath.removePrefix(mount.guestTarget).removePrefix("/"),
+                )
+            }
+        return requestedPath.takeIf { hostPath.isDirectory } ?: fallback
+    }
 }

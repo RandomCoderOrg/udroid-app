@@ -13,9 +13,15 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import org.randomcoder.udroid.runtime.TerminalColorProfile
+import org.randomcoder.udroid.runtime.TerminalProfiles
 
 private val UdroidLightColors =
     lightColorScheme(
@@ -128,14 +134,77 @@ val UdroidWarning: Color
 val UdroidWarningSurface: Color
     @Composable get() = if (isSystemInDarkTheme()) Color(0xFF3B2F00) else Color(0xFFFFE08B)
 
+private data class TerminalPalette(
+    val background: Color,
+    val surface: Color,
+    val raised: Color,
+    val line: Color,
+    val foreground: Color,
+    val muted: Color,
+    val accent: Color,
+    val accentContainer: Color,
+    val onAccent: Color,
+    val error: Color,
+    val onError: Color,
+    val errorContainer: Color,
+    val onErrorContainer: Color,
+)
+
+private fun terminalPalette(profile: TerminalColorProfile): TerminalPalette {
+    val background = Color(profile.background)
+    val foreground = Color(profile.foreground)
+    val accent = Color(profile.cursor)
+    val lightBackground = background.luminance() >= 0.5f
+    val onAccent =
+        if (contrastRatio(foreground, accent) >= contrastRatio(background, accent)) {
+            foreground
+        } else {
+            background
+        }
+    return TerminalPalette(
+        background = background,
+        surface = lerp(background, foreground, 0.06f),
+        raised = lerp(background, foreground, 0.12f),
+        line = lerp(background, foreground, 0.18f),
+        foreground = foreground,
+        muted = lerp(background, foreground, 0.65f),
+        accent = accent,
+        accentContainer = lerp(background, accent, 0.28f),
+        onAccent = onAccent,
+        error = if (lightBackground) Color(0xFFBA1A1A) else Color(0xFFFFB4AB),
+        onError = if (lightBackground) Color.White else Color(0xFF690005),
+        errorContainer = if (lightBackground) Color(0xFFFFDAD6) else Color(0xFF93000A),
+        onErrorContainer = if (lightBackground) Color(0xFF93000A) else Color(0xFFFFDAD6),
+    )
+}
+
+private fun contrastRatio(
+    first: Color,
+    second: Color,
+): Float {
+    val lighter = maxOf(first.luminance(), second.luminance())
+    val darker = minOf(first.luminance(), second.luminance())
+    return (lighter + 0.05f) / (darker + 0.05f)
+}
+
+private val LocalTerminalPalette =
+    staticCompositionLocalOf { terminalPalette(TerminalProfiles.udroid) }
+
 // Terminal workspace: the management shell gives way to a focused instrument.
-val UdroidTerminal = Color(0xFF11131F)
-val UdroidTerminalSurface = Color(0xFF181B2A)
-val UdroidTerminalRaised = Color(0xFF222638)
-val UdroidTerminalLine = Color(0xFF2C3145)
-val UdroidTerminalText = Color(0xFFE3E7EF)
-val UdroidTerminalMuted = Color(0xFF9AA2B5)
-val UdroidTerminalGreen = Color(0xFF43D292)
+val UdroidTerminal: Color
+    @Composable get() = LocalTerminalPalette.current.background
+val UdroidTerminalSurface: Color
+    @Composable get() = LocalTerminalPalette.current.surface
+val UdroidTerminalRaised: Color
+    @Composable get() = LocalTerminalPalette.current.raised
+val UdroidTerminalLine: Color
+    @Composable get() = LocalTerminalPalette.current.line
+val UdroidTerminalText: Color
+    @Composable get() = LocalTerminalPalette.current.foreground
+val UdroidTerminalMuted: Color
+    @Composable get() = LocalTerminalPalette.current.muted
+val UdroidTerminalGreen: Color
+    @Composable get() = LocalTerminalPalette.current.accent
 
 object UdroidSpacing {
     val unit = 4
@@ -186,25 +255,42 @@ fun UdroidTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun UdroidTerminalTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme =
-            darkColorScheme(
-                primary = UdroidTerminalGreen,
-                onPrimary = Color(0xFF052116),
-                primaryContainer = Color(0xFF164A39),
-                onPrimaryContainer = UdroidTerminalText,
-                surface = UdroidTerminalSurface,
-                surfaceVariant = UdroidTerminalRaised,
-                onSurface = UdroidTerminalText,
-                onSurfaceVariant = UdroidTerminalMuted,
-                background = UdroidTerminal,
-                onBackground = UdroidTerminalText,
-                outline = UdroidTerminalLine,
-                error = Color(0xFFFFB4AB),
-            ),
-        typography = Typography(),
-        shapes = UdroidShapes,
-        content = content,
-    )
+fun UdroidTerminalTheme(
+    profile: TerminalColorProfile = TerminalProfiles.udroid,
+    content: @Composable () -> Unit,
+) {
+    val palette = terminalPalette(profile)
+    CompositionLocalProvider(LocalTerminalPalette provides palette) {
+        MaterialTheme(
+            colorScheme =
+                darkColorScheme(
+                    primary = palette.accent,
+                    onPrimary = palette.onAccent,
+                    primaryContainer = palette.accentContainer,
+                    onPrimaryContainer = palette.foreground,
+                    surface = palette.surface,
+                    surfaceVariant = palette.raised,
+                    onSurface = palette.foreground,
+                    onSurfaceVariant = palette.muted,
+                    background = palette.background,
+                    onBackground = palette.foreground,
+                    surfaceDim = palette.background,
+                    surfaceBright = palette.raised,
+                    surfaceContainerLowest = palette.background,
+                    surfaceContainerLow = palette.surface,
+                    surfaceContainer = palette.surface,
+                    surfaceContainerHigh = palette.raised,
+                    surfaceContainerHighest = palette.raised,
+                    outline = palette.line,
+                    outlineVariant = palette.line,
+                    error = palette.error,
+                    onError = palette.onError,
+                    errorContainer = palette.errorContainer,
+                    onErrorContainer = palette.onErrorContainer,
+                ),
+            typography = Typography(),
+            shapes = UdroidShapes,
+            content = content,
+        )
+    }
 }

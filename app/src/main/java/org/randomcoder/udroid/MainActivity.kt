@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.ProotCompatibilityConfigurationStore
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileValidator
@@ -67,12 +69,13 @@ import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.RootfsStorageUsage
+import org.randomcoder.udroid.runtime.TerminalProfileStore
+import org.randomcoder.udroid.runtime.TerminalProfiles
 import org.randomcoder.udroid.runtime.VirglServerMode
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDarkCanvas
 import org.randomcoder.udroid.ui.UdroidDestination
-import org.randomcoder.udroid.ui.UdroidTerminal
 import org.randomcoder.udroid.ui.UdroidTheme
 import org.randomcoder.udroid.ui.workspaceJourney
 import org.randomcoder.udroid.update.AppUpdateContract
@@ -206,7 +209,11 @@ class MainActivity : ComponentActivity() {
                 context: Context?,
                 intent: Intent?,
             ) {
-                refreshFromDisk()
+                if (intent?.action == RuntimeSupervisorService.ACTION_TERMINAL_TABS_CHANGED) {
+                    snapshot = snapshot.copy(updatedAtEpochMs = System.currentTimeMillis())
+                } else {
+                    refreshFromDisk()
+                }
             }
         }
 
@@ -244,6 +251,9 @@ class MainActivity : ComponentActivity() {
                     linuxApplicationMessage = linuxApplicationMessage,
                     showInstallTerminal = showInstallTerminal,
                     runtimeService = runtimeService,
+                    onTerminalAppearanceChanged = {
+                        applySystemBars(UdroidDestination.TERMINAL)
+                    },
                     onDestinationSelected = ::selectDestination,
                     onPrimaryDestinationSelected = ::selectPrimaryDestination,
                     onStart = {
@@ -344,6 +354,7 @@ class MainActivity : ComponentActivity() {
             stateReceiver,
             IntentFilter().apply {
                 addAction(RuntimeSupervisorService.ACTION_STATE_CHANGED)
+                addAction(RuntimeSupervisorService.ACTION_TERMINAL_TABS_CHANGED)
                 addAction(InstallerService.ACTION_STATE_CHANGED)
                 addAction(AppUpdateContract.ACTION_STATE_CHANGED)
             },
@@ -395,19 +406,30 @@ class MainActivity : ComponentActivity() {
         val terminal =
             destination == UdroidDestination.TERMINAL ||
                 destination == UdroidDestination.DESKTOP
-        val terminalScrim = UdroidTerminal.toArgb()
+        val terminalScrim =
+            if (destination == UdroidDestination.TERMINAL) {
+                TerminalProfileStore(this).load().selectedProfile.background
+            } else {
+                TerminalProfiles.udroid.background
+            }
+        val terminalStyle =
+            if (ColorUtils.calculateLuminance(terminalScrim) < 0.5) {
+                SystemBarStyle.dark(terminalScrim)
+            } else {
+                SystemBarStyle.light(terminalScrim, TerminalProfiles.udroid.background)
+            }
         val lightScrim = UdroidCanvas.toArgb()
         val darkScrim = UdroidDarkCanvas.toArgb()
         enableEdgeToEdge(
             statusBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(terminalScrim)
+                    terminalStyle
                 } else {
                     SystemBarStyle.auto(lightScrim, darkScrim)
                 },
             navigationBarStyle =
                 if (terminal) {
-                    SystemBarStyle.dark(terminalScrim)
+                    terminalStyle
                 } else {
                     SystemBarStyle.auto(lightScrim, darkScrim)
                 },
@@ -868,6 +890,10 @@ class MainActivity : ComponentActivity() {
                 ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
 
             if (resetWork == null) {
+                runCatching {
+                    ProotCompatibilityConfigurationStore(this@MainActivity).remove(rootfsName)
+                }.exceptionOrNull()
+                    ?.let { cleanupWarnings += it.message ?: "PRoot compatibility settings" }
                 runCatching { ProotEnvironmentProfileStore(this@MainActivity).remove(rootfsName) }
                     .exceptionOrNull()
                     ?.let { cleanupWarnings += it.message ?: "environment profile" }

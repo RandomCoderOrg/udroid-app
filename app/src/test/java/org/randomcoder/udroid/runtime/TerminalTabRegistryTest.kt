@@ -52,6 +52,43 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `custom title overrides shell updates until automatic titles are restored`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+
+        registry.updateShellTitle("one", "root@localhost: ~")
+        assertEquals("root@localhost: ~", registry.get("one")?.title)
+
+        registry.rename("one", "Server")
+        registry.updateShellTitle("one", "htop")
+        assertEquals("Server", registry.get("one")?.title)
+
+        registry.followShellTitle("one")
+        assertEquals("htop", registry.get("one")?.title)
+    }
+
+    @Test
+    fun `empty shell title falls back to default title`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.updateShellTitle("one", "htop")
+
+        registry.updateShellTitle("one", null)
+
+        assertEquals("Terminal one", registry.get("one")?.title)
+    }
+
+    @Test
+    fun `terminal titles drop controls and remain bounded`() {
+        val title = "\u001B]0;\u202Eroot@localhost\n" + "x".repeat(50)
+
+        assertEquals(
+            " ]0;root@localhost".trim() + "x".repeat(23),
+            normalizeTerminalTitle(title),
+        )
+    }
+
+    @Test
     fun `removing last tab clears active id`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))
@@ -74,6 +111,50 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `closing state prevents duplicate close and supports retry after failure`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+
+        assertEquals(TerminalTabCloseState.CLOSING, registry.beginClose("one")?.closeState)
+        assertNull(registry.beginClose("one"))
+        assertEquals(
+            TerminalTabCloseState.FORCE_CLOSING,
+            registry.markForceClosing("one")?.closeState,
+        )
+        assertEquals(
+            TerminalTabCloseState.FAILED,
+            registry.markCloseFailed("one", "Could not close")?.closeState,
+        )
+        assertEquals(TerminalTabCloseState.CLOSING, registry.beginClose("one")?.closeState)
+        assertNull(registry.get("one")?.closeError)
+    }
+
+    @Test
+    fun `command state is isolated per tab and ignores duplicate markers`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+
+        assertEquals("one", registry.updateCommandRunning("one", true)?.id)
+        assertNull(registry.updateCommandRunning("one", true))
+        assertEquals(true, registry.get("one")?.commandRunning)
+        assertEquals(false, registry.get("two")?.commandRunning)
+        assertEquals(false, registry.updateCommandRunning("one", false)?.commandRunning)
+    }
+
+    @Test
+    fun `working directory is isolated per tab and ignores duplicate reports`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+
+        assertEquals("one", registry.updateWorkingDirectory("one", "/root/project")?.id)
+        assertNull(registry.updateWorkingDirectory("one", "/root/project"))
+        assertEquals("/root/project", registry.get("one")?.workingDirectory)
+        assertNull(registry.get("two")?.workingDirectory)
+    }
+
+    @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))
@@ -85,7 +166,7 @@ class TerminalTabRegistryTest {
     ) =
         TerminalTab(
             id = id,
-            title = "Terminal $id",
+            defaultTitle = "Terminal $id",
             rootfsName = rootfsName,
             value = Any(),
         )

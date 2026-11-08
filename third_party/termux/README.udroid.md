@@ -16,10 +16,12 @@ The upstream license record is retained next to this file.
   required by current Android build tools.
 - `terminal-emulator/src/main/jni/Android.mk` links `libtermux.so` with
   `-Wl,-z,max-page-size=16384`.
+- `TerminalRenderer` accepts a line-spacing multiplier, and
+  `TerminalView.setTextAppearance()` applies font, size, and line height with a
+  single PTY resize.
 
-No Java terminal behavior was changed. uDroid owns the
-`TerminalSessionClient`, `TerminalViewClient`, service lifecycle, PRoot launch
-vector, and Compose integration outside this directory.
+uDroid owns the `TerminalSessionClient`, `TerminalViewClient`, service
+lifecycle, PRoot launch vector, and Compose integration outside this directory.
 
 ## Reproducibility check
 

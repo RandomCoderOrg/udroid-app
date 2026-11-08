@@ -116,7 +116,11 @@ class ProotMountProfilesTest {
         Files.createSymbolicLink(directory.resolve("pci_devices").toPath(), victim.toPath())
 
         val mounts =
-            ProotMountResolver.prepareCompatibilityMounts(directory) { path ->
+            ProotMountResolver.prepareCompatibilityMounts(
+                directory = directory,
+                nowEpochSeconds = 1_234L,
+                cpuCount = 2,
+            ) { path ->
                 path == "/proc/version"
             }
 
@@ -127,12 +131,46 @@ class ProotMountProfilesTest {
         assertEquals("preserve", victim.readText())
         assertFalse(Files.isSymbolicLink(directory.resolve("pci_devices").toPath()))
         assertEquals(
+            "cpu  2 0 2 2 0 0 0 0 0 0\n" +
+                "cpu0 1 0 1 1 0 0 0 0 0 0\n" +
+                "cpu1 1 0 1 1 0 0 0 0 0 0\n" +
+                "btime 1234\n",
+            mounts.single { it.guestTarget == "/proc/stat" }.let {
+                java.io.File(it.hostSource).readText()
+            },
+        )
+        assertEquals(
+            "Inter-|   Receive                                                |  Transmit\n" +
+                " face |bytes    packets errs drop fifo frame compressed multicast|" +
+                "bytes    packets errs drop fifo colls carrier compressed\n",
+            mounts.single { it.guestTarget == "/proc/net" }
+                .let { java.io.File(it.hostSource, "dev").readText() },
+        )
+        assertEquals(
             "4096\n",
             mounts.single { it.guestTarget.endsWith("max_user_watches") }.let {
                 java.io.File(it.hostSource).readText()
             },
         )
+        assertEquals(
+            "nr_free_pages 0\npswpin 0\npswpout 0\n",
+            mounts.single { it.guestTarget == "/proc/vmstat" }
+                .let { java.io.File(it.hostSource).readText() },
+        )
         assertTrue(mounts.all { it.origin == "runtime:compatibility" })
+    }
+
+    @Test
+    fun `restricted system metric directories receive empty compatibility mounts`() {
+        val directory = Files.createTempDirectory("udroid-sysdata").toFile()
+
+        val mounts = ProotMountResolver.prepareSystemCompatibilityMounts(directory) { false }
+
+        assertEquals(
+            listOf("/sys/fs/selinux", "/sys/block", "/sys/class/power_supply"),
+            mounts.map(ResolvedProotMount::guestTarget),
+        )
+        assertTrue(mounts.all { java.io.File(it.hostSource).isDirectory })
     }
 
     @Test
