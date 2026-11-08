@@ -1,12 +1,15 @@
 package org.randomcoder.udroid.filesystem
 
+import android.content.Context
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsProvider
+import android.util.Log
 import org.randomcoder.udroid.R
+import org.randomcoder.udroid.install.InstalledRootfsSourceStore
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.InstalledRootfsRegistry
 import org.randomcoder.udroid.runtime.terminalDistroTitle
@@ -21,6 +24,7 @@ import java.util.Base64
 
 class RootfsDocumentsProvider : DocumentsProvider() {
     private val registry by lazy { InstalledRootfsRegistry(requireNotNull(context)) }
+    private val installSources by lazy { InstalledRootfsSourceStore(requireNotNull(context)) }
 
     override fun onCreate(): Boolean = true
 
@@ -30,7 +34,7 @@ class RootfsDocumentsProvider : DocumentsProvider() {
             cursor.newRow()
                 .add(DocumentsContract.Root.COLUMN_ROOT_ID, rootfs.name)
                 .add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, RootfsDocumentId.encode(rootfs.name, ""))
-                .add(DocumentsContract.Root.COLUMN_TITLE, terminalDistroTitle(rootfs.name))
+                .add(DocumentsContract.Root.COLUMN_TITLE, displayName(rootfs))
                 .add(DocumentsContract.Root.COLUMN_SUMMARY, "uDroid Linux file system")
                 .add(DocumentsContract.Root.COLUMN_ICON, rootfsIconResource(rootfs.name))
                 .add(DocumentsContract.Root.COLUMN_FLAGS, DocumentsContract.Root.FLAG_LOCAL_ONLY or DocumentsContract.Root.FLAG_SUPPORTS_IS_CHILD)
@@ -98,7 +102,7 @@ class RootfsDocumentsProvider : DocumentsProvider() {
             .add(DocumentsContract.Document.COLUMN_DOCUMENT_ID, RootfsDocumentId.encode(document.rootfs.name, document.relative))
             .add(
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                if (document.relative.isEmpty()) terminalDistroTitle(document.rootfs.name) else document.relative.substringAfterLast('/'),
+                if (document.relative.isEmpty()) displayName(document.rootfs) else document.relative.substringAfterLast('/'),
             )
             .add(DocumentsContract.Document.COLUMN_MIME_TYPE, if (directory) DocumentsContract.Document.MIME_TYPE_DIR else mimeType(document.path))
             .add(DocumentsContract.Document.COLUMN_FLAGS, 0)
@@ -119,6 +123,12 @@ class RootfsDocumentsProvider : DocumentsProvider() {
 
     private fun mimeType(path: Path): String =
         URLConnection.guessContentTypeFromName(path.fileName.toString()) ?: "application/octet-stream"
+
+    private fun displayName(rootfs: InstalledRootfs): String =
+        rootfsDisplayName(
+            rootfs.name,
+            runCatching { installSources.load(rootfs.name)?.displayName }.getOrNull(),
+        )
 
     private data class ResolvedDocument(
         val rootfs: InstalledRootfs,
@@ -144,6 +154,22 @@ class RootfsDocumentsProvider : DocumentsProvider() {
             DocumentsContract.Document.COLUMN_SIZE,
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
         )
+    }
+}
+
+internal fun rootfsDisplayName(
+    rootfsName: String,
+    installedDisplayName: String?,
+): String = installedDisplayName?.takeIf(String::isNotBlank) ?: terminalDistroTitle(rootfsName)
+
+internal fun notifyRootfsDocumentsChanged(context: Context) {
+    runCatching {
+        context.contentResolver.notifyChange(
+            DocumentsContract.buildRootsUri("${context.packageName}.linux-files"),
+            null,
+        )
+    }.onFailure { error ->
+        Log.w("uDroidFiles", "Could not notify Android Files about Linux systems", error)
     }
 }
 

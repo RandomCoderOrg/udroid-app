@@ -1084,6 +1084,7 @@ private fun TerminalProfileEditor(
     onSave: (TerminalColorProfile) -> Unit,
 ) {
     var profile by remember(initial.id) { mutableStateOf(initial) }
+    var profileName by remember(initial.id) { mutableStateOf(initial.name) }
     var selectedColor by remember { mutableIntStateOf(BACKGROUND_COLOR) }
     val color = profile.colorAt(selectedColor)
     var hexText by remember(selectedColor, color) { mutableStateOf(formatTerminalColor(color)) }
@@ -1101,8 +1102,8 @@ private fun TerminalProfileEditor(
         ) {
             item {
                 OutlinedTextField(
-                    value = profile.name,
-                    onValueChange = { profile = profile.copy(name = it.take(40)) },
+                    value = profileName,
+                    onValueChange = { profileName = it.take(40) },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Profile name") },
                     singleLine = true,
@@ -1164,8 +1165,8 @@ private fun TerminalProfileEditor(
             }
             item {
                 Button(
-                    onClick = { onSave(profile) },
-                    enabled = profile.name.isNotBlank(),
+                    onClick = { onSave(profile.copy(name = profileName.trim())) },
+                    enabled = profileName.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Save profile")

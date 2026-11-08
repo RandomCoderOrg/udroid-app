@@ -1,6 +1,7 @@
 package org.randomcoder.udroid.runtime
 
 import android.content.Context
+import android.util.Log
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.install.AndroidRootfsConfigurator
 import org.randomcoder.udroid.install.ProotRuntime
@@ -38,7 +39,10 @@ object ProotTerminalLaunchBuilder {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
         }
-        AndroidRootfsConfigurator().configureShellProfile(rootfs)
+        runCatching { AndroidRootfsConfigurator().configureShellProfile(rootfs) }
+            .onFailure { error ->
+                Log.w("uDroidTerminal", "Could not refresh guest shell integration", error)
+            }
         val linker = AndroidExecutableCommand.systemLinkerPath()
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {

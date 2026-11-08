@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import org.randomcoder.udroid.MainActivity
 import org.randomcoder.udroid.UdroidApplication
 import org.randomcoder.udroid.catalog.DistroVariant
+import org.randomcoder.udroid.filesystem.notifyRootfsDocumentsChanged
 import org.randomcoder.udroid.oci.OciImageReference
 import org.randomcoder.udroid.oci.OciInstallEvent
 import org.randomcoder.udroid.oci.OciInstallStage
@@ -387,6 +388,7 @@ class InstallerService : Service() {
                 )
             app.rootfsRegistry.setActiveIfNone(result.rootfs.name)
             rememberInstallSource(work)
+            notifyRootfsDocumentsChanged(this)
             progress.complete(result.reusedInstallation)
             app.journal.append(
                 component = "installer",
@@ -518,6 +520,7 @@ class InstallerService : Service() {
         val operationId = work.operationId
         app.rootfsRegistry.setActiveIfNone(rootfs.name)
         rememberInstallSource(work)
+        notifyRootfsDocumentsChanged(this)
         val previous = app.installState.current()
         val completed =
             InstallProgress(

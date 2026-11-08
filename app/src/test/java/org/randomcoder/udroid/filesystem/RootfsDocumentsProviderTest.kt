@@ -15,6 +15,12 @@ class RootfsDocumentsProviderTest {
     }
 
     @Test
+    fun savedInstallNameTakesPriorityOverTheInternalDirectoryName() {
+        assertEquals("Ubuntu 22.04 LTS", rootfsDisplayName("udroid-jammy-raw", "Ubuntu 22.04 LTS"))
+        assertEquals("Ubuntu Jammy", rootfsDisplayName("udroid-jammy-raw", null))
+    }
+
+    @Test
     fun documentIdsRoundTripAndRejectTraversal() {
         val id = RootfsDocumentId.decode(RootfsDocumentId.encode("ubuntu:noble", "usr/share/a b"))
         assertEquals("ubuntu:noble", id.rootfs)
