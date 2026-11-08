@@ -364,9 +364,15 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
             UDROID_BASH_INTEGRATION=1
 
             __udroid_prompt_end='\[\e]133;B\a\]'
+            __udroid_last_cwd=
             __udroid_prompt_command() {
                 __udroid_status=${'$'}?
                 printf '\033]133;D;%s\033\\\033]133;A\033\\' "${'$'}__udroid_status"
+                __udroid_cwd=${'$'}{PWD//[[:cntrl:]]/}
+                if [ "${'$'}__udroid_cwd" != "${'$'}__udroid_last_cwd" ]; then
+                    printf '\033]7;kitty-shell-cwd://localhost%s\033\\' "${'$'}__udroid_cwd"
+                    __udroid_last_cwd=${'$'}__udroid_cwd
+                fi
                 case ${'$'}PS1 in
                     *"${'$'}__udroid_prompt_end"*) ;;
                     *) PS1="${'$'}PS1${'$'}__udroid_prompt_end" ;;
@@ -394,7 +400,15 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                 [[ -z "${'$'}{UDROID_ZSH_INTEGRATION-}" ]] || return
                 typeset -g UDROID_ZSH_INTEGRATION=1
                 typeset -gi __udroid_command_running=0
+                typeset -g __udroid_last_cwd=
                 autoload -Uz add-zsh-hook
+
+                __udroid_report_cwd() {
+                    local cwd=${'$'}{PWD//[[:cntrl:]]/}
+                    [[ "${'$'}cwd" == "${'$'}__udroid_last_cwd" ]] && return
+                    builtin print -n -- "\e]7;kitty-shell-cwd://localhost${'$'}cwd\e\\"
+                    __udroid_last_cwd=${'$'}cwd
+                }
 
                 __udroid_prompt_command() {
                     local command_status=${'$'}?
@@ -403,6 +417,7 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                     fi
                     builtin print -n -- "\e]133;A\a"
                     __udroid_command_running=0
+                    __udroid_report_cwd
                 }
 
                 __udroid_preexec() {
@@ -412,6 +427,7 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
 
                 add-zsh-hook precmd __udroid_prompt_command
                 add-zsh-hook preexec __udroid_preexec
+                add-zsh-hook chpwd __udroid_report_cwd
                 """.trimIndent() + "\n",
             )
             ensureLine(
@@ -428,6 +444,11 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                 set -q UDROID_FISH_INTEGRATION; and return
                 set -g UDROID_FISH_INTEGRATION 1
                 set -g __udroid_command_running 0
+
+                function __udroid_report_cwd --on-variable PWD
+                    status is-command-substitution; and return
+                    printf '\e]7;file://localhost%s\a' (string escape --style=url ${'$'}PWD)
+                end
 
                 function __udroid_prompt_command --on-event fish_prompt
                     if test "${'$'}__udroid_command_running" = 1
@@ -446,6 +467,8 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
                     printf '\e]133;D;%s\a' ${'$'}status
                     set -g __udroid_command_running 0
                 end
+
+                __udroid_report_cwd
                 """.trimIndent() + "\n",
             )
         }

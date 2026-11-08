@@ -160,6 +160,7 @@ class RootfsPipelineTest {
         assertTrue(bashIntegration.contains("133;B"))
         assertTrue(bashIntegration.contains("133;C"))
         assertTrue(bashIntegration.contains("133;D"))
+        assertTrue(bashIntegration.contains("kitty-shell-cwd://localhost"))
     }
 
     @Test
@@ -176,6 +177,8 @@ class RootfsPipelineTest {
         val zshIntegration = File(rootfs, "etc/udroid/shell-integration/udroid.zsh").readText()
         assertTrue(zshIntegration.contains("add-zsh-hook precmd"))
         assertTrue(zshIntegration.contains("add-zsh-hook preexec"))
+        assertTrue(zshIntegration.contains("add-zsh-hook chpwd"))
+        assertTrue(zshIntegration.contains("kitty-shell-cwd://localhost"))
         assertEquals(
             1,
             File(rootfs, "etc/zsh/zshrc")
@@ -186,6 +189,8 @@ class RootfsPipelineTest {
         assertTrue(fishIntegration.contains("fish_prompt"))
         assertTrue(fishIntegration.contains("fish_preexec"))
         assertTrue(fishIntegration.contains("fish_postexec"))
+        assertTrue(fishIntegration.contains("--on-variable PWD"))
+        assertTrue(fishIntegration.contains("file://localhost"))
     }
 
     private fun fixture(): Fixture {

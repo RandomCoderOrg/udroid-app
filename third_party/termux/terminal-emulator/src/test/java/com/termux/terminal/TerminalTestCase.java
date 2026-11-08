@@ -21,6 +21,7 @@ public abstract class TerminalTestCase extends TestCase {
 		public final List<ChangedTitle> titleChanges = new ArrayList<>();
 		public final List<String> clipboardPuts = new ArrayList<>();
 		public final List<Boolean> commandStateChanges = new ArrayList<>();
+		public final List<String> workingDirectoryChanges = new ArrayList<>();
 		public int bellsRung = 0;
 		public int colorsChanged = 0;
 
@@ -43,6 +44,11 @@ public abstract class TerminalTestCase extends TestCase {
 		@Override
 		public void onCommandStateChanged(boolean running) {
 			commandStateChanges.add(running);
+		}
+
+		@Override
+		public void onWorkingDirectoryChanged(String path) {
+			workingDirectoryChanges.add(path);
 		}
 
 		@Override

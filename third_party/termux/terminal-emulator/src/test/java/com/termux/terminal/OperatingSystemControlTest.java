@@ -27,6 +27,21 @@ public class OperatingSystemControlTest extends TerminalTestCase {
 		assertEquals(2, mOutput.commandStateChanges.size());
 	}
 
+	public void testWorkingDirectory() {
+		withTerminalSized(10, 10);
+
+		enterString("\033]7;file://localhost/root/hello%20world\007");
+		enterString("\033]7;kitty-shell-cwd://localhost/home/用户 + notes\033\\");
+		assertEquals(List.of("/root/hello world", "/home/用户 + notes"), mOutput.workingDirectoryChanges);
+
+		enterString("\033]7;file://example.com/root\007");
+		enterString("\033]7;file://localhost/root/../etc\007");
+		enterString("\033]7;file://localhost/root/%1Bbad\007");
+		enterString("\033]7;file://localhost/root/%invalid\007");
+		enterString("\033]7;/root\007");
+		assertEquals(2, mOutput.workingDirectoryChanges.size());
+	}
+
 	public void testSetTitle() throws Exception {
 		List<ChangedTitle> expectedTitleChanges = new ArrayList<>();
 

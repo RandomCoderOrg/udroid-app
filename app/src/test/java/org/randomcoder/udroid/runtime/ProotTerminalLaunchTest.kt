@@ -44,6 +44,81 @@ class ProotTerminalLaunchTest {
     }
 
     @Test
+    fun `resolved guest working directory is passed to proot`() {
+        val arguments =
+            ProotTerminalLaunchBuilder.buildArguments(
+                linker = "linker64",
+                prootPath = "proot",
+                rootfsPath = "rootfs",
+                guestHome = "/root",
+                guestWorkingDirectory = "/root/project",
+                guestShell = "/bin/bash",
+            )
+
+        assertTrue("--cwd=/root/project" in arguments)
+    }
+
+    @Test
+    fun `working directory resolves inside rootfs and bind mounts`() {
+        val rootfs = Files.createTempDirectory("udroid-cwd-rootfs").toFile()
+        val mounted = Files.createTempDirectory("udroid-cwd-mount").toFile()
+        try {
+            rootfs.resolve("root/project").mkdirs()
+            mounted.resolve("sources").mkdirs()
+            val mounts = listOf(ResolvedProotMount(mounted.path, "/mnt/shared", "test"))
+
+            assertEquals(
+                "/root/project",
+                ProotTerminalLaunchBuilder.resolveGuestWorkingDirectory(
+                    rootfs,
+                    mounts,
+                    "/root/project",
+                    "/root",
+                ),
+            )
+            assertEquals(
+                "/mnt/shared/sources",
+                ProotTerminalLaunchBuilder.resolveGuestWorkingDirectory(
+                    rootfs,
+                    mounts,
+                    "/mnt/shared/sources",
+                    "/root",
+                ),
+            )
+        } finally {
+            rootfs.deleteRecursively()
+            mounted.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `missing or unsafe working directory falls back home`() {
+        val rootfs = Files.createTempDirectory("udroid-cwd-fallback").toFile()
+        try {
+            assertEquals(
+                "/root",
+                ProotTerminalLaunchBuilder.resolveGuestWorkingDirectory(
+                    rootfs,
+                    emptyList(),
+                    "/root/../etc",
+                    "/root",
+                ),
+            )
+            assertEquals(
+                "/root",
+                ProotTerminalLaunchBuilder.resolveGuestWorkingDirectory(
+                    rootfs,
+                    emptyList(),
+                    "/missing",
+                    "/root",
+                ),
+            )
+        } finally {
+            rootfs.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `all Android and guest bridge mounts are explicit`() {
         val arguments =
             ProotTerminalLaunchBuilder.buildArguments(

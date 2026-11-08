@@ -117,6 +117,16 @@ class RuntimeSupervisorService : Service() {
                 }
             }
 
+            override fun onWorkingDirectoryChanged(
+                changedSession: TerminalSession,
+                path: String,
+            ) {
+                mainHandler.post {
+                    val tab = terminalTabs.findByValue(changedSession) ?: return@post
+                    terminalTabs.updateWorkingDirectory(tab.id, path)
+                }
+            }
+
             override fun onSessionFinished(finishedSession: TerminalSession) {
                 handleSessionFinished(finishedSession)
             }
@@ -335,6 +345,10 @@ class RuntimeSupervisorService : Service() {
             return
         }
         terminalCreationInFlight = true
+        val inheritedWorkingDirectory =
+            terminalTabs.active()
+                ?.takeIf { it.rootfsName == rootfsName }
+                ?.workingDirectory
         val x11SocketDirectory = x11Controller.activeSocketDirectory()
         val audioEndpoint = audioController.endpoint()
         applicationExecutor.execute {
@@ -358,6 +372,7 @@ class RuntimeSupervisorService : Service() {
                         audioEndpoint = audioEndpoint,
                         launchProfile =
                             graphicsLaunchProfile(graphicsProfile, virglServerMode, rootfs),
+                        requestedWorkingDirectory = inheritedWorkingDirectory,
                     )
                 }
             mainHandler.post {
@@ -1645,6 +1660,7 @@ class RuntimeSupervisorService : Service() {
                 defaultTitle = title,
                 rootfsName = launch.rootfs.name,
                 value = session,
+                workingDirectory = launch.guestWorkingDirectory,
             )
         terminalTabs.add(tab)
         try {

@@ -2,6 +2,8 @@ package com.termux.terminal;
 
 import android.util.Base64;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Locale;
@@ -2072,6 +2074,9 @@ public final class TerminalEmulator {
                     if (endOfInput) break;
                 }
                 break;
+            case 7: // Report the shell's current working directory.
+                handleWorkingDirectory(textParameter);
+                break;
             case 10: // Set foreground color.
             case 11: // Set background color.
             case 12: // Set cursor color.
@@ -2305,6 +2310,40 @@ public final class TerminalEmulator {
             case 'D':
                 setCommandRunning(false);
                 break;
+        }
+    }
+
+    private void handleWorkingDirectory(String uri) {
+        final String filePrefix = "file://";
+        final String kittyPrefix = "kitty-shell-cwd://";
+        boolean fileUri = uri.startsWith(filePrefix);
+        String remainder;
+        if (fileUri) {
+            remainder = uri.substring(filePrefix.length());
+        } else if (uri.startsWith(kittyPrefix)) {
+            remainder = uri.substring(kittyPrefix.length());
+        } else {
+            return;
+        }
+
+        int pathStart = remainder.indexOf('/');
+        if (pathStart < 0) return;
+        String authority = remainder.substring(0, pathStart);
+        if (!authority.isEmpty() && !"localhost".equalsIgnoreCase(authority)) return;
+
+        String encodedPath = remainder.substring(pathStart);
+        if (fileUri && (encodedPath.indexOf('?') >= 0 || encodedPath.indexOf('#') >= 0)) return;
+        try {
+            String path = URLDecoder.decode(encodedPath.replace("+", "%2B"), StandardCharsets.UTF_8.name());
+            if (path.length() > 4096 || path.charAt(0) != '/') return;
+            for (int i = 0; i < path.length(); i++) {
+                if (Character.isISOControl(path.charAt(i))) return;
+            }
+            for (String segment : path.split("/", -1)) {
+                if (".".equals(segment) || "..".equals(segment)) return;
+            }
+            mSession.onWorkingDirectoryChanged(path);
+        } catch (IllegalArgumentException | UnsupportedEncodingException ignored) {
         }
     }
 

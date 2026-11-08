@@ -13,6 +13,8 @@ public interface TerminalSessionClient {
 
     void onCommandStateChanged(TerminalSession changedSession, boolean running);
 
+    void onWorkingDirectoryChanged(TerminalSession changedSession, String path);
+
     void onSessionFinished(TerminalSession finishedSession);
 
     void onCopyTextToClipboard(TerminalSession session, String text);

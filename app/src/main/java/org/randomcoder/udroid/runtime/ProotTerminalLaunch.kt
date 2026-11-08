@@ -15,6 +15,7 @@ data class ProotTerminalLaunch(
     val environment: Array<String>,
     val rootfs: File,
     val mounts: List<ResolvedProotMount>,
+    val guestWorkingDirectory: String,
 )
 
 object InstalledRootfsResolver {
@@ -32,6 +33,7 @@ object ProotTerminalLaunchBuilder {
         x11SocketDirectory: File? = null,
         audioEndpoint: AudioEndpoint? = null,
         launchProfile: ProotLaunchProfile? = null,
+        requestedWorkingDirectory: String? = null,
     ): ProotTerminalLaunch {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
@@ -70,6 +72,8 @@ object ProotTerminalLaunchBuilder {
         val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
         val managedEnvironment =
             ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
+        val guestWorkingDirectory =
+            resolveGuestWorkingDirectory(rootfs, mounts, requestedWorkingDirectory, guestHome)
 
         val arguments =
             buildArguments(
@@ -77,6 +81,7 @@ object ProotTerminalLaunchBuilder {
                 prootPath = runtime.executable.absolutePath,
                 rootfsPath = ProotPathContract.rootfsPath(context, rootfs),
                 guestHome = guestHome,
+                guestWorkingDirectory = guestWorkingDirectory,
                 guestShell = guestShell,
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
@@ -101,6 +106,7 @@ object ProotTerminalLaunchBuilder {
             environment = environment,
             rootfs = rootfs,
             mounts = mounts,
+            guestWorkingDirectory = guestWorkingDirectory,
         )
     }
 
@@ -109,6 +115,7 @@ object ProotTerminalLaunchBuilder {
         prootPath: String,
         rootfsPath: String,
         guestHome: String,
+        guestWorkingDirectory: String = guestHome,
         guestShell: String,
         x11SocketDirectory: String? = null,
         audioAuthDirectory: String? = null,
@@ -131,7 +138,7 @@ object ProotTerminalLaunchBuilder {
             add("--rootfs=$rootfsPath")
             addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
-            add("--cwd=$guestHome")
+            add("--cwd=$guestWorkingDirectory")
             addAll(additionalProotArguments)
             add("/usr/bin/env")
             add("-i")
@@ -179,4 +186,37 @@ object ProotTerminalLaunchBuilder {
                     candidate.isFile || Files.isSymbolicLink(candidate.toPath())
                 }
             }
+
+    internal fun resolveGuestWorkingDirectory(
+        rootfs: File,
+        mounts: List<ResolvedProotMount>,
+        requestedPath: String?,
+        fallback: String,
+    ): String {
+        if (requestedPath == null ||
+            requestedPath.length > 4096 ||
+            !requestedPath.startsWith('/') ||
+            requestedPath.any(Char::isISOControl) ||
+            requestedPath.split('/').any { it == "." || it == ".." }
+        ) {
+            return fallback
+        }
+        val mount =
+            mounts
+                .filter {
+                    requestedPath == it.guestTarget ||
+                        requestedPath.startsWith("${it.guestTarget.trimEnd('/')}/")
+                }
+                .maxByOrNull { it.guestTarget.length }
+        val hostPath =
+            if (mount == null) {
+                File(rootfs, requestedPath.removePrefix("/"))
+            } else {
+                File(
+                    mount.hostSource,
+                    requestedPath.removePrefix(mount.guestTarget).removePrefix("/"),
+                )
+            }
+        return requestedPath.takeIf { hostPath.isDirectory } ?: fallback
+    }
 }

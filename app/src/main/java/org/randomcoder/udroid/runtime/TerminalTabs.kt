@@ -43,6 +43,7 @@ internal data class TerminalTab<T>(
     var shellTitle: String? = null,
     var customTitle: String? = null,
     var commandRunning: Boolean = false,
+    var workingDirectory: String? = null,
     var closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
     var closeError: String? = null,
 ) {
@@ -110,6 +111,16 @@ internal class TerminalTabRegistry<T> {
         val tab = tabs[id] ?: return null
         if (tab.commandRunning == running) return null
         tab.commandRunning = running
+        return tab
+    }
+
+    fun updateWorkingDirectory(
+        id: String,
+        path: String,
+    ): TerminalTab<T>? {
+        val tab = tabs[id] ?: return null
+        if (tab.workingDirectory == path) return null
+        tab.workingDirectory = path
         return tab
     }
 

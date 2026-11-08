@@ -122,7 +122,7 @@ with the terminal outside the normal text grid. uDroid currently supports:
 | OSC 52 | Write only | Copies Base64-encoded text from a terminal program to the Android clipboard. |
 | OSC 104, 110, 111, 112 | Supported | Resets indexed colors, foreground, background, or cursor color. |
 | OSC 133 A/B/C/D | Bash, Zsh, and Fish | Tracks whether the foreground command is running so uDroid can warn before closing its tab. |
-| OSC 7 | Not supported | The terminal does not track the shell's current directory. |
+| OSC 7 | Bash, Zsh, and Fish | Tracks the guest working directory so a new tab for the same Linux system opens in the current directory. |
 | OSC 8 | Not supported | Hyperlinks are displayed as ordinary text. |
 | OSC 9, 777 | Not supported | Terminal programs cannot create Android notifications. |
 | OSC 9;4 | Not supported | Terminal progress is not shown in the Android UI. |
@@ -130,9 +130,13 @@ with the terminal outside the normal text grid. uDroid currently supports:
 
 Supported OSC sequences may end with either BEL or ST. OSC 133 command
 tracking is automatically configured for interactive Bash, Zsh, and Fish
-shells. A newly installed Zsh or Fish is detected when the next uDroid terminal
-starts. Tracking cannot detect background jobs after the prompt returns, and a
-prompt framework that replaces the shell's registered hooks may disable it.
+shells. OSC 7 working-directory tracking is configured for the same shells and
+accepts local `file://` and `kitty-shell-cwd://` URIs. Remote hosts, unsafe
+paths, and directories that no longer exist fall back to the Linux home
+directory. A newly installed Zsh or Fish is detected when the next uDroid
+terminal starts. Tracking cannot detect background jobs after the prompt
+returns, and a prompt framework that replaces the shell's registered hooks may
+disable it.
 The exit status carried by OSC 133 D is accepted but is not shown or saved.
 
 OSC 52 lets command output replace the Android clipboard, so run untrusted

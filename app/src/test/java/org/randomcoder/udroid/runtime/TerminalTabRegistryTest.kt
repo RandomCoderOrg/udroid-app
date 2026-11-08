@@ -143,6 +143,18 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `working directory is isolated per tab and ignores duplicate reports`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+
+        assertEquals("one", registry.updateWorkingDirectory("one", "/root/project")?.id)
+        assertNull(registry.updateWorkingDirectory("one", "/root/project"))
+        assertEquals("/root/project", registry.get("one")?.workingDirectory)
+        assertNull(registry.get("two")?.workingDirectory)
+    }
+
+    @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))
