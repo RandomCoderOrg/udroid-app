@@ -71,6 +71,8 @@ import org.randomcoder.udroid.runtime.GraphicsProfileCompatibilityProbe
 import org.randomcoder.udroid.runtime.GraphicsProfileSupport
 import org.randomcoder.udroid.runtime.InstalledRootfs
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
+import org.randomcoder.udroid.runtime.ProotCompatibilityConfiguration
+import org.randomcoder.udroid.runtime.ProotCompatibilityConfigurationStore
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfile
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
@@ -129,6 +131,7 @@ fun LinuxSystemPage(
     val openDeveloperOptions = rememberDeveloperOptionsAction(onRefreshCapabilities)
     val mountProfileStore = remember(context) { ProotMountProfileStore(context) }
     val environmentProfileStore = remember(context) { ProotEnvironmentProfileStore(context) }
+    val compatibilityStore = remember(context) { ProotCompatibilityConfigurationStore(context) }
     var confirmation by remember(rootfs.name) {
         mutableStateOf<FilesystemConfirmation?>(null)
     }
@@ -140,6 +143,13 @@ fun LinuxSystemPage(
         runCatching { environmentProfileStore.load(rootfs.name) }
             .getOrDefault(ProotEnvironmentProfile())
     }
+    var compatibility by remember(rootfs.name) {
+        mutableStateOf(
+            runCatching { compatibilityStore.load(rootfs.name) }
+                .getOrDefault(ProotCompatibilityConfiguration()),
+        )
+    }
+    var compatibilityMessage by remember(rootfs.name) { mutableStateOf<String?>(null) }
     val selectedEnvironment =
         environments.firstOrNull { it.id == configuration.environmentId }
             ?: environments.firstOrNull()
@@ -521,6 +531,29 @@ fun LinuxSystemPage(
             )
         }
 
+        item(key = "compatibility-label") {
+            UdroidSectionLabel(
+                text = "PRoot compatibility",
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item(key = "compatibility-settings") {
+            ProotCompatibilityPanel(
+                configuration = compatibility,
+                message = compatibilityMessage,
+                onChange = { updated ->
+                    runCatching { compatibilityStore.save(rootfs.name, updated) }
+                        .onSuccess {
+                            compatibility = it
+                            compatibilityMessage = "Saved · New launches use changes"
+                        }.onFailure {
+                            compatibilityMessage =
+                                it.message ?: "Could not save PRoot compatibility settings"
+                        }
+                },
+            )
+        }
+
         item(key = "filesystem-label") {
             UdroidSectionLabel(
                 text = "Storage",
@@ -709,6 +742,46 @@ fun LinuxSystemPage(
         )
     }
 
+}
+
+@Composable
+private fun ProotCompatibilityPanel(
+    configuration: ProotCompatibilityConfiguration,
+    message: String?,
+    onChange: (ProotCompatibilityConfiguration) -> Unit,
+) {
+    Surface(
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, UdroidLine),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column {
+            SettingRow(
+                title = "System V IPC",
+                detail = "Emulate shared memory, semaphores, and message queues inside each PRoot launch.",
+                checked = configuration.sysvipcEnabled,
+                enabled = true,
+                onCheckedChange = { onChange(configuration.copy(sysvipcEnabled = it)) },
+            )
+            HorizontalDivider(color = UdroidLine)
+            SettingRow(
+                title = "memfd compatibility",
+                detail = "Use Android shared memory when software cannot create memfd objects directly.",
+                checked = configuration.memfdFallbackEnabled,
+                enabled = true,
+                onCheckedChange = { onChange(configuration.copy(memfdFallbackEnabled = it)) },
+            )
+            message?.let {
+                HorizontalDivider(color = UdroidLine)
+                Text(
+                    text = it,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    color = UdroidMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }
 
 @Composable

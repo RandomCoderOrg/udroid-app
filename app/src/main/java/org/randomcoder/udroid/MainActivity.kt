@@ -60,6 +60,7 @@ import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopEnvironmentScanner
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
 import org.randomcoder.udroid.runtime.InstalledRootfs
+import org.randomcoder.udroid.runtime.ProotCompatibilityConfigurationStore
 import org.randomcoder.udroid.runtime.ProotEnvironmentProfileStore
 import org.randomcoder.udroid.runtime.ProotMountProfile
 import org.randomcoder.udroid.runtime.ProotMountProfileValidator
@@ -889,6 +890,10 @@ class MainActivity : ComponentActivity() {
                 ?.let { cleanupWarnings += it.message ?: "launcher shortcuts" }
 
             if (resetWork == null) {
+                runCatching {
+                    ProotCompatibilityConfigurationStore(this@MainActivity).remove(rootfsName)
+                }.exceptionOrNull()
+                    ?.let { cleanupWarnings += it.message ?: "PRoot compatibility settings" }
                 runCatching { ProotEnvironmentProfileStore(this@MainActivity).remove(rootfsName) }
                     .exceptionOrNull()
                     ?.let { cleanupWarnings += it.message ?: "environment profile" }

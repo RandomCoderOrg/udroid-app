@@ -63,6 +63,7 @@ object ProotTerminalLaunchBuilder {
                     ),
             )
         val environmentProfile = ProotEnvironmentProfileStore(context).load(rootfs.name)
+        val compatibility = ProotCompatibilityConfigurationStore(context).load(rootfs.name)
         val guestEnvironment = ProotEnvironmentResolver.resolve(environmentProfile)
         val managedEnvironment =
             ProotEnvironmentResolver.resolveManagedOverrides(environmentProfile)
@@ -77,6 +78,7 @@ object ProotTerminalLaunchBuilder {
                 x11SocketDirectory = x11SocketDirectory?.absolutePath,
                 audioAuthDirectory = audioEndpoint?.hostAuthDirectory?.absolutePath,
                 launchProfile = launchProfile,
+                compatibility = compatibility,
                 mounts = mounts,
                 guestEnvironment = guestEnvironment,
                 managedEnvironment = managedEnvironment,
@@ -107,6 +109,7 @@ object ProotTerminalLaunchBuilder {
         x11SocketDirectory: String? = null,
         audioAuthDirectory: String? = null,
         launchProfile: ProotLaunchProfile? = null,
+        compatibility: ProotCompatibilityConfiguration = ProotCompatibilityConfiguration(),
         mounts: List<ResolvedProotMount> =
             ProotMountResolver.defaults(x11SocketDirectory, audioAuthDirectory),
         guestEnvironment: List<String> = ProotEnvironmentResolver.resolve(),
@@ -119,6 +122,7 @@ object ProotTerminalLaunchBuilder {
             add("--link2symlink")
             add("--kill-on-exit")
             add("--root-id")
+            addProotCompatibilityOptions(compatibility)
             add("--rootfs=$rootfsPath")
             addProotBindMounts(mounts)
             launchProfile?.addBindings(this)
