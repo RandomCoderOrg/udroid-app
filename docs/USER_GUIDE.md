@@ -123,7 +123,7 @@ with the terminal outside the normal text grid. uDroid currently supports:
 | OSC 104, 110, 111, 112 | Supported | Resets indexed colors, foreground, background, or cursor color. |
 | OSC 133 A/B/C/D | Bash, Zsh, and Fish | Tracks whether the foreground command is running so uDroid can warn before closing its tab. |
 | OSC 7 | Bash, Zsh, and Fish | Tracks the guest working directory so a new tab for the same Linux system opens in the current directory. |
-| OSC 8 | Not supported | Hyperlinks are displayed as ordinary text. |
+| OSC 8 | Supported | Underlines hyperlinks and offers **Open** or **Copy** when selected. |
 | OSC 9, 777 | Not supported | Terminal programs cannot create Android notifications. |
 | OSC 9;4 | Not supported | Terminal progress is not shown in the Android UI. |
 | OSC 1337 images | Not supported | Inline image rendering is not implemented by the embedded Termux terminal. |
@@ -141,7 +141,8 @@ The exit status carried by OSC 133 D is accepted but is not shown or saved.
 
 OSC 52 lets command output replace the Android clipboard, so run untrusted
 terminal programs with the same care as programs that can print arbitrary
-terminal control sequences. See the
+terminal control sequences. OSC 8 opens only `http`, `https`, and `mailto`
+links after confirmation; other link types can still be copied. See the
 [xterm control-sequence reference](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)
 for title, color, and clipboard sequences, and
 [VS Code shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)
@@ -246,6 +247,10 @@ or compatibility package.
 Open **File access** to choose which Android and system paths Linux can see.
 Internal shared storage can be exposed at `/mnt/shared`. Custom mounts are for
 other Android paths the app can read.
+
+Android's Files app also lists each installed Linux system as a read-only
+location. Use it to browse or open Linux files without sharing the whole
+filesystem with Android apps; file changes still belong in Linux.
 
 Stop Linux before changing mounts. Session mounts used by the display, audio,
 or graphics features are added automatically only when those features need
