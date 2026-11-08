@@ -151,7 +151,41 @@ class RootfsPipelineTest {
         AndroidRootfsConfigurator().configure(rootfs)
 
         assertTrue(File(rootfs, "etc/hosts").readText().contains("localhost"))
-        assertTrue(File(rootfs, "etc/profile.d/udroid.sh").canExecute())
+        val profile = File(rootfs, "etc/profile.d/udroid.sh")
+        val profileContents = profile.readText()
+        assertTrue(profile.canExecute())
+        assertTrue(profileContents.contains("udroid.bash"))
+        val bashIntegration = File(rootfs, "etc/udroid/shell-integration/udroid.bash").readText()
+        assertTrue(bashIntegration.contains("133;A"))
+        assertTrue(bashIntegration.contains("133;B"))
+        assertTrue(bashIntegration.contains("133;C"))
+        assertTrue(bashIntegration.contains("133;D"))
+    }
+
+    @Test
+    fun `available shells receive native command lifecycle hooks`() {
+        val rootfs = Files.createTempDirectory("udroid-shell-configurator-test").toFile()
+        File(rootfs, "usr/bin").mkdirs()
+        File(rootfs, "usr/bin/zsh").createNewFile()
+        File(rootfs, "usr/bin/fish").createNewFile()
+
+        val configurator = AndroidRootfsConfigurator()
+        configurator.configure(rootfs)
+        configurator.configureShellProfile(rootfs)
+
+        val zshIntegration = File(rootfs, "etc/udroid/shell-integration/udroid.zsh").readText()
+        assertTrue(zshIntegration.contains("add-zsh-hook precmd"))
+        assertTrue(zshIntegration.contains("add-zsh-hook preexec"))
+        assertEquals(
+            1,
+            File(rootfs, "etc/zsh/zshrc")
+                .readLines()
+                .count { it.contains("udroid.zsh") },
+        )
+        val fishIntegration = File(rootfs, "etc/fish/conf.d/udroid.fish").readText()
+        assertTrue(fishIntegration.contains("fish_prompt"))
+        assertTrue(fishIntegration.contains("fish_preexec"))
+        assertTrue(fishIntegration.contains("fish_postexec"))
     }
 
     private fun fixture(): Fixture {

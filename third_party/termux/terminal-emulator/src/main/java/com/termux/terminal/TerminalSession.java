@@ -259,6 +259,11 @@ public final class TerminalSession extends TerminalOutput {
         mClient.onTitleChanged(this);
     }
 
+    @Override
+    public void onCommandStateChanged(boolean running) {
+        mClient.onCommandStateChanged(this, running);
+    }
+
     public synchronized boolean isRunning() {
         return mShellPid != -1;
     }

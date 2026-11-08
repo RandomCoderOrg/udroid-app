@@ -18,6 +18,9 @@ public abstract class TerminalOutput {
     /** Notify the terminal client that the terminal title has changed. */
     public abstract void titleChanged(String oldTitle, String newTitle);
 
+    /** Notify the terminal client that OSC 133 marked a command as running or finished. */
+    public abstract void onCommandStateChanged(boolean running);
+
     /** Notify the terminal client that text should be copied to clipboard. */
     public abstract void onCopyTextToClipboard(String text);
 

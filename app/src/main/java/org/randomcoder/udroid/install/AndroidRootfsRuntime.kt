@@ -325,6 +325,13 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
             File(rootfs, "etc/resolv.conf"),
             "nameserver 1.1.1.1\nnameserver 8.8.8.8\n",
         )
+        configureShellProfile(rootfs)
+        appendAndroidGroups(File(rootfs, "etc/group"))
+        File(rootfs, "usr/bin/sudo").takeIf(File::exists)?.setExecutable(true, false)
+    }
+
+    fun configureShellProfile(rootfs: File) {
+        val integrationDirectory = File(rootfs, "etc/udroid/shell-integration")
         replaceFile(
             File(rootfs, "etc/profile.d/udroid.sh"),
             """
@@ -339,11 +346,109 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
             export PULSE_SERVER=127.0.0.1
             export TERM=${'$'}{TERM-xterm-256color}
             export TMPDIR=/tmp
+
+            if [ -n "${'$'}{BASH_VERSION-}" ] && [ -r /etc/udroid/shell-integration/udroid.bash ]; then
+                . /etc/udroid/shell-integration/udroid.bash
+            fi
             """.trimIndent() + "\n",
             executable = true,
         )
-        appendAndroidGroups(File(rootfs, "etc/group"))
-        File(rootfs, "usr/bin/sudo").takeIf(File::exists)?.setExecutable(true, false)
+        replaceFile(
+            File(integrationDirectory, "udroid.bash"),
+            """
+            case ${'$'}- in
+                *i*) ;;
+                *) return ;;
+            esac
+            [ -z "${'$'}{UDROID_BASH_INTEGRATION-}" ] || return
+            UDROID_BASH_INTEGRATION=1
+
+            __udroid_prompt_end='\[\e]133;B\a\]'
+            __udroid_prompt_command() {
+                __udroid_status=${'$'}?
+                printf '\033]133;D;%s\033\\\033]133;A\033\\' "${'$'}__udroid_status"
+                case ${'$'}PS1 in
+                    *"${'$'}__udroid_prompt_end"*) ;;
+                    *) PS1="${'$'}PS1${'$'}__udroid_prompt_end" ;;
+                esac
+            }
+            PS0="${'$'}{PS0-}"'\[\e]133;C\a\]'
+            case "${'$'}(declare -p PROMPT_COMMAND 2>/dev/null)" in
+                "declare -a"*) PROMPT_COMMAND+=(__udroid_prompt_command) ;;
+                *)
+                    if [ -n "${'$'}{PROMPT_COMMAND-}" ]; then
+                        PROMPT_COMMAND="${'$'}PROMPT_COMMAND;__udroid_prompt_command"
+                    else
+                        PROMPT_COMMAND=__udroid_prompt_command
+                    fi
+                    ;;
+            esac
+            """.trimIndent() + "\n",
+        )
+
+        if (listOf("bin/zsh", "usr/bin/zsh").any { File(rootfs, it).exists() }) {
+            replaceFile(
+                File(integrationDirectory, "udroid.zsh"),
+                """
+                [[ -o interactive ]] || return
+                [[ -z "${'$'}{UDROID_ZSH_INTEGRATION-}" ]] || return
+                typeset -g UDROID_ZSH_INTEGRATION=1
+                typeset -gi __udroid_command_running=0
+                autoload -Uz add-zsh-hook
+
+                __udroid_prompt_command() {
+                    local command_status=${'$'}?
+                    if (( __udroid_command_running )); then
+                        builtin print -n -- "\e]133;D;${'$'}command_status\a"
+                    fi
+                    builtin print -n -- "\e]133;A\a"
+                    __udroid_command_running=0
+                }
+
+                __udroid_preexec() {
+                    builtin print -n -- "\e]133;B\a\e]133;C\a"
+                    __udroid_command_running=1
+                }
+
+                add-zsh-hook precmd __udroid_prompt_command
+                add-zsh-hook preexec __udroid_preexec
+                """.trimIndent() + "\n",
+            )
+            ensureLine(
+                File(rootfs, "etc/zsh/zshrc"),
+                "[[ -r /etc/udroid/shell-integration/udroid.zsh ]] && builtin source /etc/udroid/shell-integration/udroid.zsh",
+            )
+        }
+
+        if (listOf("bin/fish", "usr/bin/fish").any { File(rootfs, it).exists() }) {
+            replaceFile(
+                File(rootfs, "etc/fish/conf.d/udroid.fish"),
+                """
+                status is-interactive; or return
+                set -q UDROID_FISH_INTEGRATION; and return
+                set -g UDROID_FISH_INTEGRATION 1
+                set -g __udroid_command_running 0
+
+                function __udroid_prompt_command --on-event fish_prompt
+                    if test "${'$'}__udroid_command_running" = 1
+                        printf '\e]133;D\a'
+                    end
+                    printf '\e]133;A\a'
+                    set -g __udroid_command_running 0
+                end
+
+                function __udroid_preexec --on-event fish_preexec
+                    printf '\e]133;B\a\e]133;C\a'
+                    set -g __udroid_command_running 1
+                end
+
+                function __udroid_postexec --on-event fish_postexec
+                    printf '\e]133;D;%s\a' ${'$'}status
+                    set -g __udroid_command_running 0
+                end
+                """.trimIndent() + "\n",
+            )
+        }
     }
 
     private fun appendAndroidGroups(groupFile: File) {
@@ -385,6 +490,18 @@ class AndroidRootfsConfigurator : RootfsConfigurator {
         target.setReadable(true, false)
         target.setWritable(true, true)
         if (executable) target.setExecutable(true, false)
+    }
+
+    private fun ensureLine(
+        target: File,
+        line: String,
+    ) {
+        target.parentFile?.mkdirs()
+        val existing = target.takeIf(File::isFile)?.readText().orEmpty()
+        if (existing.lineSequence().any { it == line }) return
+        target.appendText((if (existing.isEmpty() || existing.endsWith('\n')) "" else "\n") + line + "\n")
+        target.setReadable(true, false)
+        target.setWritable(true, true)
     }
 
     private fun File.isSymbolicLink(): Boolean =

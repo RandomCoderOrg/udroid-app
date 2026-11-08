@@ -109,6 +109,40 @@ without deleting imported fonts.
 provides downloadable monospaced fonts. Check a font's license before sharing
 or redistributing its file.
 
+### Terminal OSC compatibility
+
+Terminal programs use Operating System Command (OSC) sequences to communicate
+with the terminal outside the normal text grid. uDroid currently supports:
+
+| Sequence | Support | uDroid behavior |
+| --- | --- | --- |
+| OSC 0, 1, 2 | Supported | Sets the shell title. A manually renamed tab keeps its name until **Follow shell title** is selected. |
+| OSC 4 | Supported | Changes indexed terminal colors for the current session. |
+| OSC 10, 11, 12 | Supported | Changes the current foreground, background, and cursor colors. |
+| OSC 52 | Write only | Copies Base64-encoded text from a terminal program to the Android clipboard. |
+| OSC 104, 110, 111, 112 | Supported | Resets indexed colors, foreground, background, or cursor color. |
+| OSC 133 A/B/C/D | Bash, Zsh, and Fish | Tracks whether the foreground command is running so uDroid can warn before closing its tab. |
+| OSC 7 | Not supported | The terminal does not track the shell's current directory. |
+| OSC 8 | Not supported | Hyperlinks are displayed as ordinary text. |
+| OSC 9, 777 | Not supported | Terminal programs cannot create Android notifications. |
+| OSC 9;4 | Not supported | Terminal progress is not shown in the Android UI. |
+| OSC 1337 images | Not supported | Inline image rendering is not implemented by the embedded Termux terminal. |
+
+Supported OSC sequences may end with either BEL or ST. OSC 133 command
+tracking is automatically configured for interactive Bash, Zsh, and Fish
+shells. A newly installed Zsh or Fish is detected when the next uDroid terminal
+starts. Tracking cannot detect background jobs after the prompt returns, and a
+prompt framework that replaces the shell's registered hooks may disable it.
+The exit status carried by OSC 133 D is accepted but is not shown or saved.
+
+OSC 52 lets command output replace the Android clipboard, so run untrusted
+terminal programs with the same care as programs that can print arbitrary
+terminal control sequences. See the
+[xterm control-sequence reference](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)
+for title, color, and clipboard sequences, and
+[VS Code shell integration](https://code.visualstudio.com/docs/terminal/shell-integration)
+for the OSC 133 A/B/C/D protocol used by the Bash integration.
+
 ### Desktop
 
 uDroid can start X11 desktop sessions installed inside Linux.

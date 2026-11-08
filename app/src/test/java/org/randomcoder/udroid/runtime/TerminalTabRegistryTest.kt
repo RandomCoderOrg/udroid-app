@@ -130,6 +130,19 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `command state is isolated per tab and ignores duplicate markers`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+
+        assertEquals("one", registry.updateCommandRunning("one", true)?.id)
+        assertNull(registry.updateCommandRunning("one", true))
+        assertEquals(true, registry.get("one")?.commandRunning)
+        assertEquals(false, registry.get("two")?.commandRunning)
+        assertEquals(false, registry.updateCommandRunning("one", false)?.commandRunning)
+    }
+
+    @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))

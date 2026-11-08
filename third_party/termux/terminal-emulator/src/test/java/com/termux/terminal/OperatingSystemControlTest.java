@@ -9,6 +9,24 @@ import java.util.Random;
 /** "ESC ]" is the Operating System Command. */
 public class OperatingSystemControlTest extends TerminalTestCase {
 
+	public void testSemanticPromptCommandState() {
+		withTerminalSized(10, 10);
+
+		enterString("\033]133;A\007\033]133;B\033\\");
+		assertTrue(mOutput.commandStateChanges.isEmpty());
+
+		enterString("\033]133;C\007\033]133;C;ignored\033\\");
+		assertEquals(1, mOutput.commandStateChanges.size());
+		assertTrue(mOutput.commandStateChanges.get(0));
+
+		enterString("\033]133;D;7\033\\");
+		assertEquals(2, mOutput.commandStateChanges.size());
+		assertFalse(mOutput.commandStateChanges.get(1));
+
+		enterString("\033]133;invalid\007");
+		assertEquals(2, mOutput.commandStateChanges.size());
+	}
+
 	public void testSetTitle() throws Exception {
 		List<ChangedTitle> expectedTitleChanges = new ArrayList<>();
 

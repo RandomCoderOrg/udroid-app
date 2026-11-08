@@ -188,6 +188,9 @@ public final class TerminalEmulator {
     /** Holds OSC and device control arguments, which can be strings. */
     private final StringBuilder mOSCOrDeviceControlArgs = new StringBuilder();
 
+    /** Whether OSC 133 has marked a foreground command as running. */
+    private boolean mCommandRunning;
+
     /**
      * True if the current escape sequence should continue, false if the current escape sequence should be terminated.
      * Used when parsing a single character.
@@ -2110,6 +2113,9 @@ public final class TerminalEmulator {
                     Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "");
                 }
                 break;
+            case 133: // FinalTerm semantic prompt markers.
+                handleSemanticPrompt(textParameter);
+                break;
             case 104:
                 // "104;$c" → Reset Color Number $c. It is reset to the color specified by the corresponding X
                 // resource. Any number of c parameters may be given. These parameters correspond to the ANSI colors 0-7,
@@ -2286,6 +2292,26 @@ public final class TerminalEmulator {
         } else {
             unknownSequence(b);
         }
+    }
+
+    private void handleSemanticPrompt(String parameter) {
+        if (parameter.isEmpty() || (parameter.length() > 1 && parameter.charAt(1) != ';')) return;
+        switch (parameter.charAt(0)) {
+            case 'C':
+                setCommandRunning(true);
+                break;
+            case 'A':
+            case 'B':
+            case 'D':
+                setCommandRunning(false);
+                break;
+        }
+    }
+
+    private void setCommandRunning(boolean running) {
+        if (mCommandRunning == running) return;
+        mCommandRunning = running;
+        mSession.onCommandStateChanged(running);
     }
 
     private void unimplementedSequence(int b) {
@@ -2524,6 +2550,7 @@ public final class TerminalEmulator {
 
     /** Reset terminal state so user can interact with it regardless of present state. */
     public void reset() {
+        setCommandRunning(false);
         setCursorStyle();
         mArgIndex = 0;
         mContinueSequence = false;

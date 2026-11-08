@@ -11,6 +11,8 @@ public interface TerminalSessionClient {
 
     void onTitleChanged(TerminalSession changedSession);
 
+    void onCommandStateChanged(TerminalSession changedSession, boolean running);
+
     void onSessionFinished(TerminalSession finishedSession);
 
     void onCopyTextToClipboard(TerminalSession session, String text);

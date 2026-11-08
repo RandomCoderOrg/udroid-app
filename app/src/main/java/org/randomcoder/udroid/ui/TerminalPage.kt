@@ -112,6 +112,7 @@ fun InteractiveTerminalPage(
     var stopRequested by remember(session) { mutableStateOf(false) }
     var tabError by remember { mutableStateOf<String?>(null) }
     var renamingTab by remember { mutableStateOf<TerminalTabSnapshot?>(null) }
+    var pendingCloseTabId by remember { mutableStateOf<String?>(null) }
     var creatingTab by remember { mutableStateOf(false) }
     var showDistroPicker by remember { mutableStateOf(false) }
     var showAppearance by remember { mutableStateOf(false) }
@@ -130,6 +131,12 @@ fun InteractiveTerminalPage(
                     tabError = result.exceptionOrNull()?.message
                 }
             }
+        }
+    }
+
+    fun closeTab(id: String) {
+        if (service?.closeTerminalTab(id) != true) {
+            tabError = "Could not close terminal"
         }
     }
 
@@ -174,8 +181,10 @@ fun InteractiveTerminalPage(
                 onRename = { tab -> renamingTab = tab },
                 onFollowTitle = { id -> service?.followTerminalShellTitle(id) },
                 onClose = { id ->
-                    if (service?.closeTerminalTab(id) != true) {
-                        tabError = "Could not close terminal"
+                    if (tabs.firstOrNull { it.id == id }?.commandRunning == true) {
+                        pendingCloseTabId = id
+                    } else {
+                        closeTab(id)
                     }
                 },
                 creatingTab = creatingTab,
@@ -230,6 +239,38 @@ fun InteractiveTerminalPage(
                     tabError = null
                 } else {
                     tabError = "Enter a terminal name"
+                }
+            },
+        )
+    }
+
+    tabs.firstOrNull { it.id == pendingCloseTabId }?.let { tab ->
+        val stopsLinux = tabs.size == 1
+        AlertDialog(
+            onDismissRequest = { pendingCloseTabId = null },
+            title = { Text(if (stopsLinux) "Stop Linux?" else "Close tab?") },
+            text = {
+                Text(
+                    if (stopsLinux) {
+                        "A command is still running. Stopping Linux will end it."
+                    } else {
+                        "A command is still running in ${tab.title}. Closing the tab will end it."
+                    },
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingCloseTabId = null
+                        closeTab(tab.id)
+                    },
+                ) {
+                    Text(if (stopsLinux) "Stop Linux" else "Close tab")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCloseTabId = null }) {
+                    Text("Cancel")
                 }
             },
         )

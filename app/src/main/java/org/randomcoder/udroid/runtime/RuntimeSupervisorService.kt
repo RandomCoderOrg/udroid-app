@@ -105,6 +105,18 @@ class RuntimeSupervisorService : Service() {
                 }
             }
 
+            override fun onCommandStateChanged(
+                changedSession: TerminalSession,
+                running: Boolean,
+            ) {
+                mainHandler.post {
+                    val tab = terminalTabs.findByValue(changedSession) ?: return@post
+                    if (terminalTabs.updateCommandRunning(tab.id, running) != null) {
+                        scheduleTerminalTabsChanged()
+                    }
+                }
+            }
+
             override fun onSessionFinished(finishedSession: TerminalSession) {
                 handleSessionFinished(finishedSession)
             }
@@ -299,6 +311,7 @@ class RuntimeSupervisorService : Service() {
                 rootfsName = tab.rootfsName,
                 pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
                 running = tab.value.isRunning,
+                commandRunning = tab.commandRunning,
                 active = tab.id == terminalTabs.activeId,
                 closeState = tab.closeState,
                 closeError = tab.closeError,

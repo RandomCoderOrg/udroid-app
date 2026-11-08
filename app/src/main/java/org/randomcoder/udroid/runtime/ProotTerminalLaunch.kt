@@ -2,6 +2,7 @@ package org.randomcoder.udroid.runtime
 
 import android.content.Context
 import org.randomcoder.udroid.audio.AudioEndpoint
+import org.randomcoder.udroid.install.AndroidRootfsConfigurator
 import org.randomcoder.udroid.install.ProotRuntime
 import org.randomcoder.udroid.install.RootfsInstallationPipeline
 import java.io.File
@@ -35,6 +36,7 @@ object ProotTerminalLaunchBuilder {
         require(File(rootfs, RootfsInstallationPipeline.READY_MARKER).isFile) {
             "The selected Linux image is not ready"
         }
+        AndroidRootfsConfigurator().configureShellProfile(rootfs)
         val linker = AndroidExecutableCommand.systemLinkerPath()
         val temporaryDirectory =
             File(context.cacheDir, "proot").apply {

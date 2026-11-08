@@ -7,6 +7,7 @@ data class TerminalTabSnapshot(
     val rootfsName: String,
     val pid: Long?,
     val running: Boolean,
+    val commandRunning: Boolean,
     val active: Boolean,
     val closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
     val closeError: String? = null,
@@ -41,6 +42,7 @@ internal data class TerminalTab<T>(
     val value: T,
     var shellTitle: String? = null,
     var customTitle: String? = null,
+    var commandRunning: Boolean = false,
     var closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
     var closeError: String? = null,
 ) {
@@ -98,6 +100,16 @@ internal class TerminalTabRegistry<T> {
     fun followShellTitle(id: String): TerminalTab<T>? {
         val tab = tabs[id]?.takeIf { it.customTitle != null } ?: return null
         tab.customTitle = null
+        return tab
+    }
+
+    fun updateCommandRunning(
+        id: String,
+        running: Boolean,
+    ): TerminalTab<T>? {
+        val tab = tabs[id] ?: return null
+        if (tab.commandRunning == running) return null
+        tab.commandRunning = running
         return tab
     }
 
