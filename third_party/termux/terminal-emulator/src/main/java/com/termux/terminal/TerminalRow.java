@@ -47,6 +47,8 @@ public final class TerminalRow {
     boolean mLineWrap;
     /** The style bits of each cell in the row. See {@link TextStyle}. */
     final long[] mStyle;
+    /** OSC 8 hyperlink id for each cell, or null while this row has no links. */
+    int[] mLinks;
     /** If this row might contain chars with width != 1, used for deactivating fast path */
     boolean mHasNonOneWidthOrSurrogateChars;
 
@@ -65,6 +67,7 @@ public final class TerminalRow {
         final int x2 = line.findStartOfColumn(sourceX2);
         boolean startingFromSecondHalfOfWideChar = (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1));
         final char[] sourceChars = (this == line) ? Arrays.copyOf(line.mText, line.mText.length) : line.mText;
+        final int[] sourceLinks = (this == line && line.mLinks != null) ? line.mLinks.clone() : line.mLinks;
         int latestNonCombiningWidth = 0;
         for (int i = x1; i < x2; i++) {
             char sourceChar = sourceChars[i];
@@ -80,7 +83,7 @@ public final class TerminalRow {
                 sourceX1 += latestNonCombiningWidth;
                 latestNonCombiningWidth = w;
             }
-            setChar(destinationX, codePoint, line.getStyle(sourceX1));
+            setChar(destinationX, codePoint, line.getStyle(sourceX1), sourceLinks == null ? 0 : sourceLinks[sourceX1]);
         }
     }
 
@@ -146,16 +149,22 @@ public final class TerminalRow {
         Arrays.fill(mStyle, style);
         mSpaceUsed = (short) mColumns;
         mHasNonOneWidthOrSurrogateChars = false;
+        mLinks = null;
     }
 
     // https://github.com/steven676/Android-Terminal-Emulator/commit/9a47042620bec87617f0b4f5d50568535668fe26
     public void setChar(int columnToSet, int codePoint, long style) {
+        setChar(columnToSet, codePoint, style, 0);
+    }
+
+    /** Write a cell carrying an OSC 8 hyperlink id (0 for none). */
+    public void setChar(int columnToSet, int codePoint, long style, int link) {
         if (columnToSet  < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
 
-        mStyle[columnToSet] = style;
-
         final int newCodePointDisplayWidth = WcWidth.width(codePoint);
+        if (newCodePointDisplayWidth > 0) setHyperlink(columnToSet, link);
+        mStyle[columnToSet] = style;
 
         // Fast path when we don't have any chars with width != 1
         if (!mHasNonOneWidthOrSurrogateChars) {
@@ -174,6 +183,7 @@ public final class TerminalRow {
         if (newIsCombining) {
             // When standing at second half of wide character and inserting combining:
             if (wasExtraColForWideChar) columnToSet--;
+            link = getHyperlink(columnToSet);
         } else {
             // Check if we are overwriting the second half of a wide character starting at the previous column:
             if (wasExtraColForWideChar) setChar(columnToSet - 1, ' ', style);
@@ -268,11 +278,34 @@ public final class TerminalRow {
                 mSpaceUsed -= nextLen;
             }
         }
+
+        setHyperlink(columnToSet, link);
+        if (columnToSet + 1 < mColumns) {
+            if (newCodePointDisplayWidth == 2 || (newIsCombining && oldCodePointDisplayWidth == 2))
+                setHyperlink(columnToSet + 1, link);
+            else if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1)
+                setHyperlink(columnToSet + 1, 0);
+        }
+    }
+
+    private void setHyperlink(int column, int link) {
+        if (mLinks == null) {
+            if (link == 0) return;
+            mLinks = new int[mColumns];
+        }
+        mLinks[column] = link;
+    }
+
+    public int getHyperlink(int column) {
+        return mLinks == null ? 0 : mLinks[column];
     }
 
     boolean isBlank() {
         for (int charIndex = 0, charLen = getSpaceUsed(); charIndex < charLen; charIndex++)
             if (mText[charIndex] != ' ') return false;
+        if (mLinks != null)
+            for (int link : mLinks)
+                if (link != 0) return false;
         return true;
     }
 

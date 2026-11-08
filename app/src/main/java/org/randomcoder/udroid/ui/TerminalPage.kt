@@ -1,11 +1,16 @@
 package org.randomcoder.udroid.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -893,6 +898,7 @@ private fun LiveTerminal(
     val maximumTextSizePx = with(density) { TERMINAL_TEXT_SIZE_MAX_SP.sp.toPx() }
     val currentTypography by rememberUpdatedState(typography)
     val currentOnTypographyChanged by rememberUpdatedState(onTypographyChanged)
+    var pendingLink by remember { mutableStateOf<String?>(null) }
     val client =
         remember(context, density) {
             UdroidTerminalViewClient(
@@ -901,6 +907,7 @@ private fun LiveTerminal(
                 initialTextSize = textSizePx,
                 minimumTextSize = minimumTextSizePx,
                 maximumTextSize = maximumTextSizePx,
+                onLinkTapped = { pendingLink = it },
                 onTextSizeChanged = {
                     currentOnTypographyChanged(
                         currentTypography.copy(
@@ -956,7 +963,48 @@ private fun LiveTerminal(
             write = service::writeToTerminal,
         )
     }
+    pendingLink?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingLink = null },
+            title = { Text("Open link?") },
+            text = { Text(uri) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingLink = null
+                        if (!openTerminalLink(context, uri)) {
+                            Toast.makeText(context, "This link type cannot be opened", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                ) { Text("Open") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        context.getSystemService(ClipboardManager::class.java)
+                            .setPrimaryClip(ClipData.newPlainText("Terminal link", uri))
+                        pendingLink = null
+                        Toast.makeText(context, "Link copied", Toast.LENGTH_SHORT).show()
+                    },
+                ) { Text("Copy") }
+            },
+        )
+    }
 }
+
+internal fun openTerminalLink(
+    context: Context,
+    value: String,
+): Boolean {
+    val uri = Uri.parse(value)
+    if (!terminalLinkCanOpen(uri.scheme)) return false
+    return runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+    }.isSuccess
+}
+
+internal fun terminalLinkCanOpen(scheme: String?): Boolean =
+    scheme.equals("http", true) || scheme.equals("https", true) || scheme.equals("mailto", true)
 
 @Composable
 private fun ExtraKeysRow(
@@ -1039,6 +1087,7 @@ private class UdroidTerminalViewClient(
     initialTextSize: Int,
     private val minimumTextSize: Float,
     private val maximumTextSize: Float,
+    private val onLinkTapped: (String) -> Unit,
     private val onTextSizeChanged: (Int) -> Unit,
 ) : TerminalViewClient {
     private var terminalView: TerminalView? = null
@@ -1079,6 +1128,11 @@ private class UdroidTerminalViewClient(
 
     override fun onSingleTapUp(event: MotionEvent) {
         terminalView?.let { view ->
+            val (column, row) = view.getColumnAndRow(event, true)
+            view.currentSession?.emulator?.getHyperlinkUriAt(row, column)?.let {
+                onLinkTapped(it)
+                return
+            }
             view.requestFocus()
             context.getSystemService(InputMethodManager::class.java)
                 .showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)

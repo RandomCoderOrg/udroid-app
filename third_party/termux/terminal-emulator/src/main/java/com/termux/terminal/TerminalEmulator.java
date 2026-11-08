@@ -6,6 +6,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Stack;
@@ -192,6 +193,26 @@ public final class TerminalEmulator {
 
     /** Whether OSC 133 has marked a foreground command as running. */
     private boolean mCommandRunning;
+
+    // Adapted from termux/termux-app#5390 by Matt Schwartz.
+    static final int MAX_HYPERLINKS = 1024;
+    private final String[] mHyperlinkUris = new String[MAX_HYPERLINKS + 1];
+    private final String[] mHyperlinkKeys = new String[MAX_HYPERLINKS + 1];
+    private final HashMap<String, Integer> mHyperlinkIds = new HashMap<>();
+    private int mHyperlink;
+    private int mNextHyperlink = 1;
+    private int mHyperlinkOpensSinceSweep;
+
+    /** Resolve the OSC 8 URI stored on a terminal cell, or null. */
+    public String getHyperlinkUriAt(int row, int column) {
+        if (row < -mScreen.getActiveTranscriptRows() || row >= mRows || column < 0 || column >= mColumns) return null;
+        TerminalRow line = mScreen.mLines[mScreen.externalToInternalRow(row)];
+        return line == null ? null : getHyperlinkUri(line.getHyperlink(column));
+    }
+
+    public String getHyperlinkUri(int id) {
+        return id > 0 && id <= MAX_HYPERLINKS ? mHyperlinkUris[id] : null;
+    }
 
     /**
      * True if the current escape sequence should continue, false if the current escape sequence should be terminated.
@@ -2077,6 +2098,9 @@ public final class TerminalEmulator {
             case 7: // Report the shell's current working directory.
                 handleWorkingDirectory(textParameter);
                 break;
+            case 8: // Hyperlink: 8;params;URI opens, 8;; closes.
+                setHyperlink(textParameter);
+                break;
             case 10: // Set foreground color.
             case 11: // Set background color.
             case 12: // Set cursor color.
@@ -2161,6 +2185,64 @@ public final class TerminalEmulator {
                 break;
         }
         finishSequence();
+    }
+
+    private void setHyperlink(String parameters) {
+        int split = parameters.indexOf(';');
+        String uri = split < 0 ? "" : parameters.substring(split + 1);
+        if (uri.isEmpty()) {
+            mHyperlink = 0;
+            return;
+        }
+        String explicitId = null;
+        for (String parameter : parameters.substring(0, split).split(":", -1)) {
+            if (parameter.startsWith("id=") && parameter.length() > 3) explicitId = parameter.substring(3);
+        }
+        String key = explicitId == null ? null : explicitId + '\u0000' + uri;
+        Integer existing = key == null ? null : mHyperlinkIds.get(key);
+        mHyperlink = existing != null ? existing : allocateHyperlink(key, uri);
+    }
+
+    private int allocateHyperlink(String key, String uri) {
+        mHyperlinkOpensSinceSweep++;
+        int id = freeHyperlink();
+        if (id == 0 && mHyperlinkOpensSinceSweep >= MAX_HYPERLINKS / 4) {
+            mHyperlinkOpensSinceSweep = 0;
+            sweepHyperlinks();
+            id = freeHyperlink();
+        }
+        if (id == 0) return 0;
+        mHyperlinkUris[id] = uri;
+        mHyperlinkKeys[id] = key;
+        if (key != null) mHyperlinkIds.put(key, id);
+        mNextHyperlink = id % MAX_HYPERLINKS + 1;
+        return id;
+    }
+
+    private int freeHyperlink() {
+        for (int step = 0; step < MAX_HYPERLINKS; step++) {
+            int id = (mNextHyperlink - 1 + step) % MAX_HYPERLINKS + 1;
+            if (mHyperlinkUris[id] == null) return id;
+        }
+        return 0;
+    }
+
+    private void sweepHyperlinks() {
+        boolean[] live = new boolean[MAX_HYPERLINKS + 1];
+        live[mHyperlink] = true;
+        for (TerminalBuffer buffer : new TerminalBuffer[]{mMainBuffer, mAltBuffer}) {
+            for (TerminalRow row : buffer.mLines) {
+                if (row != null && row.mLinks != null) {
+                    for (int link : row.mLinks) live[link] = true;
+                }
+            }
+        }
+        for (int id = 1; id <= MAX_HYPERLINKS; id++) {
+            if (live[id] || mHyperlinkUris[id] == null) continue;
+            if (mHyperlinkKeys[id] != null) mHyperlinkIds.remove(mHyperlinkKeys[id]);
+            mHyperlinkUris[id] = null;
+            mHyperlinkKeys[id] = null;
+        }
     }
 
     private void blockClear(int sx, int sy, int w) {
@@ -2549,7 +2631,7 @@ public final class TerminalEmulator {
         // so was mCursorCol changed after the offsetDueToCombiningChar conditional by another thread?
         // TODO: Check if there are thread synchronization issues with mCursorCol and mCursorRow, possibly causing others bugs too.
         if (column < 0) column = 0;
-        mScreen.setChar(column, mCursorRow, codePoint, getStyle());
+        mScreen.setChar(column, mCursorRow, codePoint, getStyle(), mHyperlink);
 
         if (autoWrap && displayWidth > 0)
             mAboutToAutoWrap = (mCursorCol == mRightMargin - displayWidth);
@@ -2589,6 +2671,7 @@ public final class TerminalEmulator {
 
     /** Reset terminal state so user can interact with it regardless of present state. */
     public void reset() {
+        mHyperlink = 0;
         setCommandRunning(false);
         setCursorStyle();
         mArgIndex = 0;
