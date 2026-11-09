@@ -101,6 +101,8 @@ object ProotTerminalLaunchBuilder {
                 androidHome = context.filesDir.absolutePath,
                 loaderPath = runtime.loader.absolutePath,
                 temporaryDirectory = temporaryDirectory.absolutePath,
+                shmHelperLauncher = linker,
+                prootPath = runtime.executable.absolutePath,
             )
 
         return ProotTerminalLaunch(
@@ -170,6 +172,8 @@ object ProotTerminalLaunchBuilder {
         androidHome: String,
         loaderPath: String,
         temporaryDirectory: String,
+        shmHelperLauncher: String,
+        prootPath: String,
     ): Array<String> =
         arrayOf(
             "ANDROID_DATA=/data",
@@ -180,6 +184,8 @@ object ProotTerminalLaunchBuilder {
             "PATH=/system/bin",
             "PROOT_LOADER=$loaderPath",
             "PROOT_TMP_DIR=$temporaryDirectory",
+            "PROOT_SHM_HELPER_LAUNCHER=$shmHelperLauncher",
+            "PROOT_SHM_HELPER_EXECUTABLE=$prootPath",
             "TMPDIR=$temporaryDirectory",
         )
 

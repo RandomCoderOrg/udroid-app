@@ -6,11 +6,11 @@ third-party components.
 ## PRoot
 
 - Project: <https://github.com/termux/proot>
-- Version: `5.1.107.86`
+- Version: `5.1.107.101`
 - Source archive SHA-256:
-  `692da7f952ac390eb65c4117d360cad23a052525eea4eb110ae42f8a4a7d7bb8`
+  `a66743f50c7b0bac1913b83bf55e139d679c80a0ca2808eec76432a65640017f`
 - License: GNU General Public License version 2
-- Local modification: `tools/proot-ndk28.patch`
+- Local patch set: `patches/proot`
 
 ## talloc
 
@@ -21,7 +21,7 @@ third-party components.
 - License: GNU Lesser General Public License version 3 or later
 
 `tools/build-proot-assets.sh` downloads the pinned source archives, verifies
-the hashes, applies the recorded patch, and builds the checked-in binaries.
+the hashes, applies the recorded patches, and builds the checked-in binaries.
 Release packaging must provide the applicable full license texts and complete
 corresponding source alongside binary downloads.
 

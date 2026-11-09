@@ -57,8 +57,9 @@ build_abi() {
     ln -s "$TOOLCHAIN/llvm-readelf" "$wrappers/readelf"
     unzip -q "$WORK/proot.zip" -d "$abi_work/proot-source"
     tar -xzf "$WORK/talloc.tar.gz" -C "$abi_work/talloc" --strip-components=1
-    patch -d "$abi_work/proot-source/proot-${PROOT_VERSION}" -p1 \
-        < "$ROOT/tools/proot-ndk28.patch"
+    for patch_file in "$ROOT"/patches/proot/*.patch; do
+        patch -d "$abi_work/proot-source/proot-${PROOT_VERSION}" -p1 < "$patch_file"
+    done
 
     (
         cd "$abi_work/talloc"
