@@ -127,9 +127,11 @@ fun DesktopPage(
     }
 
     val palettePrimary = MaterialTheme.colorScheme.primaryContainer.toArgb()
-    val paletteSurface = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
-    val paletteText = MaterialTheme.colorScheme.onSurface.toArgb()
-    val paletteOutline = MaterialTheme.colorScheme.outline.toArgb()
+    val paletteSurface = UdroidTerminalSurface.toArgb()
+    val paletteRaised = UdroidTerminalRaised.toArgb()
+    val paletteText = UdroidTerminalText.toArgb()
+    val paletteActiveText = UdroidTerminalGreen.toArgb()
+    val paletteOutline = UdroidTerminalLine.toArgb()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -191,7 +193,9 @@ fun DesktopPage(
                         it.setPaletteColors(
                             primaryContainer = palettePrimary,
                             surfaceContainer = paletteSurface,
+                            raisedContainer = paletteRaised,
                             onSurface = paletteText,
+                            activeText = paletteActiveText,
                             outline = paletteOutline,
                         )
                     },
