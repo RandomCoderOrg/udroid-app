@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -15,6 +16,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,7 +43,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,6 +72,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,6 +92,10 @@ import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
 import org.randomcoder.udroid.runtime.TerminalColorProfile
+import org.randomcoder.udroid.runtime.TerminalExtraKeys
+import org.randomcoder.udroid.runtime.TerminalExtraKeysState
+import org.randomcoder.udroid.runtime.TerminalExtraKeysStore
+import org.randomcoder.udroid.input.ExtraKeyBinding
 import org.randomcoder.udroid.runtime.TerminalProfileState
 import org.randomcoder.udroid.runtime.TerminalTypographyState
 import org.randomcoder.udroid.runtime.TerminalTypographyStore
@@ -111,6 +123,7 @@ fun InteractiveTerminalPage(
     onStop: () -> Unit,
     onExit: () -> Unit,
 ) {
+    val context = LocalContext.current
     val tabs = service?.terminalTabSnapshots().orEmpty()
     val activeTab = tabs.firstOrNull(TerminalTabSnapshot::active)
     val session = service?.currentTerminalSession()
@@ -120,7 +133,9 @@ fun InteractiveTerminalPage(
     var pendingCloseTabId by remember { mutableStateOf<String?>(null) }
     var creatingTab by remember { mutableStateOf(false) }
     var showDistroPicker by remember { mutableStateOf(false) }
-    var showAppearance by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    val extraKeysStore = remember(context) { TerminalExtraKeysStore(context) }
+    var extraKeysState by remember(extraKeysStore) { mutableStateOf(extraKeysStore.load()) }
     val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
 
     fun createTab(rootfsName: String?) {
@@ -145,16 +160,20 @@ fun InteractiveTerminalPage(
         }
     }
 
-    if (showAppearance) {
+    if (showSettings) {
         TerminalSettingsPage(
             modifier = modifier,
             state = profileState,
             typographyState = typographyState,
-            onBack = { showAppearance = false },
+            extraKeysState = extraKeysState,
+            onBack = { showSettings = false },
             onSelectProfile = onSelectProfile,
             onSaveProfile = onSaveProfile,
             onDeleteProfile = onDeleteProfile,
             onTypographyChanged = onTypographyChanged,
+            onExtraKeysChanged = {
+                extraKeysState = extraKeysStore.save(it)
+            },
         )
         return
     }
@@ -172,7 +191,7 @@ fun InteractiveTerminalPage(
             stopping = stopping,
             onExit = onExit,
             onChooseDistro = { showDistroPicker = true },
-            onShowAppearance = { showAppearance = true },
+            onShowSettings = { showSettings = true },
             onStop = {
                 stopRequested = true
                 onStop()
@@ -229,6 +248,7 @@ fun InteractiveTerminalPage(
                 service = service,
                 session = session,
                 typography = typographyState,
+                extraKeys = extraKeysState,
                 onTypographyChanged = onTypographyChanged,
             )
         }
@@ -301,7 +321,7 @@ private fun TerminalSessionBar(
     stopping: Boolean,
     onExit: () -> Unit,
     onChooseDistro: () -> Unit,
-    onShowAppearance: () -> Unit,
+    onShowSettings: () -> Unit,
     onStop: () -> Unit,
 ) {
     val tabClosing =
@@ -403,10 +423,10 @@ private fun TerminalSessionBar(
         } else {
             Spacer(Modifier.width(48.dp))
         }
-        IconButton(onClick = onShowAppearance) {
+        IconButton(onClick = onShowSettings) {
             Icon(
-                imageVector = Icons.Outlined.Palette,
-                contentDescription = "Terminal appearance",
+                imageVector = Icons.Outlined.Settings,
+                contentDescription = "Terminal settings",
                 tint = UdroidTerminalMuted,
             )
         }
@@ -885,6 +905,7 @@ private fun LiveTerminal(
     service: RuntimeSupervisorService,
     session: TerminalSession,
     typography: TerminalTypographyState,
+    extraKeys: TerminalExtraKeysState,
     onTypographyChanged: (TerminalTypographyState) -> Unit,
 ) {
     val context = LocalContext.current
@@ -938,6 +959,7 @@ private fun LiveTerminal(
     DisposableEffect(service, terminalView) {
         service.attachTerminalView(terminalView)
         onDispose {
+            modifiers.reset()
             client.stopCursorBlinking()
             service.detachTerminalView(terminalView)
         }
@@ -958,10 +980,13 @@ private fun LiveTerminal(
                     .weight(1f)
                     .fillMaxWidth(),
         )
-        ExtraKeysRow(
-            modifiers = modifiers,
-            write = service::writeToTerminal,
-        )
+        if (extraKeys.visible) {
+            TerminalExtraKeysRail(
+                rows = extraKeys.rows,
+                modifiers = modifiers,
+                terminalView = terminalView,
+            )
+        }
     }
     pendingLink?.let { uri ->
         AlertDialog(
@@ -1007,78 +1032,237 @@ internal fun terminalLinkCanOpen(scheme: String?): Boolean =
     scheme.equals("http", true) || scheme.equals("https", true) || scheme.equals("mailto", true)
 
 @Composable
-private fun ExtraKeysRow(
+private fun TerminalExtraKeysRail(
+    rows: List<List<ExtraKeyBinding>>,
     modifiers: TerminalModifierState,
-    write: (String) -> Unit,
+    terminalView: TerminalView,
 ) {
-    Row(
+    Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(58.dp)
                 .background(UdroidTerminalSurface)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 7.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        TerminalKey(
-            label = "Ctrl",
-            active = modifiers.control,
-            onClick = { modifiers.control = !modifiers.control },
-        )
-        TerminalKey(
-            label = "Alt",
-            active = modifiers.alt,
-            onClick = { modifiers.alt = !modifiers.alt },
-        )
-        TerminalKey("Esc") { write("\u001B") }
-        TerminalKey("Tab") { write("\t") }
-        TerminalKey("←") { write("\u001B[D") }
-        TerminalKey("↑") { write("\u001B[A") }
-        TerminalKey("↓") { write("\u001B[B") }
-        TerminalKey("→") { write("\u001B[C") }
-        TerminalKey("Home") { write("\u001B[H") }
-        TerminalKey("PgUp") { write("\u001B[5~") }
-        TerminalKey("PgDn") { write("\u001B[6~") }
-        TerminalKey("End") { write("\u001B[F") }
+        var slot = 0
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                row.forEach { binding ->
+                    val keySlot = slot++
+                    val keyCode = binding.takeUnless(ExtraKeyBinding::macro)?.let { TerminalExtraKeys.keyCode(it.action) }
+                    TerminalExtraKey(
+                        modifier = Modifier.weight(1f),
+                        slot = keySlot,
+                        binding = binding,
+                        active = keyCode?.let(modifiers::isActive) == true,
+                        onPressed = { pressed ->
+                            if (keyCode == null) return@TerminalExtraKey
+                            val now = SystemClock.uptimeMillis()
+                            modifiers.onKeyEvent(keySlot, keyCode, pressed, now) { code, down ->
+                                val action = if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
+                                val event = KeyEvent(now, now, action, code, 0)
+                                if (down) terminalView.onKeyDown(code, event) else terminalView.onKeyUp(code, event)
+                            }
+                        },
+                        onMacro = { sendTerminalMacro(binding, terminalView) },
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun TerminalKey(
-    label: String,
-    active: Boolean = false,
-    onClick: () -> Unit,
+private fun TerminalExtraKey(
+    modifier: Modifier,
+    slot: Int,
+    binding: ExtraKeyBinding,
+    active: Boolean,
+    onPressed: (Boolean) -> Unit,
+    onMacro: () -> Unit,
 ) {
+    val label = TerminalExtraKeys.label(binding)
     Box(
         modifier =
-            Modifier
-                .width(if (label.length > 2) 56.dp else 48.dp)
-                .height(48.dp)
+            modifier
+                .height(34.dp)
                 .background(
-                    color =
-                        if (active) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            UdroidTerminalRaised
-                        },
+                    color = if (active) MaterialTheme.colorScheme.primaryContainer else UdroidTerminalRaised,
                     shape = RoundedCornerShape(8.dp),
-                )
-                .clickable(onClick = onClick),
+                ).semantics {
+                    role = Role.Button
+                    contentDescription =
+                        if (binding.display == null) "$label extra key" else "$label, ${binding.action} extra key"
+                    onClick {
+                        if (binding.macro || TerminalExtraKeys.keyCode(binding.action) == null) {
+                            onMacro()
+                        } else {
+                            onPressed(true)
+                            onPressed(false)
+                        }
+                        true
+                    }
+                }.pointerInput(slot, binding) {
+                    if (binding.macro || TerminalExtraKeys.keyCode(binding.action) == null) {
+                        detectTapGestures(onTap = { onMacro() })
+                    } else {
+                        detectTapGestures(
+                            onPress = {
+                                onPressed(true)
+                                tryAwaitRelease()
+                                onPressed(false)
+                            },
+                        )
+                    }
+                },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
             color = if (active) UdroidTerminalGreen else UdroidTerminalText,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-private class TerminalModifierState {
-    var control by mutableStateOf(false)
-    var alt by mutableStateOf(false)
+private fun sendTerminalMacro(
+    binding: ExtraKeyBinding,
+    terminalView: TerminalView,
+) {
+    val tokens = binding.tokens()
+    val modifiers = tokens.mapNotNull(TerminalExtraKeys::keyCode).filter(TerminalExtraKeys::isModifier).toSet()
+    val metaState =
+        (if (KeyEvent.KEYCODE_CTRL_LEFT in modifiers) KeyEvent.META_CTRL_LEFT_ON or KeyEvent.META_CTRL_ON else 0) or
+            (if (KeyEvent.KEYCODE_ALT_LEFT in modifiers) KeyEvent.META_ALT_LEFT_ON or KeyEvent.META_ALT_ON else 0) or
+            (if (KeyEvent.KEYCODE_SHIFT_LEFT in modifiers) KeyEvent.META_SHIFT_LEFT_ON or KeyEvent.META_SHIFT_ON else 0) or
+            (if (KeyEvent.KEYCODE_FUNCTION in modifiers) KeyEvent.META_FUNCTION_ON else 0)
+    tokens.forEach { token ->
+        val keyCode = TerminalExtraKeys.keyCode(token)
+        if (keyCode?.let(TerminalExtraKeys::isModifier) == true) return@forEach
+        if (keyCode != null) {
+            val now = SystemClock.uptimeMillis()
+            terminalView.onKeyDown(keyCode, KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
+            terminalView.onKeyUp(keyCode, KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0, metaState))
+        } else {
+            token.codePoints().forEach { terminalView.inputCodePoint(it, metaState and KeyEvent.META_CTRL_ON != 0, metaState and KeyEvent.META_ALT_ON != 0) }
+        }
+    }
+}
+
+internal class TerminalModifierState(
+    private val doubleTapMillis: Long = 300,
+) {
+    private enum class Modifier { CONTROL, ALT, SHIFT, FUNCTION }
+
+    private data class Held(
+        val modifier: Modifier,
+        val pressedAt: Long,
+        var usedInChord: Boolean = false,
+    )
+
+    private val held = mutableMapOf<Int, Held>()
+    private val armed = mutableSetOf<Modifier>()
+    private val locked = mutableSetOf<Modifier>()
+    private val ignoredReleases = mutableSetOf<Int>()
+    private var lastTapSlot = -1
+    private var lastTapAt = 0L
+    private var revision by mutableStateOf(0)
+
+    fun onKeyEvent(
+        slot: Int,
+        keyCode: Int,
+        pressed: Boolean,
+        atMillis: Long,
+        send: (Int, Boolean) -> Unit,
+    ) {
+        val modifier = modifierFor(keyCode)
+        if (pressed) {
+            if (modifier == null) {
+                held.values.forEach { it.usedInChord = true }
+                send(keyCode, true)
+            } else {
+                when {
+                    modifier in locked -> {
+                        locked -= modifier
+                        ignoredReleases += slot
+                    }
+                    modifier in armed && slot == lastTapSlot && atMillis - lastTapAt in 0..doubleTapMillis -> {
+                        armed -= modifier
+                        locked += modifier
+                        ignoredReleases += slot
+                        lastTapSlot = -1
+                    }
+                    else -> held[slot] = Held(modifier, atMillis)
+                }
+                changed()
+            }
+        } else if (modifier == null) {
+            send(keyCode, false)
+            consumeArmed()
+        } else if (!ignoredReleases.remove(slot)) {
+            held.remove(slot)?.let { key ->
+                if (!key.usedInChord && atMillis - key.pressedAt <= 500) {
+                    armed += key.modifier
+                    lastTapSlot = slot
+                    lastTapAt = atMillis
+                }
+                changed()
+            }
+        }
+    }
+
+    fun isActive(keyCode: Int): Boolean {
+        revision
+        val modifier = modifierFor(keyCode) ?: return false
+        return modifier in armed || modifier in locked || held.values.any { it.modifier == modifier }
+    }
+
+    fun isControlActive(): Boolean = isActive(KeyEvent.KEYCODE_CTRL_LEFT)
+
+    fun isAltActive(): Boolean = isActive(KeyEvent.KEYCODE_ALT_LEFT)
+
+    fun isShiftActive(): Boolean = isActive(KeyEvent.KEYCODE_SHIFT_LEFT)
+
+    fun isFunctionActive(): Boolean = isActive(KeyEvent.KEYCODE_FUNCTION)
+
+    fun markChordUsed() {
+        held.values.forEach { it.usedInChord = true }
+    }
+
+    fun consumeArmed() {
+        if (armed.isEmpty()) return
+        armed.clear()
+        lastTapSlot = -1
+        changed()
+    }
+
+    fun reset() {
+        held.clear()
+        armed.clear()
+        locked.clear()
+        ignoredReleases.clear()
+        lastTapSlot = -1
+        changed()
+    }
+
+    private fun changed() {
+        revision += 1
+    }
+
+    private fun modifierFor(keyCode: Int): Modifier? =
+        when (keyCode) {
+            KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_CTRL_RIGHT -> Modifier.CONTROL
+            KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.KEYCODE_ALT_RIGHT -> Modifier.ALT
+            KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT -> Modifier.SHIFT
+            KeyEvent.KEYCODE_FUNCTION -> Modifier.FUNCTION
+            else -> null
+        }
 }
 
 private class UdroidTerminalViewClient(
@@ -1153,7 +1337,13 @@ private class UdroidTerminalViewClient(
         keyCode: Int,
         event: KeyEvent,
         session: TerminalSession,
-    ): Boolean = false
+    ): Boolean {
+        if (!TerminalExtraKeys.isModifier(keyCode)) {
+            modifiers.markChordUsed()
+            terminalView?.post(modifiers::consumeArmed)
+        }
+        return false
+    }
 
     override fun onKeyUp(
         keyCode: Int,
@@ -1162,23 +1352,20 @@ private class UdroidTerminalViewClient(
 
     override fun onLongPress(event: MotionEvent): Boolean = false
 
-    override fun readControlKey(): Boolean = modifiers.control
+    override fun readControlKey(): Boolean = modifiers.isControlActive()
 
-    override fun readAltKey(): Boolean = modifiers.alt
+    override fun readAltKey(): Boolean = modifiers.isAltActive()
 
-    override fun readShiftKey(): Boolean = false
+    override fun readShiftKey(): Boolean = modifiers.isShiftActive()
 
-    override fun readFnKey(): Boolean = false
+    override fun readFnKey(): Boolean = modifiers.isFunctionActive()
 
     override fun onCodePoint(
         codePoint: Int,
         ctrlDown: Boolean,
         session: TerminalSession,
     ): Boolean {
-        terminalView?.post {
-            modifiers.control = false
-            modifiers.alt = false
-        }
+        terminalView?.post(modifiers::consumeArmed)
         return false
     }
 

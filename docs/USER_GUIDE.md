@@ -47,7 +47,7 @@ stopped.
 
 ### Terminal colors
 
-Select the palette button in **Terminal** to open **Terminal appearance**, then
+Select the settings button in **Terminal** to open **Terminal settings**, then
 choose **Colors**. You can choose a built-in profile, create one, or customize
 a built-in profile as an editable copy. Changes apply to the running terminal
 and are kept for new terminal sessions. Built-in choices include uDroid,
@@ -89,7 +89,7 @@ base appearance for the next session.
 
 ### Terminal font and text
 
-Open **Terminal appearance**, then **Font & text**, to change the terminal font,
+Open **Terminal settings**, then **Font & text**, to change the terminal font,
 text size, line height, cursor shape, and cursor blinking. The preview shows the
 selected settings before you return to the terminal. Pinch inside the terminal
 to change the same saved text-size setting.
@@ -108,6 +108,33 @@ without deleting imported fonts.
 [Google Fonts](https://fonts.google.com/?categoryFilters=Appearance:%2FMonospace%2FMonospace)
 provides downloadable monospaced fonts. Check a font's license before sharing
 or redistributing its file.
+
+### Terminal extra keys
+
+Open **Terminal settings → Extra keys** to show, hide, or customize the key
+rail below the terminal. Tap a slot and search for a modifier, navigation key,
+letter, number, punctuation key, or function key. Use **Add key** or **Add row**
+to extend the layout; remove controls beside each key and row shrink it again.
+Hold a key's drag handle and move it onto another key to relocate it within or
+between rows.
+An optional display label can use text, symbols, or emoji without changing the
+key that is sent. A macro uses Termux's space-separated syntax, such as
+`CTRL f d`, and runs the complete chord when tapped.
+
+| Gesture | Result |
+| --- | --- |
+| Tap Ctrl, Alt, Shift, or Fn | Apply it to the next key. |
+| Hold a modifier and tap another key | Send a temporary chord. |
+| Double-tap a modifier | Lock it until you tap it again. |
+
+**Import JSON** accepts the same two-dimensional `extra-keys` JSON matrix used
+by Termux. Rows may contain key names or objects with `key`, `macro`, and
+`display`. Popup actions are reported but not imported. Row and column counts
+are preserved. **Export JSON** keeps macros and custom labels and can be used as
+the value of `extra-keys` in `termux.properties`.
+
+See the [Termux extra-keys documentation](https://github.com/termux/termux-tools/blob/master/doc/termux.1.md.in)
+for the upstream format.
 
 ### Terminal OSC compatibility
 
@@ -198,18 +225,27 @@ button.
 
 ### Keyboard strip and display buttons
 
-The two-row keyboard strip stays at the bottom even when the Android keyboard
-is closed. If **Keep desktop above keyboard** is on, the strip moves above
-the Android keyboard when it opens. Turn **Show keyboard strip** off in
-**Desktop settings → Keyboard** to reclaim the space.
+The keyboard strip stays at the bottom even when the Android keyboard is
+closed. If **Keep desktop above keyboard** is on, the strip moves above the
+Android keyboard when it opens. Open **Desktop settings → Keyboard strip** to
+show or hide it.
 
-The strip has 12 editable slots. In **Desktop settings → Keyboard**, tap a
-slot to assign a letter, number, modifier, arrow, function or navigation key,
-supported punctuation key, mouse button, or scroll direction. **Reset keyboard
-strip** restores the default bindings.
+Add or remove rows and keys from the keyboard-strip page. Tap a key to edit it,
+or hold its handle and drag it within or between rows. The editor supports
+letters, numbers, modifiers, arrows, function and navigation keys, punctuation,
+mouse buttons, and scroll directions. **Reset keyboard strip** restores the
+default two-row layout.
+
+The page can also import or export a Termux extra-keys JSON matrix. Primary
+keys, macros, and custom labels are supported; Termux popup actions are ignored.
+
+Each strip or display button can also have a custom text, symbol, or emoji
+label. Enter a Termux-style macro such as `CTRL c` to make a button send a
+complete shortcut when tapped. Macro buttons are tap actions; ordinary key
+buttons continue to support press, hold, chords, and modifier locking.
 
 **Keys** on the toolbar shows separate translucent buttons over the Linux
-display. Add, change, or remove them in **Desktop settings → Keyboard**. To
+display. Add, edit, or remove them in **Desktop settings → Display buttons**. To
 move one, choose **Arrange on display**, drag it to the desired place, then
 tap **Done** on the toolbar. Positions are saved. Normal use does not move
 buttons, so holding a key cannot accidentally drag it.

@@ -5,15 +5,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.randomcoder.udroid.input.ExtraKeyBinding
 
 class OverlayKeyboardTest {
     @Test
     fun bindingsRejectUnsupportedOrMissingKeys() {
-        val saved = listOf(KeyEvent.KEYCODE_F5, OverlayKeyboard.MOUSE_LEFT, -100)
+        val saved = listOf(OverlayKeyboard.binding(KeyEvent.KEYCODE_F5), OverlayKeyboard.binding(OverlayKeyboard.MOUSE_LEFT), ExtraKeyBinding(""))
         val normalized = OverlayKeyboard.normalized(saved)
         assertEquals(OverlayKeyboard.defaults.size, normalized.size)
-        assertEquals(KeyEvent.KEYCODE_F5, normalized[0])
-        assertEquals(OverlayKeyboard.MOUSE_LEFT, normalized[1])
+        assertEquals(OverlayKeyboard.binding(KeyEvent.KEYCODE_F5), normalized[0])
+        assertEquals(OverlayKeyboard.binding(OverlayKeyboard.MOUSE_LEFT), normalized[1])
         assertEquals(OverlayKeyboard.defaults[2], normalized[2])
     }
 
@@ -21,12 +22,36 @@ class OverlayKeyboardTest {
     fun displayButtonsKeepValidKeysAndClampTheirPositions() {
         val buttons = OverlayKeyboard.normalizedDisplayKeys(
             listOf(
-                DisplayKey(KeyEvent.KEYCODE_W, -1f, 2f),
-                DisplayKey(-100, 0.5f, 0.5f),
-                DisplayKey(KeyEvent.KEYCODE_A, Float.NaN, 0.5f),
+                DisplayKey(OverlayKeyboard.binding(KeyEvent.KEYCODE_W), -1f, 2f),
+                DisplayKey(ExtraKeyBinding(""), 0.5f, 0.5f),
+                DisplayKey(OverlayKeyboard.binding(KeyEvent.KEYCODE_A), Float.NaN, 0.5f),
             ),
         )
-        assertEquals(listOf(DisplayKey(KeyEvent.KEYCODE_W, 0f, 1f)), buttons)
+        assertEquals(listOf(DisplayKey(OverlayKeyboard.binding(KeyEvent.KEYCODE_W), 0f, 1f)), buttons)
+    }
+
+    @Test
+    fun customDisplayDoesNotChangeTheBoundAction() {
+        val binding = ExtraKeyBinding("CTRL f d", macro = true, display = "tmux 🚪")
+
+        assertEquals("tmux 🚪", OverlayKeyboard.label(binding))
+        assertEquals(listOf("CTRL", "f", "d"), binding.tokens())
+    }
+
+    @Test
+    fun keyboardRowsKeepCustomLayoutAndDropBlankBindings() {
+        assertEquals(
+            listOf(
+                listOf(ExtraKeyBinding("CTRL"), ExtraKeyBinding("A")),
+                listOf(ExtraKeyBinding("ALT")),
+            ),
+            OverlayKeyboard.normalizedRows(
+                listOf(
+                    listOf(ExtraKeyBinding("CTRL"), ExtraKeyBinding(""), ExtraKeyBinding("A")),
+                    listOf(ExtraKeyBinding("ALT")),
+                ),
+            ),
+        )
     }
 
     @Test

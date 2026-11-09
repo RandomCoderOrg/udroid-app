@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -13,23 +14,27 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.termux.x11.input.InputStub
+import org.randomcoder.udroid.input.ExtraKeyBinding
 import org.randomcoder.udroid.x11.X11DisplayView
 import org.randomcoder.udroid.x11.DisplayKey
 import org.randomcoder.udroid.x11.OverlayKeyboard
 import org.randomcoder.udroid.x11.OverlayKeyState
 import kotlin.math.roundToInt
+import java.nio.charset.StandardCharsets.UTF_8
 
 internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
     val displayView = X11DisplayView(context)
 
     private val density = resources.displayMetrics.density
-    private val keyboardStripHeight = dp(76)
+    private var keyboardStripHeight = dp(76)
     private val palette = LinearLayout(context)
     private val keyboardStrip = LinearLayout(context)
     private val displayKeyLayer = FrameLayout(context)
     private val keyboardButtons = mutableListOf<TextView>()
     private val displayKeyButtons = mutableListOf<TextView>()
-    private val keyboardState = OverlayKeyState { binding, pressed ->
+    private val keyboardState = OverlayKeyState { binding, pressed -> sendOverlayKey(binding, pressed) }
+
+    private fun sendOverlayKey(binding: Int, pressed: Boolean) {
         when (binding) {
             OverlayKeyboard.MOUSE_LEFT ->
                 displayView.setOverlayMouseButton(InputStub.BUTTON_LEFT, pressed)
@@ -45,7 +50,8 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
     private val heldKeyboardSlots = mutableSetOf<Int>()
     private val chordUsedSlots = mutableSetOf<Int>()
     private val modifierTaps = ModifierDoubleTap(ViewConfiguration.getDoubleTapTimeout().toLong())
-    private var keyboardBindings = OverlayKeyboard.defaults
+    private var keyboardRows = OverlayKeyboard.defaultRows
+    private var keyboardBindings = keyboardRows.flatten()
     private var displayKeys = emptyList<DisplayKey>()
     private var displayKeysVisible = false
     private var arrangingDisplayKeys = false
@@ -58,7 +64,9 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
     private var momentaryButton = InputStub.BUTTON_UNDEFINED
     private var primaryContainer = Color.DKGRAY
     private var surfaceContainer = Color.rgb(35, 35, 35)
+    private var raisedContainer = Color.rgb(45, 45, 45)
     private var onSurface = Color.WHITE
+    private var activeText = Color.GREEN
     private var outline = Color.GRAY
 
     init {
@@ -82,7 +90,7 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
         )
         displayKeyLayer.visibility = View.GONE
-        buildKeyboardStrip()
+        buildKeyboardStrip(keyboardRows)
         addView(
             keyboardStrip,
             LayoutParams(LayoutParams.MATCH_PARENT, keyboardStripHeight).apply { gravity = Gravity.BOTTOM },
@@ -142,7 +150,7 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         displayKeyLayer.removeAllViews()
         displayKeyButtons.clear()
         normalized.forEachIndexed { index, key ->
-            val label = OverlayKeyboard.label(key.keyCode)
+            val label = OverlayKeyboard.label(key.binding)
             val button = textButton(label, "Hold $label key; arrange to move").apply {
                 textSize = 12f
                 background = displayKeyBackground(false)
@@ -156,28 +164,29 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         updateKeyboardButtons()
     }
 
-    fun setKeyboardBindings(bindings: List<Int>) {
-        val normalized = OverlayKeyboard.normalized(bindings)
-        if (normalized == keyboardBindings) return
+    fun setKeyboardBindings(rows: List<List<ExtraKeyBinding>>) {
+        val normalized = OverlayKeyboard.normalizedRows(rows)
+        if (normalized == keyboardRows) return
         releaseKeyboard()
-        keyboardBindings = normalized
-        keyboardButtons.forEachIndexed { index, view ->
-            val label = OverlayKeyboard.label(normalized[index])
-            view.text = label
-            view.contentDescription = "Hold $label key"
-        }
+        keyboardRows = normalized
+        keyboardBindings = normalized.flatten()
+        buildKeyboardStrip(normalized)
         updateKeyboardButtons()
     }
 
     fun setPaletteColors(
         primaryContainer: Int,
         surfaceContainer: Int,
+        raisedContainer: Int,
         onSurface: Int,
+        activeText: Int,
         outline: Int,
     ) {
         this.primaryContainer = primaryContainer
         this.surfaceContainer = surfaceContainer
+        this.raisedContainer = raisedContainer
         this.onSurface = onSurface
+        this.activeText = activeText
         this.outline = outline
         palette.background = roundedBackground(surfaceContainer, outline, 30)
         keyboardStrip.setBackgroundColor(surfaceContainer)
@@ -243,28 +252,51 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         palette.addView(mouseBody)
     }
 
-    private fun buildKeyboardStrip() {
+    private fun buildKeyboardStrip(rows: List<List<ExtraKeyBinding>>) {
+        keyboardStrip.removeAllViews()
+        keyboardButtons.clear()
         keyboardStrip.orientation = LinearLayout.VERTICAL
         keyboardStrip.isMotionEventSplittingEnabled = true
         keyboardStrip.setBackgroundColor(surfaceContainer)
-        keyboardStrip.setPadding(dp(4), dp(2), dp(4), dp(2))
-        repeat(2) { rowIndex ->
+        keyboardStrip.setPadding(dp(6), dp(4), dp(6), dp(4))
+        var slot = 0
+        rows.forEachIndexed { rowIndex, bindings ->
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 isMotionEventSplittingEnabled = true
             }
-            repeat(6) { columnIndex ->
-                val slot = rowIndex * 6 + columnIndex
-                val label = OverlayKeyboard.label(keyboardBindings[slot])
+            bindings.forEachIndexed { columnIndex, binding ->
+                val label = OverlayKeyboard.label(binding)
                 val button = textButton(label, "Hold $label key").apply {
-                    textSize = 12f
+                    textSize = 11f
+                    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
                     background = stripButtonBackground(false)
                 }
                 installKeyboardButton(button, slot)
                 keyboardButtons += button
-                row.addView(button, LinearLayout.LayoutParams(0, dp(36), 1f))
+                row.addView(
+                    button,
+                    LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                        if (columnIndex > 0) marginStart = dp(2)
+                        if (columnIndex < bindings.lastIndex) marginEnd = dp(2)
+                    },
+                )
+                slot += 1
             }
-            keyboardStrip.addView(row, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(36)))
+            keyboardStrip.addView(
+                row,
+                LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(34)).apply {
+                    if (rowIndex < rows.lastIndex) bottomMargin = dp(4)
+                },
+            )
+        }
+        keyboardStripHeight = dp(rows.size * 34 + (rows.size - 1) * 4 + 8)
+        keyboardStrip.layoutParams =
+            (keyboardStrip.layoutParams as? LayoutParams)?.apply { height = keyboardStripHeight }
+                ?: LayoutParams(LayoutParams.MATCH_PARENT, keyboardStripHeight).apply { gravity = Gravity.BOTTOM }
+        if (keyboardStrip.visibility == View.VISIBLE) {
+            (displayView.layoutParams as LayoutParams).bottomMargin = keyboardStripHeight
+            (displayKeyLayer.layoutParams as LayoutParams).bottomMargin = keyboardStripHeight
         }
     }
 
@@ -372,15 +404,21 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
             if (handledTouchClick) {
                 handledTouchClick = false
             } else if (displayView.isRendererAttached) {
-                val keyCode = bindingForSlot(slot)
+                val binding = bindingForSlot(slot)
                 modifierTaps.clear()
-                keyboardState.press(touchOwner(slot), keyCode)
-                keyboardState.release(touchOwner(slot))
+                val keyCode = bindingKeyCode(binding)
+                if (keyCode == null) {
+                    executeBinding(binding)
+                } else {
+                    keyboardState.press(touchOwner(slot), keyCode)
+                    keyboardState.release(touchOwner(slot))
+                }
                 updateKeyboardButtons()
             }
         }
         view.setOnLongClickListener {
-            if (!displayView.isRendererAttached || !OverlayKeyboard.isModifier(bindingForSlot(slot))) {
+            val keyCode = bindingKeyCode(bindingForSlot(slot))
+            if (!displayView.isRendererAttached || keyCode == null || !OverlayKeyboard.isModifier(keyCode)) {
                 false
             } else {
                 modifierTaps.clear()
@@ -427,6 +465,13 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         if (!displayView.isRendererAttached) return@setOnTouchListener true
+                        val binding = bindingForSlot(slot)
+                        val keyCode = bindingKeyCode(binding)
+                        if (keyCode == null) {
+                            target.isPressed = true
+                            downTime = event.eventTime
+                            return@setOnTouchListener true
+                        }
                         modifierTaps.cancelUnless(slot)
                         if (heldKeyboardSlots.isNotEmpty()) {
                             chordUsedSlots.addAll(heldKeyboardSlots)
@@ -436,14 +481,23 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
                         heldKeyboardSlots.add(slot)
                         downTime = event.eventTime
                         target.isPressed = true
-                        keyboardState.press(touchOwner(slot), bindingForSlot(slot))
+                        keyboardState.press(touchOwner(slot), keyCode)
                         updateKeyboardButtons()
                         true
                     }
 
                     MotionEvent.ACTION_UP -> {
                         target.isPressed = false
-                        val keyCode = bindingForSlot(slot)
+                        val binding = bindingForSlot(slot)
+                        val keyCode = bindingKeyCode(binding)
+                        if (keyCode == null) {
+                            target.isPressed = false
+                            executeBinding(binding)
+                            handledTouchClick = true
+                            target.performClick()
+                            updateKeyboardButtons()
+                            return@setOnTouchListener true
+                        }
                         if (isQuickModifierTap(
                                 isHeld = slot in heldKeyboardSlots,
                                 isModifier = OverlayKeyboard.isModifier(keyCode),
@@ -472,7 +526,7 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
                     MotionEvent.ACTION_CANCEL -> {
                         target.isPressed = false
                         modifierTaps.clear()
-                        keyboardState.release(touchOwner(slot))
+                        if (bindingKeyCode(bindingForSlot(slot)) != null) keyboardState.release(touchOwner(slot))
                         heldKeyboardSlots.remove(slot)
                         chordUsedSlots.remove(slot)
                         updateKeyboardButtons()
@@ -485,8 +539,31 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         }
     }
 
-    private fun bindingForSlot(slot: Int): Int =
-        if (slot >= 1000) displayKeys[slot - 1000].keyCode else keyboardBindings[slot]
+    private fun bindingForSlot(slot: Int): ExtraKeyBinding =
+        if (slot >= 1000) displayKeys[slot - 1000].binding else keyboardBindings[slot]
+
+    private fun bindingKeyCode(binding: ExtraKeyBinding): Int? =
+        binding.takeUnless(ExtraKeyBinding::macro)?.let { OverlayKeyboard.keyCode(it.action) }
+
+    private fun executeBinding(binding: ExtraKeyBinding) {
+        val tokens = binding.tokens()
+        val modifiers = tokens.mapNotNull(OverlayKeyboard::keyCode).filter(OverlayKeyboard::isModifier).distinct()
+        modifiers.forEach { sendOverlayKey(it, true) }
+        try {
+            tokens.forEach { token ->
+                val keyCode = OverlayKeyboard.keyCode(token)
+                if (keyCode?.let(OverlayKeyboard::isModifier) == true) return@forEach
+                if (keyCode == null) {
+                    displayView.sendTextEvent(token.toByteArray(UTF_8))
+                } else {
+                    sendOverlayKey(keyCode, true)
+                    sendOverlayKey(keyCode, false)
+                }
+            }
+        } finally {
+            modifiers.asReversed().forEach { sendOverlayKey(it, false) }
+        }
+    }
 
     private fun positionDisplayKeys() {
         displayKeyButtons.forEachIndexed { index, button ->
@@ -496,11 +573,12 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
     }
 
     private fun toggleLatchedKey(slot: Int) {
+        val keyCode = bindingKeyCode(bindingForSlot(slot)) ?: return
         val owner = latchOwner(slot)
         if (keyboardState.isPressed(owner)) {
             keyboardState.release(owner)
         } else {
-            keyboardState.press(owner, bindingForSlot(slot))
+            keyboardState.press(owner, keyCode)
         }
     }
 
@@ -521,9 +599,12 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
         (keyboardButtons.mapIndexed { slot, view -> slot to view } +
             displayKeyButtons.mapIndexed { index, view -> (1000 + index) to view }).forEach { (slot, view) ->
             val active = keyboardState.isPressed(touchOwner(slot)) || keyboardState.isPressed(latchOwner(slot))
-            view.isLongClickable = !arrangingDisplayKeys && OverlayKeyboard.isModifier(bindingForSlot(slot))
+            val binding = bindingForSlot(slot)
+            val keyCode = bindingKeyCode(binding)
+            view.setTextColor(if (active) activeText else onSurface)
+            view.isLongClickable = !arrangingDisplayKeys && keyCode != null && OverlayKeyboard.isModifier(keyCode)
             if (slot >= 1000) {
-                val label = OverlayKeyboard.label(bindingForSlot(slot))
+                val label = OverlayKeyboard.label(binding)
                 view.contentDescription = if (arrangingDisplayKeys) "Drag $label to move" else "Hold $label key"
             }
             view.background =
@@ -533,8 +614,8 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
 
     private fun stripButtonBackground(active: Boolean): StateListDrawable =
         StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(primaryContainer, Color.TRANSPARENT, 6))
-            addState(intArrayOf(), roundedBackground(if (active) primaryContainer else Color.TRANSPARENT, Color.TRANSPARENT, 6))
+            addState(intArrayOf(android.R.attr.state_pressed), roundedBackground(primaryContainer, Color.TRANSPARENT, 8))
+            addState(intArrayOf(), roundedBackground(if (active) primaryContainer else raisedContainer, Color.TRANSPARENT, 8))
         }
 
     private fun displayKeyBackground(active: Boolean): StateListDrawable =
@@ -599,6 +680,8 @@ internal class X11DesktopHostView(context: Context) : FrameLayout(context) {
                 text = label
                 contentDescription = description
                 gravity = Gravity.CENTER
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
                 setTextColor(onSurface)
                 textSize = 14f
                 isClickable = true

@@ -89,6 +89,7 @@ fun DesktopPage(
     }
 
     LaunchedEffect(arrangingDisplayKeys, showSettings) {
+        if (showSettings) displayView?.resetInput()
         if (arrangingDisplayKeys && !showSettings) {
             withFrameNanos { }
             displayView?.hideKeyboard()
@@ -126,9 +127,11 @@ fun DesktopPage(
     }
 
     val palettePrimary = MaterialTheme.colorScheme.primaryContainer.toArgb()
-    val paletteSurface = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
-    val paletteText = MaterialTheme.colorScheme.onSurface.toArgb()
-    val paletteOutline = MaterialTheme.colorScheme.outline.toArgb()
+    val paletteSurface = UdroidTerminalSurface.toArgb()
+    val paletteRaised = UdroidTerminalRaised.toArgb()
+    val paletteText = UdroidTerminalText.toArgb()
+    val paletteActiveText = UdroidTerminalGreen.toArgb()
+    val paletteOutline = UdroidTerminalLine.toArgb()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -182,7 +185,7 @@ fun DesktopPage(
                             updateSettings(settings.copy(displayKeys = moved))
                         }
                         it.setPaletteVisible(inputPaletteVisible)
-                        it.setKeyboardBindings(settings.overlayKeys)
+                        it.setKeyboardBindings(settings.overlayKeyRows)
                         it.setKeyboardStripVisible(settings.showKeyboardStrip)
                         it.setDisplayKeys(settings.displayKeys)
                         it.setDisplayKeysVisible(displayKeysVisible)
@@ -190,7 +193,9 @@ fun DesktopPage(
                         it.setPaletteColors(
                             primaryContainer = palettePrimary,
                             surfaceContainer = paletteSurface,
+                            raisedContainer = paletteRaised,
                             onSurface = paletteText,
+                            activeText = paletteActiveText,
                             outline = paletteOutline,
                         )
                     },
@@ -201,7 +206,7 @@ fun DesktopPage(
     }
 
     if (showSettings) {
-        X11SettingsDialog(
+        X11SettingsPage(
             settings = settings,
             onSettingsChanged = updateSettings,
             onArrangeDisplayKeys = {

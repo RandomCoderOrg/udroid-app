@@ -3,6 +3,9 @@ package org.randomcoder.udroid.x11
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONException
+import org.json.JSONObject
+import org.randomcoder.udroid.input.ExtraKeyBinding
+import org.randomcoder.udroid.runtime.TerminalExtraKeys
 import kotlin.math.roundToInt
 
 enum class X11ResolutionMode {
@@ -34,7 +37,7 @@ data class X11Settings(
     val preferScancodes: Boolean = false,
     val keepScreenOn: Boolean = true,
     val startControlsCollapsed: Boolean = false,
-    val overlayKeys: List<Int> = OverlayKeyboard.defaults,
+    val overlayKeyRows: List<List<ExtraKeyBinding>> = OverlayKeyboard.defaultRows,
     val displayKeys: List<DisplayKey> = emptyList(),
     val showKeyboardStrip: Boolean = true,
     val avoidSoftKeyboard: Boolean = true,
@@ -143,11 +146,7 @@ class X11SettingsStore(context: Context) {
             keepScreenOn = preferences.getBoolean(KEY_KEEP_SCREEN_ON, true),
             startControlsCollapsed =
                 preferences.getBoolean(KEY_START_CONTROLS_COLLAPSED, false),
-            overlayKeys =
-                OverlayKeyboard.normalized(
-                    preferences.getString(KEY_OVERLAY_KEYS, null)
-                        ?.split(',')?.mapNotNull(String::toIntOrNull).orEmpty(),
-                ),
+            overlayKeyRows = parseOverlayKeyRows(preferences.getString(KEY_OVERLAY_KEYS, null)),
             displayKeys = loadDisplayKeys(preferences.getString(KEY_DISPLAY_KEYS, null)),
             showKeyboardStrip = preferences.getBoolean(KEY_SHOW_KEYBOARD_STRIP, true),
             avoidSoftKeyboard = preferences.getBoolean(KEY_AVOID_SOFT_KEYBOARD, true),
@@ -171,7 +170,11 @@ class X11SettingsStore(context: Context) {
                 settings.startControlsCollapsed,
             ).putString(
                 KEY_OVERLAY_KEYS,
-                OverlayKeyboard.normalized(settings.overlayKeys).joinToString(","),
+                JSONArray().apply {
+                    OverlayKeyboard.normalizedRows(settings.overlayKeyRows).forEach { row ->
+                        put(JSONArray().apply { row.forEach { put(bindingJson(it)) } })
+                    }
+                }.toString(),
             ).putBoolean(
                 KEY_SHOW_KEYBOARD_STRIP,
                 settings.showKeyboardStrip,
@@ -182,7 +185,7 @@ class X11SettingsStore(context: Context) {
                 KEY_DISPLAY_KEYS,
                 JSONArray().apply {
                     OverlayKeyboard.normalizedDisplayKeys(settings.displayKeys).forEach { key ->
-                        put(JSONArray().put(key.keyCode).put(key.x.toDouble()).put(key.y.toDouble()))
+                        put(JSONArray().put(bindingJson(key.binding)).put(key.x.toDouble()).put(key.y.toDouble()))
                     }
                 }.toString(),
             ).apply()
@@ -198,14 +201,33 @@ class X11SettingsStore(context: Context) {
         try {
             val saved = JSONArray(raw ?: "[]")
             OverlayKeyboard.normalizedDisplayKeys(
-                (0 until saved.length()).map { index ->
+                (0 until saved.length()).mapNotNull { index ->
                     saved.getJSONArray(index).let { key ->
-                        DisplayKey(key.getInt(0), key.getDouble(1).toFloat(), key.getDouble(2).toFloat())
+                        val binding =
+                            if (key.get(0) is Number) {
+                                key.getInt(0).takeIf { it in OverlayKeyboard.keys }?.let(OverlayKeyboard::binding)
+                            } else {
+                                parseBinding(key.get(0))
+                            }
+                        binding?.let { DisplayKey(it, key.getDouble(1).toFloat(), key.getDouble(2).toFloat()) }
                     }
                 },
             )
         } catch (_: JSONException) {
             emptyList()
+        }
+
+    private fun parseBinding(value: Any): ExtraKeyBinding? =
+        parseOverlayBinding(value)
+
+    private fun bindingJson(binding: ExtraKeyBinding): Any =
+        if (!binding.macro && binding.display == null) {
+            binding.action
+        } else {
+            JSONObject().apply {
+                put(if (binding.macro) "macro" else "key", binding.action)
+                binding.display?.let { put("display", it) }
+            }
         }
 
     private companion object {
@@ -227,3 +249,36 @@ class X11SettingsStore(context: Context) {
         const val KEY_AVOID_SOFT_KEYBOARD = "avoid-soft-keyboard"
     }
 }
+
+internal fun parseOverlayKeyRows(raw: String?): List<List<ExtraKeyBinding>> {
+    if (raw.isNullOrBlank()) return OverlayKeyboard.defaultRows
+    return runCatching {
+        if (raw.startsWith("[")) {
+            val array = JSONArray(raw)
+            if (array.optJSONArray(0) != null) {
+                TerminalExtraKeys.parseTermuxJson(raw).rows
+            } else {
+                (0 until array.length()).mapNotNull { parseOverlayBinding(array.get(it)) }.chunked(6)
+            }
+        } else {
+            raw.split(',').mapNotNull(String::toIntOrNull).map(OverlayKeyboard::binding).chunked(6)
+        }
+    }.map(OverlayKeyboard::normalizedRows).getOrDefault(OverlayKeyboard.defaultRows)
+}
+
+private fun parseOverlayBinding(value: Any): ExtraKeyBinding? =
+    when (value) {
+        is String -> ExtraKeyBinding(value)
+        is JSONObject -> {
+            val key = value.optString("key").takeIf(String::isNotBlank)
+            val macro = value.optString("macro").takeIf(String::isNotBlank)
+            if ((key == null) == (macro == null)) null else {
+                ExtraKeyBinding(
+                    action = key ?: macro.orEmpty(),
+                    macro = macro != null,
+                    display = value.optString("display").takeIf(String::isNotBlank),
+                )
+            }
+        }
+        else -> null
+    }

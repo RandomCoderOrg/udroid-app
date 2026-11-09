@@ -217,6 +217,10 @@ public final class X11DisplayView extends SurfaceView
         rendererAttached = false;
     }
 
+    public void resetInput() {
+        releaseAllInput();
+    }
+
     public boolean isRendererAttached() {
         return rendererAttached && connected();
     }
