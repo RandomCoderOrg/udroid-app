@@ -77,6 +77,8 @@ object ProotDesktopLaunchBuilder {
                         androidHome = context.filesDir.absolutePath,
                         loaderPath = runtime.loader.absolutePath,
                         temporaryDirectory = temporaryDirectory.absolutePath,
+                        shmHelperLauncher = AndroidExecutableCommand.systemLinkerPath(),
+                        prootPath = runtime.executable.absolutePath,
                     ).associate {
                         val separator = it.indexOf('=')
                         it.substring(0, separator) to it.substring(separator + 1)

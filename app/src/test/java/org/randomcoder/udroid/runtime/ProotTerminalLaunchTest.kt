@@ -366,6 +366,8 @@ class ProotTerminalLaunchTest {
                 androidHome = "/data/user/0/udroid/files",
                 loaderPath = "/data/user/0/udroid/files/runtime/libproot-loader.so",
                 temporaryDirectory = "/data/user/0/udroid/cache/proot",
+                shmHelperLauncher = "/system/bin/linker64",
+                prootPath = "/data/user/0/udroid/files/runtime/proot",
             )
 
         assertTrue("ANDROID_ROOT=/system" in environment)
@@ -373,6 +375,10 @@ class ProotTerminalLaunchTest {
             "PROOT_LOADER=/data/user/0/udroid/files/runtime/libproot-loader.so" in environment,
         )
         assertTrue("PROOT_TMP_DIR=/data/user/0/udroid/cache/proot" in environment)
+        assertTrue("PROOT_SHM_HELPER_LAUNCHER=/system/bin/linker64" in environment)
+        assertTrue(
+            "PROOT_SHM_HELPER_EXECUTABLE=/data/user/0/udroid/files/runtime/proot" in environment,
+        )
         assertTrue("TMPDIR=/data/user/0/udroid/cache/proot" in environment)
     }
 }
