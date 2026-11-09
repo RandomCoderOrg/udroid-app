@@ -89,6 +89,7 @@ fun DesktopPage(
     }
 
     LaunchedEffect(arrangingDisplayKeys, showSettings) {
+        if (showSettings) displayView?.resetInput()
         if (arrangingDisplayKeys && !showSettings) {
             withFrameNanos { }
             displayView?.hideKeyboard()
@@ -182,7 +183,7 @@ fun DesktopPage(
                             updateSettings(settings.copy(displayKeys = moved))
                         }
                         it.setPaletteVisible(inputPaletteVisible)
-                        it.setKeyboardBindings(settings.overlayKeys)
+                        it.setKeyboardBindings(settings.overlayKeyRows)
                         it.setKeyboardStripVisible(settings.showKeyboardStrip)
                         it.setDisplayKeys(settings.displayKeys)
                         it.setDisplayKeysVisible(displayKeysVisible)
@@ -201,7 +202,7 @@ fun DesktopPage(
     }
 
     if (showSettings) {
-        X11SettingsDialog(
+        X11SettingsPage(
             settings = settings,
             onSettingsChanged = updateSettings,
             onArrangeDisplayKeys = {
