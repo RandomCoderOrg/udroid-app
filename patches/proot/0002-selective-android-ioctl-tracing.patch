@@ -1,0 +1,166 @@
+--- a/src/syscall/seccomp.c
++++ b/src/syscall/seccomp.c
+@@ -38,6 +38,10 @@
+ #include <stddef.h>        /* offsetof(3), */
+ #include <stdint.h>        /* uint*_t, UINT*_MAX, */
+ #include <assert.h>        /* assert(3), */
++#ifdef __ANDROID__
++#include <linux/ioctl.h>   /* _IOW, */
++#include <termios.h>       /* TCGETS2, TCSETS*, */
++#endif
+ 
+ #include "syscall/seccomp.h"
+ #include "tracee/tracee.h"
+@@ -117,9 +121,56 @@
+ 	status = add_statements(program, LENGTH_TRACE_SYSCALL, statements);
+ 	if (status < 0)
+ 		return status;
++
++	return 0;
++}
++
++#ifdef __ANDROID__
++#define LENGTH_TRACE_ANDROID_IOCTL 14
++
++/* Only requests rewritten in enter.c or exit.c need the ptrace round trip. */
++static int add_trace_android_ioctl(struct sock_fprog *program, word_t syscall)
++{
++	const uint32_t requests[] = {
++		TCSETS + 2,
++		TCGETS2,
++		TCSETS2,
++		TCSETSW2,
++		TCSETSF2,
++		_IOW(0x94, 9, int), /* FICLONE */
++	};
++	const size_t request_offset = offsetof(struct seccomp_data, args[1]);
++	struct sock_filter start[] = {
++		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, syscall, 0,
++			LENGTH_TRACE_ANDROID_IOCTL - 1),
++		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, request_offset),
++	};
++	size_t i;
++	int status;
++
++	if (syscall > UINT32_MAX || request_offset > UINT32_MAX)
++		return -ERANGE;
++
++	status = add_statements(program, sizeof(start) / sizeof(start[0]), start);
++	if (status < 0)
++		return status;
++
++	for (i = 0; i < sizeof(requests) / sizeof(requests[0]); i++) {
++		struct sock_filter request[] = {
++			BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, requests[i], 0, 1),
++			BPF_STMT(BPF_RET + BPF_K,
++				SECCOMP_RET_TRACE + FILTER_SYSEXIT),
++		};
++
++		status = add_statements(program,
++				sizeof(request) / sizeof(request[0]), request);
++		if (status < 0)
++			return status;
++	}
+ 
+ 	return 0;
+ }
++#endif
+ 
+ /**
+  * Append to @program->filter the statements that allow anything (if
+@@ -127,7 +178,8 @@
+  * sanity check.  This function returns -errno if an error occurred,
+  * otherwise 0.
+  */
+-static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscalls)
++static int end_arch_section(struct sock_fprog *program, size_t nb_traced_syscalls,
++				size_t extra_length)
+ {
+ 	int status;
+ 
+@@ -144,7 +196,8 @@
+ 
+ 	/* Sanity check, see start_arch_section().  */
+ 	if (   talloc_array_length(program->filter) - program->len
+-	    != LENGTH_END_SECTION + nb_traced_syscalls * LENGTH_TRACE_SYSCALL)
++	    != LENGTH_END_SECTION + nb_traced_syscalls * LENGTH_TRACE_SYSCALL
++		+ extra_length)
+ 		return -ERANGE;
+ 
+ 	return 0;
+@@ -156,12 +209,14 @@
+  * sanity check.  This function returns -errno if an error occurred,
+  * otherwise 0.
+  */
+-static int start_arch_section(struct sock_fprog *program, uint32_t arch, size_t nb_traced_syscalls)
++static int start_arch_section(struct sock_fprog *program, uint32_t arch,
++				size_t nb_traced_syscalls, size_t extra_length)
+ {
+ 	const size_t arch_offset    = offsetof(struct seccomp_data, arch);
+ 	const size_t syscall_offset = offsetof(struct seccomp_data, nr);
+ 	const size_t section_length = LENGTH_END_SECTION +
+-					nb_traced_syscalls * LENGTH_TRACE_SYSCALL;
++					nb_traced_syscalls * LENGTH_TRACE_SYSCALL +
++					extra_length;
+ 	int status;
+ 
+ 	/* Sanity checks.  */
+@@ -267,6 +322,7 @@
+ 	/* For each handled architectures */
+ 	for (i = 0; i < nb_archs; i++) {
+ 		word_t syscall;
++		size_t extra_length = 0;
+ 
+ 		nb_traced_syscalls = 0;
+ 
+@@ -279,8 +335,17 @@
+ 			}
+ 		}
+ 
++#ifdef __ANDROID__
++		for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
++			syscall = detranslate_sysnum(seccomp_archs[i].abis[j], PR_ioctl);
++			if (syscall != SYSCALL_AVOIDER)
++				extra_length += LENGTH_TRACE_ANDROID_IOCTL;
++		}
++#endif
++
+ 		/* Filter: if handled architecture */
+-		status = start_arch_section(&program, seccomp_archs[i].value, nb_traced_syscalls);
++		status = start_arch_section(&program, seccomp_archs[i].value,
++				nb_traced_syscalls, extra_length);
+ 		if (status < 0)
+ 			goto end;
+ 
+@@ -298,8 +363,20 @@
+ 			}
+ 		}
+ 
++#ifdef __ANDROID__
++		for (j = 0; j < seccomp_archs[i].nb_abis; j++) {
++			syscall = detranslate_sysnum(seccomp_archs[i].abis[j], PR_ioctl);
++			if (syscall == SYSCALL_AVOIDER)
++				continue;
++
++			status = add_trace_android_ioctl(&program, syscall);
++			if (status < 0)
++				goto end;
++		}
++#endif
++
+ 		/* Filter: allow untraced syscalls for this architecture */
+-		status = end_arch_section(&program, nb_traced_syscalls);
++		status = end_arch_section(&program, nb_traced_syscalls, extra_length);
+ 		if (status < 0)
+ 			goto end;
+ 	}
+@@ -356,9 +433,6 @@
+ 	{ PR_getsockname,	FILTER_SYSEXIT },
+ 	{ PR_getxattr,		0 },
+ 	{ PR_inotify_add_watch,	0 },
+-#ifdef __ANDROID__
+-	{ PR_ioctl,		FILTER_SYSEXIT },
+-#endif
+ 	{ PR_lchown,		0 },
+ 	{ PR_lchown32,		0 },
+ 	{ PR_lgetxattr,		0 },
