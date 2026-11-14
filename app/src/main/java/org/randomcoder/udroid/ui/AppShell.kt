@@ -121,6 +121,7 @@ import org.randomcoder.udroid.runtime.TerminalColorProfile
 import org.randomcoder.udroid.runtime.TerminalProfileState
 import org.randomcoder.udroid.runtime.TerminalProfileStore
 import org.randomcoder.udroid.runtime.TerminalProfiles
+import org.randomcoder.udroid.runtime.TerminalTabSnapshot
 import org.randomcoder.udroid.runtime.TerminalTypographyState
 import org.randomcoder.udroid.runtime.TerminalTypographyStore
 import org.randomcoder.udroid.runtime.VirglServerMode
@@ -208,10 +209,14 @@ fun UdroidApp(
     showInstallTerminal: Boolean,
     runtimeService: RuntimeSupervisorService?,
     onTerminalAppearanceChanged: () -> Unit,
+    terminalUploadTabId: String?,
+    terminalUploadMessage: String?,
+    terminalUploadFailed: Boolean,
     onDestinationSelected: (UdroidDestination) -> Unit,
     onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onUploadTerminalFile: (TerminalTabSnapshot) -> Unit,
     onRefresh: () -> Unit,
     onReloadCatalogue: () -> Unit,
     onPreviewInstall: (DistroVariant) -> Unit,
@@ -344,8 +349,12 @@ fun UdroidApp(
                         )
                     },
                     onTypographyChanged = ::applyTerminalTypography,
+                    uploadingTabId = terminalUploadTabId,
+                    uploadMessage = terminalUploadMessage,
+                    uploadFailed = terminalUploadFailed,
                     onStart = onStart,
                     onStop = onStop,
+                    onUploadFile = onUploadTerminalFile,
                     onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
                 )
             }
