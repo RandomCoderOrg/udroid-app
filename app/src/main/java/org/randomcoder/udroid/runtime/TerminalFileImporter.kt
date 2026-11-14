@@ -22,27 +22,20 @@ internal object TerminalFileImporter {
             "The selected Linux system is unavailable"
         }
 
-        val rootHome = root.resolve("root")
-        check(!Files.isSymbolicLink(rootHome)) {
-            "The Linux home directory cannot be a symbolic link"
-        }
-        val home = if (Files.isDirectory(rootHome, LinkOption.NOFOLLOW_LINKS)) rootHome else root
-        val uploads = home.resolve("Uploads")
-        if (Files.exists(uploads, LinkOption.NOFOLLOW_LINKS)) {
-            check(Files.isDirectory(uploads, LinkOption.NOFOLLOW_LINKS)) {
-                "~/Uploads is not a directory"
+        val temporaryDirectory = root.resolve("tmp")
+        if (Files.exists(temporaryDirectory, LinkOption.NOFOLLOW_LINKS)) {
+            check(Files.isDirectory(temporaryDirectory, LinkOption.NOFOLLOW_LINKS)) {
+                "/tmp is not a directory"
             }
         } else {
-            Files.createDirectory(uploads)
+            Files.createDirectory(temporaryDirectory)
         }
 
         val fileName = safeFileName(sourceName)
-        val destination = uploads.resolve(fileName)
-        check(!Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
-            "~/Uploads/$fileName already exists"
-        }
+        val guestDestination = "/tmp/$fileName"
+        val destination = temporaryDirectory.resolve(fileName)
 
-        val staging = uploads.resolve(".upload-${UUID.randomUUID()}.part")
+        val staging = temporaryDirectory.resolve(".upload-${UUID.randomUUID()}.part")
         try {
             Files.createFile(
                 staging,
@@ -58,14 +51,19 @@ internal object TerminalFileImporter {
                 output.fd.sync()
             }
             try {
-                Files.move(staging, destination, StandardCopyOption.ATOMIC_MOVE)
+                Files.move(
+                    staging,
+                    destination,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
             } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(staging, destination)
+                Files.move(staging, destination, StandardCopyOption.REPLACE_EXISTING)
             }
         } finally {
             Files.deleteIfExists(staging)
         }
-        return "~/Uploads/$fileName"
+        return guestDestination
     }
 
     internal fun safeFileName(sourceName: String?): String {
@@ -77,10 +75,6 @@ internal object TerminalFileImporter {
                 .map { character ->
                     if (character.code < 32 || character.code == 127) '_' else character
                 }.joinToString("")
-                .trim()
-                .take(MAX_FILE_NAME_CHARS)
         return sanitized.takeUnless { it.isBlank() || it == "." || it == ".." } ?: "upload"
     }
-
-    private const val MAX_FILE_NAME_CHARS = 64
 }

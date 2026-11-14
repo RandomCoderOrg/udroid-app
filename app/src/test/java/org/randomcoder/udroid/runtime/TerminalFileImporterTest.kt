@@ -12,6 +12,13 @@ import java.nio.file.attribute.PosixFilePermission
 
 class TerminalFileImporterTest {
     @Test
+    fun `valid file names are preserved`() {
+        val sourceName = "  ${"a".repeat(65)}.txt  "
+
+        assertEquals(sourceName, TerminalFileImporter.safeFileName(sourceName))
+    }
+
+    @Test
     fun `imports stay inside the selected distro`() {
         val parent = Files.createTempDirectory("udroid-terminal-upload").toFile()
         try {
@@ -25,13 +32,13 @@ class TerminalFileImporterTest {
                     source = ByteArrayInputStream("private key".toByteArray()),
                 )
 
-            assertEquals("~/Uploads/server.pem", imported)
-            assertEquals("private key", ubuntu.resolve("root/Uploads/server.pem").readText())
+            assertEquals("/tmp/server.pem", imported)
+            assertEquals("private key", ubuntu.resolve("tmp/server.pem").readText())
             assertEquals(
                 setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
-                Files.getPosixFilePermissions(ubuntu.resolve("root/Uploads/server.pem").toPath()),
+                Files.getPosixFilePermissions(ubuntu.resolve("tmp/server.pem").toPath()),
             )
-            assertFalse(debian.resolve("root/Uploads/server.pem").exists())
+            assertFalse(debian.resolve("tmp/server.pem").exists())
             assertFalse(parent.resolve("server.pem").exists())
         } finally {
             parent.deleteRecursively()
@@ -53,32 +60,63 @@ class TerminalFileImporterTest {
                 }.exceptionOrNull()
 
             assertTrue(failure is IOException)
-            assertTrue(rootfs.resolve("root/Uploads").listFiles().orEmpty().isEmpty())
+            assertTrue(rootfs.resolve("tmp").listFiles().orEmpty().isEmpty())
         } finally {
             rootfs.deleteRecursively()
         }
     }
 
     @Test
-    fun `existing upload is never overwritten`() {
+    fun `existing upload is replaced`() {
         val rootfs = Files.createTempDirectory("udroid-terminal-upload").toFile()
         val existing =
-            rootfs.resolve("root/Uploads/config.json").apply {
+            rootfs.resolve("tmp/config.json").apply {
                 requireNotNull(parentFile).mkdirs()
                 writeText("original")
             }
         try {
-            val failure =
-                runCatching {
-                    TerminalFileImporter.import(
-                        rootfs = rootfs,
-                        sourceName = "config.json",
-                        source = ByteArrayInputStream("replacement".toByteArray()),
-                    )
-                }.exceptionOrNull()
+            val imported =
+                TerminalFileImporter.import(
+                    rootfs = rootfs,
+                    sourceName = "config.json",
+                    source = ByteArrayInputStream("replacement".toByteArray()),
+                )
 
-            assertTrue(failure is IllegalStateException)
-            assertEquals("original", existing.readText())
+            assertEquals("/tmp/config.json", imported)
+            assertEquals("replacement", existing.readText())
+        } finally {
+            rootfs.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `upload created while copying is replaced`() {
+        val rootfs = Files.createTempDirectory("udroid-terminal-upload").toFile()
+        val destination = rootfs.resolve("tmp/config.json")
+        destination.parentFile?.mkdirs()
+        try {
+            val source =
+                object : ByteArrayInputStream("replacement".toByteArray()) {
+                    override fun read(
+                        buffer: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int {
+                        destination.writeText("original")
+                        return super.read(buffer, offset, length)
+                    }
+                }
+
+            val imported =
+                TerminalFileImporter.import(
+                    rootfs = rootfs,
+                    sourceName = "config.json",
+                    source = source,
+                )
+
+            assertEquals("/tmp/config.json", imported)
+            assertEquals("replacement", destination.readText())
+            assertTrue(destination.parentFile?.listFiles().orEmpty().size == 1)
         } finally {
             rootfs.deleteRecursively()
         }
