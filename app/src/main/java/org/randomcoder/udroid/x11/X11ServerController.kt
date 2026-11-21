@@ -147,6 +147,16 @@ class X11ServerController(
             ?.let { X11RuntimePaths.socketDirectory(context) }
             ?.takeIf(File::isDirectory)
 
+    fun whenReady(rootfs: File, bootId: String?, callback: (File?) -> Unit) {
+        // A terminal-only distro may have failed to supply XKB data for the shared display.
+        if (pendingStart == null && (bootId == null || runCatching { start(rootfs, bootId) }.isFailure)) {
+            pendingStart = null
+            callback(null)
+            return
+        }
+        whenReady(callback)
+    }
+
     fun whenReady(callback: (File?) -> Unit) {
         val socketDirectory = activeSocketDirectory()
         if (socketDirectory != null) {

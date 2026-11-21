@@ -47,6 +47,7 @@ import org.randomcoder.udroid.virgl.VirglHostSnapshot
 import org.randomcoder.udroid.virgl.VirglProotLaunchProfile
 import org.randomcoder.udroid.virgl.VenusGuestRuntimeInstaller
 import org.randomcoder.udroid.virgl.parseZinkRequirements
+import org.randomcoder.udroid.x11.X11RuntimePaths
 import org.randomcoder.udroid.x11.X11ServerController
 import java.io.BufferedReader
 import java.io.File
@@ -63,18 +64,21 @@ class RuntimeSupervisorService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val terminalTabs = TerminalTabRegistry<TerminalSession>()
     private var nextTerminalNumber = 1
-    private var terminalCreationInFlight = false
+    private var openingRootfs: String? = null
+    private var coldOpenCallback: ((Result<String>) -> Unit)? = null
     private var terminalTabsRefreshPending = false
     private var terminalCursorStyle = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
     private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
-    private val virglApplicationBackends = ConcurrentHashMap<String, VirglHostBackend>()
+    private val virglApplicationBackends = ConcurrentHashMap<Pair<String, String>, VirglHostBackend>()
     private val virglHostLock = Any()
     private val desktopLaunchToken = AtomicReference<String?>(null)
     private val pendingDesktopRestart = AtomicReference<DesktopLaunchRequest?>(null)
     private val attachedViews = CopyOnWriteArraySet<TerminalView>()
-    private val applicationProcesses = ConcurrentHashMap<String, Process>()
+    private val applicationProcesses = ConcurrentHashMap<Pair<String, String>, OwnedApplication>()
+    private var applicationGeneration = 0L
+    private val launchingApplications = mutableSetOf<Pair<String, String>>()
     private val applicationExecutor = Executors.newCachedThreadPool()
     private val x11Controller by lazy { X11ServerController(this, app.journal) }
     private val audioConfigurationStore by lazy { AudioConfigurationStore(this) }
@@ -254,6 +258,15 @@ class RuntimeSupervisorService : Service() {
                 val configuration = effectiveAudioConfiguration(rootfsName, allowMicrophone = true)
                 startRuntimeForeground("Starting Linux terminal…", configuration)
                 startRuntime(rootfsName, configuration)
+                coldOpenCallback?.takeIf { openingRootfs == rootfsName }?.let { complete ->
+                    coldOpenCallback = null
+                    openingRootfs = null
+                    val tab = terminalTabs.active()
+                    complete(
+                        if (tab != null && tab.rootfsName == rootfsName && tab.value.isRunning) Result.success(tab.id)
+                        else Result.failure(IllegalStateException(app.runtimeState.current().message)),
+                    )
+                }
                 START_STICKY
             }
 
@@ -289,7 +302,10 @@ class RuntimeSupervisorService : Service() {
     override fun onDestroy() {
         attachedViews.clear()
         mainHandler.removeCallbacksAndMessages(null)
-        terminalTabs.clear().forEach { it.value.finishIfRunning() }
+        terminalTabs.clear().forEach { tab ->
+            signalHostSession(tab.hostSessionId, OsConstants.SIGKILL)
+            tab.value.finishIfRunning()
+        }
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
@@ -328,6 +344,36 @@ class RuntimeSupervisorService : Service() {
             )
         }
 
+    fun rootfsInUse(name: String): Boolean =
+        name == openingRootfs || terminalTabs.all().any { it.rootfsName == name } ||
+            applicationProcesses.any { (key, app) -> key.first == name && app.process.isAlive } ||
+            launchingApplications.any { it.first == name }
+
+    fun openTerminal(rootfsName: String, newTab: Boolean, complete: (Result<String>) -> Unit) {
+        val existing = terminalTabs.mostRecent(rootfsName) { it.isRunning }
+        when {
+            app.rootfsRegistry.maintenanceRootfs == rootfsName ->
+                complete(Result.failure(IllegalStateException("This Linux filesystem is being changed")))
+            app.runtimeState.current().phase == RuntimePhase.STOPPING ->
+                complete(Result.failure(IllegalStateException("Linux is stopping")))
+            existing != null && !newTab -> {
+                selectTerminalTab(existing.id)
+                complete(Result.success(existing.id))
+            }
+            terminalTabs.size() > 0 -> createTerminalTab(rootfsName, complete)
+            openingRootfs != null -> complete(Result.failure(IllegalStateException("A terminal is already opening")))
+            else -> {
+                openingRootfs = rootfsName
+                coldOpenCallback = complete
+                runCatching { start(this, rootfsName) }.onFailure {
+                    openingRootfs = null
+                    coldOpenCallback = null
+                    complete(Result.failure(it))
+                }
+            }
+        }
+    }
+
     fun createTerminalTab(
         rootfsName: String,
         onComplete: (Result<String>) -> Unit,
@@ -335,7 +381,11 @@ class RuntimeSupervisorService : Service() {
         check(Looper.myLooper() == Looper.getMainLooper()) {
             "Terminal tabs must be created from the main thread"
         }
-        if (terminalCreationInFlight) {
+        if (app.rootfsRegistry.maintenanceRootfs == rootfsName) {
+            onComplete(Result.failure(IllegalStateException("This Linux filesystem is being changed")))
+            return
+        }
+        if (openingRootfs != null) {
             onComplete(Result.failure(IllegalStateException("A terminal is already opening")))
             return
         }
@@ -344,22 +394,18 @@ class RuntimeSupervisorService : Service() {
             onComplete(Result.failure(IllegalStateException("Start Linux before opening another terminal")))
             return
         }
-        terminalCreationInFlight = true
+        openingRootfs = rootfsName
+        scheduleTerminalTabsChanged()
         val inheritedWorkingDirectory =
             terminalTabs.active()
                 ?.takeIf { it.rootfsName == rootfsName }
                 ?.workingDirectory
-        val x11SocketDirectory = x11Controller.activeSocketDirectory()
+        val x11SocketDirectory = X11RuntimePaths.socketDirectory(this).takeIf(File::isDirectory)
         val audioEndpoint = audioController.endpoint()
         applicationExecutor.execute {
             val prepared =
                 runCatching {
-                    val rootfs =
-                        app.rootfsRegistry
-                            .all()
-                            .firstOrNull { it.name == rootfsName }
-                            ?.directory
-                            ?: error("Linux system $rootfsName is not installed or is not ready")
+                    val rootfs = app.rootfsRegistry.directoryFor(rootfsName)
                     val graphicsProfile =
                         desktopConfigurationStore.loadGraphicsProfile(rootfs.name)
                     val virglServerMode =
@@ -379,7 +425,7 @@ class RuntimeSupervisorService : Service() {
                 val result =
                     prepared.mapCatching { launch ->
                         val current = app.runtimeState.current()
-                        check(current.phase == RuntimePhase.RUNNING) {
+                        check(current.phase == RuntimePhase.RUNNING && current.bootId == snapshot.bootId) {
                             "Linux stopped while the terminal was opening"
                         }
                         val tab = createTerminalSession(launch)
@@ -409,7 +455,8 @@ class RuntimeSupervisorService : Service() {
                             fields = mapOf("exception" to error.javaClass.name),
                         )
                     }
-                terminalCreationInFlight = false
+                openingRootfs = null
+                scheduleTerminalTabsChanged()
                 onComplete(result)
             }
         }
@@ -463,9 +510,10 @@ class RuntimeSupervisorService : Service() {
         return true
     }
 
-    fun closeTerminalTab(id: String): Boolean {
+    fun closeTerminalTab(id: String, stopIfLast: Boolean): Boolean {
         if (terminalTabs.get(id) == null) return false
         if (terminalTabs.size() == 1) {
+            if (!stopIfLast) return false
             stopRuntime(userRequested = true)
             return true
         }
@@ -599,6 +647,13 @@ class RuntimeSupervisorService : Service() {
         environment: DesktopEnvironment,
         configuration: DesktopConfiguration,
     ) {
+        val desktop = app.runtimeState.current().desktop
+        if (desktop.phase in setOf(DesktopSessionPhase.STARTING, DesktopSessionPhase.RUNNING, DesktopSessionPhase.STOPPING) &&
+            desktop.rootfsName != rootfsName
+        ) {
+            reportDisplayOwner(desktop.rootfsName, desktop.environmentName)
+            return
+        }
         val request = DesktopLaunchRequest(rootfsName, environment, configuration)
         val current = ownedDesktop.get()
         if (current == null || !current.process.isAlive) {
@@ -669,7 +724,8 @@ class RuntimeSupervisorService : Service() {
             return
         }
 
-        if (applicationProcesses[application.id]?.isAlive == true) {
+        val appKey = rootfsName to application.id
+        if (applicationProcesses[appKey]?.process?.isAlive == true) {
             app.journal.append(
                 component = "linux-app",
                 severity = "info",
@@ -682,15 +738,21 @@ class RuntimeSupervisorService : Service() {
             return
         }
 
-        x11Controller.whenReady { socketDirectory ->
+        val rootfs = app.rootfsRegistry.directoryFor(rootfsName)
+        val generation = applicationGeneration
+        if (!launchingApplications.add(appKey)) {
+            callback(Result.failure(IllegalStateException("${application.name} is already opening")))
+            return
+        }
+        x11Controller.whenReady(rootfs, snapshot.bootId) { socketDirectory ->
             if (socketDirectory == null) {
+                launchingApplications.remove(appKey)
                 callback(Result.failure(IllegalStateException("Embedded X11 failed to start")))
                 return@whenReady
             }
             applicationExecutor.execute {
                 val result =
                     runCatching {
-                        val rootfs = InstalledRootfsResolver.resolve(this, rootfsName)
                         val profile = desktopConfigurationStore.loadGraphicsProfile(rootfsName)
                         val launchProfile =
                             graphicsLaunchProfile(
@@ -718,22 +780,36 @@ class RuntimeSupervisorService : Service() {
                                     "working_directory" to launch.workingDirectory.absolutePath,
                                 ),
                         )
-                        val process =
-                            ProcessBuilder(launch.command)
+                        val pidFile = File.createTempFile("linux-app-", ".pid", cacheDir)
+                        val builder =
+                            ProcessBuilder(wrapWithPidFile(launch.command, pidFile))
                                 .directory(launch.workingDirectory)
                                 .redirectErrorStream(true)
                                 .apply {
                                     environment().clear()
                                     environment().putAll(launch.environment)
-                                }.start()
-                        applicationProcesses.put(application.id, process)?.destroy()
+                                }
+                        val process = synchronized(applicationProcesses) {
+                            check(generation == applicationGeneration) { "Linux stopped while the app was opening" }
+                            val process = builder.start()
+                            val sessionId = try {
+                                awaitHostPid(pidFile) ?: error("Linux application did not publish its session ID")
+                            } catch (error: Throwable) {
+                                process.destroyForcibly()
+                                throw error
+                            } finally {
+                                pidFile.delete()
+                            }
+                            applicationProcesses[appKey] = OwnedApplication(process, sessionId)
+                            process
+                        }
                         val virglBackend = VirglHostBackend.from(profile)
                         if (virglBackend != null) {
-                            virglApplicationBackends[application.id] = virglBackend
+                            virglApplicationBackends[appKey] = virglBackend
                         } else {
-                            virglApplicationBackends -= application.id
+                            virglApplicationBackends -= appKey
                         }
-                        drainApplicationOutput(application, process)
+                        drainApplicationOutput(appKey, application, process)
                         app.journal.append(
                             component = "linux-app",
                             severity = "info",
@@ -748,18 +824,19 @@ class RuntimeSupervisorService : Service() {
                                 ),
                         )
                     }
-                mainHandler.post { callback(result) }
+                mainHandler.post {
+                    launchingApplications.remove(appKey)
+                    scheduleTerminalTabsChanged()
+                    callback(result)
+                }
             }
         }
     }
 
     private fun startDesktopInternal(request: DesktopLaunchRequest) {
         val runtime = app.runtimeState.current()
-        val terminal = currentTerminalSession()
-        if (
-            runtime.phase != RuntimePhase.RUNNING ||
-            terminal?.isRunning != true ||
-            terminal.mSessionName != request.rootfsName
+        if (runtime.phase != RuntimePhase.RUNNING ||
+            terminalTabs.mostRecent(request.rootfsName) { it.isRunning } == null
         ) {
             publishDesktopFailure(
                 request,
@@ -801,10 +878,7 @@ class RuntimeSupervisorService : Service() {
                     },
                 )
             } else {
-                publishDesktopFailure(
-                    request,
-                    "${existing.environment.name} owns display :0; stop it before switching",
-                )
+                reportDisplayOwner(existing.rootfsName, existing.environment.name)
             }
             return
         }
@@ -843,7 +917,8 @@ class RuntimeSupervisorService : Service() {
                     "graphics_profile" to request.configuration.graphicsProfile.storageValue,
                 ),
         )
-        x11Controller.whenReady { socketDirectory ->
+        val rootfs = app.rootfsRegistry.directoryFor(request.rootfsName)
+        x11Controller.whenReady(rootfs, runtime.bootId) { socketDirectory ->
             if (desktopLaunchToken.get() != launchToken) return@whenReady
             if (socketDirectory == null) {
                 if (desktopLaunchToken.compareAndSet(launchToken, null)) {
@@ -855,7 +930,6 @@ class RuntimeSupervisorService : Service() {
                 var startingGfxstreamHost: GfxstreamHostController? = null
                 runCatching {
                     if (desktopLaunchToken.get() != launchToken) return@runCatching null
-                    val rootfs = InstalledRootfsResolver.resolve(this, request.rootfsName)
                     val launchProfile =
                         when (request.configuration.graphicsProfile) {
                             DesktopGraphicsProfile.STANDARD,
@@ -1360,7 +1434,7 @@ class RuntimeSupervisorService : Service() {
                 .map { it.key }
                 .forEach { applicationId ->
                     if (virglApplicationBackends.remove(applicationId, backend)) {
-                        applicationProcesses.remove(applicationId)?.destroy()
+                        applicationProcesses.remove(applicationId)?.let(::stopApplication)
                     }
                 }
             host.close()
@@ -1404,6 +1478,11 @@ class RuntimeSupervisorService : Service() {
                 releaseGfxstreamHost(host)
             }
         }
+    }
+
+    private fun reportDisplayOwner(rootfsName: String?, environmentName: String?) {
+        val message = "${environmentName ?: "A desktop"} in $rootfsName owns display :0. Stop that desktop first."
+        publishState(app.runtimeState.update { it.copy(desktop = it.desktop.copy(message = message)) })
     }
 
     private fun publishDesktopFailure(
@@ -1469,6 +1548,7 @@ class RuntimeSupervisorService : Service() {
         owned: OwnedDesktopProcess,
         signal: Int,
     ) {
+        signalHostSession(owned.hostPid, signal)
         try {
             Os.kill(-owned.hostPid, signal)
         } catch (error: ErrnoException) {
@@ -1496,34 +1576,16 @@ class RuntimeSupervisorService : Service() {
         audioConfiguration: AudioConfiguration =
             effectiveAudioConfiguration(requestedRootfsName, allowMicrophone = false),
     ) {
-        val existing = terminalTabs.active()
-        if (existing?.value?.isRunning == true && existing.value.pid > 0) {
-            if (requestedRootfsName != null && existing.rootfsName != requestedRootfsName) {
-                publishState(
-                    app.runtimeState.update {
-                        it.copy(
-                            message =
-                                "${existing.rootfsName} is running; stop it before switching " +
-                                    "to $requestedRootfsName",
-                        )
-                    },
-                )
-                return
+        if (terminalTabs.size() > 0) {
+            if (requestedRootfsName != null) {
+                openTerminal(requestedRootfsName, newTab = false) { result ->
+                    result.onFailure { error ->
+                        publishState(app.runtimeState.update { it.copy(message = error.message ?: "Could not open terminal") })
+                    }
+                }
             }
-            publishState(
-                app.runtimeState.update {
-                    it.copy(
-                        phase = RuntimePhase.RUNNING,
-                        desiredRunning = true,
-                        message = "${terminalTabs.size()} terminal tab(s) running",
-                        childPid = existing.value.pid.toLong(),
-                        rootfsName = existing.rootfsName,
-                    )
-                },
-            )
             return
         }
-        terminalTabs.clear().forEach { it.value.finishIfRunning() }
         nextTerminalNumber = 1
 
         val bootId = UUID.randomUUID().toString()
@@ -1546,6 +1608,9 @@ class RuntimeSupervisorService : Service() {
         )
 
         runCatching {
+            check(requestedRootfsName == null || app.rootfsRegistry.maintenanceRootfs != requestedRootfsName) {
+                "This Linux filesystem is being changed"
+            }
             val runtime = ProotRuntimeInstaller.install(this)
             val rootfs = InstalledRootfsResolver.resolve(this, requestedRootfsName)
             val graphicsProfile = desktopConfigurationStore.loadGraphicsProfile(rootfs.name)
@@ -1671,6 +1736,7 @@ class RuntimeSupervisorService : Service() {
                 DEFAULT_CELL_HEIGHT_PX,
             )
             check(session.pid > 0) { "Termux did not return a terminal child PID" }
+            tab.hostSessionId = session.pid
         } catch (error: Throwable) {
             terminalTabs.remove(tab.id)
             if (session.pid > 0) session.finishIfRunning()
@@ -1720,6 +1786,7 @@ class RuntimeSupervisorService : Service() {
     private fun handleSessionFinished(session: TerminalSession) {
         val tab = terminalTabs.findByValue(session) ?: return
         val individuallyClosed = tab.closeState != TerminalTabCloseState.OPEN
+        if (individuallyClosed) signalHostSession(tab.hostSessionId, OsConstants.SIGKILL)
         terminalTabs.remove(tab.id)
         val exitCode = session.exitStatus
         val beforeExit = app.runtimeState.current()
@@ -1843,6 +1910,7 @@ class RuntimeSupervisorService : Service() {
             handleSessionFinished(session)
             return
         }
+        signalHostSession(tab.hostSessionId, OsConstants.SIGTERM)
         try {
             Os.kill(session.pid, OsConstants.SIGTERM)
         } catch (error: ErrnoException) {
@@ -1882,6 +1950,7 @@ class RuntimeSupervisorService : Service() {
             bootId = app.runtimeState.current().bootId,
             fields = mapOf("tab_id" to tab.id, "child_pid" to session.pid),
         )
+        signalHostSession(tab.hostSessionId, OsConstants.SIGKILL)
         session.finishIfRunning()
         mainHandler.postDelayed(
             {
@@ -1958,6 +2027,7 @@ class RuntimeSupervisorService : Service() {
     }
 
     private fun drainApplicationOutput(
+        appKey: Pair<String, String>,
         application: LinuxApplication,
         process: Process,
     ) {
@@ -1990,7 +2060,7 @@ class RuntimeSupervisorService : Service() {
                     }
                 }
             }.onFailure { error ->
-                val replaced = applicationProcesses[application.id] !== process
+                val replaced = applicationProcesses[appKey]?.process !== process
                 if (!replaced && process.isAlive) {
                     runCatching {
                         app.journal.append(
@@ -2015,8 +2085,10 @@ class RuntimeSupervisorService : Service() {
                     Thread.currentThread().interrupt()
                     return@processWait
                 }
-            if (applicationProcesses.remove(application.id, process)) {
-                virglApplicationBackends -= application.id
+            val owned = applicationProcesses[appKey]
+            if (owned?.process === process && applicationProcesses.remove(appKey, owned)) {
+                virglApplicationBackends -= appKey
+                mainHandler.post { scheduleTerminalTabsChanged() }
             }
             app.journal.append(
                 component = "linux-app",
@@ -2033,11 +2105,31 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
-    private fun stopApplicationProcesses() {
-        applicationProcesses.values.forEach { process ->
-            if (process.isAlive) process.destroy()
+    private fun stopApplication(app: OwnedApplication) {
+        if (app.process.isAlive) {
+            signalHostSession(app.sessionId, OsConstants.SIGKILL)
+            app.process.destroyForcibly()
         }
-        applicationProcesses.clear()
+    }
+
+    // A PTY session can have a separate process group for every shell job.
+    private fun signalHostSession(sessionId: Int, signal: Int) {
+        if (sessionId <= 1) return
+        runCatching {
+            val status = ProcessBuilder(
+                "/system/bin/toybox", "pkill", "-s", sessionId.toString(), "-l",
+                if (signal == OsConstants.SIGKILL) "KILL" else "TERM", ".*",
+            ).start().waitFor()
+            check(status == 0 || status == 1) { "pkill exited with status $status" }
+        }.onFailure { Log.w("uDroidRuntime", "Could not signal Linux session $sessionId", it) }
+    }
+
+    private fun stopApplicationProcesses() {
+        synchronized(applicationProcesses) {
+            applicationGeneration++
+            applicationProcesses.values.forEach(::stopApplication)
+            applicationProcesses.clear()
+        }
         virglApplicationBackends.clear()
     }
 
@@ -2127,11 +2219,12 @@ class RuntimeSupervisorService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         val stopIntent =
-            PendingIntent.getService(
+            PendingIntent.getActivity(
                 this,
                 1,
-                Intent(this, RuntimeSupervisorService::class.java)
-                    .setAction(ACTION_STOP_RUNTIME),
+                Intent(this, MainActivity::class.java)
+                    .setAction(ACTION_CONFIRM_STOP)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
@@ -2142,7 +2235,7 @@ class RuntimeSupervisorService : Service() {
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(0, "Stop", stopIntent)
+            .addAction(0, "Stop all sessions", stopIntent)
             .build()
     }
 
@@ -2167,6 +2260,7 @@ class RuntimeSupervisorService : Service() {
             "org.randomcoder.udroid.action.TERMINAL_TABS_CHANGED"
         const val EXTRA_PHASE = "phase"
         const val EXTRA_UPDATED_AT = "updated-at"
+        const val ACTION_CONFIRM_STOP = "org.randomcoder.udroid.action.CONFIRM_STOP"
         const val EXTRA_ROOTFS_NAME = "rootfs-name"
 
         private const val ACTION_START_RUNTIME =
@@ -2209,6 +2303,8 @@ class RuntimeSupervisorService : Service() {
             )
         }
     }
+
+    private data class OwnedApplication(val process: Process, val sessionId: Int)
 
     private data class DesktopLaunchRequest(
         val rootfsName: String,

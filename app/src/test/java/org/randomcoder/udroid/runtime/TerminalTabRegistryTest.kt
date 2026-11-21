@@ -111,6 +111,22 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `opening a distro resumes its most recently selected available tab`() {
+        val registry = TerminalTabRegistry<Any>()
+        val first = registry.add(tab("one", rootfsName = "debian"))
+        val second = registry.add(tab("two", rootfsName = "debian"))
+        registry.select(first.id)
+        registry.add(tab("three", rootfsName = "alpine"))
+
+        assertEquals(first, registry.mostRecent("debian") { true })
+        registry.beginClose(first.id)
+        assertEquals(second, registry.mostRecent("debian") { true })
+        assertNull(registry.mostRecent("debian") { false })
+        assertNull(registry.mostRecent("ubuntu") { true })
+        assertEquals("three", registry.activeId)
+    }
+
+    @Test
     fun `closing state prevents duplicate close and supports retry after failure`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))

@@ -85,6 +85,7 @@ import java.util.Date
 
 @Composable
 fun LinuxSystemPage(
+    rootfsInUse: Boolean?,
     rootfs: InstalledRootfs,
     distro: DistroVariant?,
     active: Boolean,
@@ -164,7 +165,7 @@ fun LinuxSystemPage(
         desktop.phase == DesktopSessionPhase.STARTING ||
             desktop.phase == DesktopSessionPhase.STOPPING
     val desktopRunning = desktopOwnsSystem && desktop.phase == DesktopSessionPhase.RUNNING
-    val runtimeBlocksMaintenance =
+    val runtimeBlocksMaintenance = rootfsInUse == true ||
         snapshot.rootfsName == rootfs.name &&
             snapshot.phase in
             setOf(
@@ -183,7 +184,7 @@ fun LinuxSystemPage(
                 DesktopSessionPhase.STOPPING,
             )
     val maintenanceEnabled =
-        !maintenanceInProgress &&
+        rootfsInUse != null && !maintenanceInProgress &&
             !runtimeBlocksMaintenance &&
             !desktopBlocksMaintenance
 
@@ -239,7 +240,7 @@ fun LinuxSystemPage(
         item(key = "state") {
             OperationalStatePanel(
                 snapshot = snapshot,
-                runtimeOwnsSystem = runtimeOwnsSystem,
+                runtimeOwnsSystem = runtimeOwnsSystem || rootfsInUse == true,
                 desktopOwnsSystem = desktopOwnsSystem,
             )
         }
@@ -575,8 +576,9 @@ fun LinuxSystemPage(
                         when {
                             maintenanceInProgress ->
                                 maintenanceMessage ?: "Changing the Linux system…"
+                            rootfsInUse == null -> "Connecting to the Linux service…"
                             runtimeBlocksMaintenance || desktopBlocksMaintenance ->
-                                "Stop the terminal and desktop before resetting or deleting this system"
+                                "Close this system’s terminals, apps and desktop before resetting or deleting it"
                             !resetAvailable ->
                                 "Reset isn’t available because the original image source is missing. " +
                                     "You can still delete this system."
@@ -618,7 +620,7 @@ fun LinuxSystemPage(
                                         Icon(Icons.Rounded.Stop, contentDescription = null)
                                     }
                                     Text(
-                                        if (runtimeStopping) "Stopping…" else "Stop terminal",
+                                        if (runtimeStopping) "Stopping…" else "Stop all sessions",
                                         modifier = Modifier.padding(start = 6.dp),
                                     )
                                 }

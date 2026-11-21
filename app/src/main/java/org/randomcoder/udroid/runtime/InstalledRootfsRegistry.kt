@@ -24,6 +24,10 @@ class InstalledRootfsRegistry(context: Context) {
     private val preferences =
         appContext.getSharedPreferences("installed-rootfs-state", Context.MODE_PRIVATE)
 
+    // Main-thread reservation shared across activity recreation and the runtime service.
+    var maintenanceRootfs: String? = null
+        internal set
+
     @Synchronized
     fun all(): List<InstalledRootfs> = InstalledRootfsDiscovery.scan(rootfsDirectory)
 
@@ -49,6 +53,10 @@ class InstalledRootfsRegistry(context: Context) {
         persistActive(selected.name)
         return selected
     }
+
+    fun directoryFor(name: String): File =
+        all().firstOrNull { it.name == name }?.directory
+            ?: error("Linux system $name is not installed or is not ready")
 
     @Synchronized
     fun setActive(name: String): InstalledRootfs {

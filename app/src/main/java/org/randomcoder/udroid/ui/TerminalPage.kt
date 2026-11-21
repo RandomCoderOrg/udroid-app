@@ -101,11 +101,40 @@ import org.randomcoder.udroid.runtime.TerminalTypographyState
 import org.randomcoder.udroid.runtime.TerminalTypographyStore
 import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
+import org.randomcoder.udroid.runtime.DesktopSessionPhase
+import org.randomcoder.udroid.runtime.DesktopSessionSnapshot
 import org.randomcoder.udroid.runtime.MAX_TERMINAL_TITLE_CHARS
 import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MAX_SP
 import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MIN_SP
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
+
+@Composable
+internal fun StopSessionsDialog(
+    tabs: List<TerminalTabSnapshot>,
+    desktop: DesktopSessionSnapshot,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val systems = tabs.groupBy { it.rootfsName }.map { (name, sessions) ->
+        "${terminalDistroTitle(name)} (${sessions.size})"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop all sessions?") },
+        text = {
+            Text(buildString {
+                append("All Linux terminals, jobs and apps will stop.")
+                if (systems.isNotEmpty()) append("\n\nOpen tabs: ${systems.joinToString()}")
+                if (desktop.phase in setOf(DesktopSessionPhase.STARTING, DesktopSessionPhase.RUNNING, DesktopSessionPhase.STOPPING)) {
+                    append("\nDesktop: ${desktop.environmentName} in ${desktop.rootfsName}")
+                }
+            })
+        },
+        confirmButton = { Button(onClick = onConfirm) { Text("Stop all sessions") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
 
 @Composable
 fun InteractiveTerminalPage(
@@ -127,7 +156,6 @@ fun InteractiveTerminalPage(
     val tabs = service?.terminalTabSnapshots().orEmpty()
     val activeTab = tabs.firstOrNull(TerminalTabSnapshot::active)
     val session = service?.currentTerminalSession()
-    var stopRequested by remember(session) { mutableStateOf(false) }
     var tabError by remember { mutableStateOf<String?>(null) }
     var renamingTab by remember { mutableStateOf<TerminalTabSnapshot?>(null) }
     var pendingCloseTabId by remember { mutableStateOf<String?>(null) }
@@ -136,7 +164,7 @@ fun InteractiveTerminalPage(
     var showSettings by remember { mutableStateOf(false) }
     val extraKeysStore = remember(context) { TerminalExtraKeysStore(context) }
     var extraKeysState by remember(extraKeysStore) { mutableStateOf(extraKeysStore.load()) }
-    val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
+    val stopping = snapshot.phase == RuntimePhase.STOPPING
 
     fun createTab(rootfsName: String?) {
         val connectedService = service
@@ -154,8 +182,8 @@ fun InteractiveTerminalPage(
         }
     }
 
-    fun closeTab(id: String) {
-        if (service?.closeTerminalTab(id) != true) {
+    fun closeTab(id: String, stopIfLast: Boolean = false) {
+        if (service?.closeTerminalTab(id, stopIfLast) != true) {
             tabError = "Could not close terminal"
         }
     }
@@ -192,10 +220,7 @@ fun InteractiveTerminalPage(
             onExit = onExit,
             onChooseDistro = { showDistroPicker = true },
             onShowSettings = { showSettings = true },
-            onStop = {
-                stopRequested = true
-                onStop()
-            },
+            onStop = onStop,
         )
 
         if (tabs.isNotEmpty()) {
@@ -205,7 +230,7 @@ fun InteractiveTerminalPage(
                 onRename = { tab -> renamingTab = tab },
                 onFollowTitle = { id -> service?.followTerminalShellTitle(id) },
                 onClose = { id ->
-                    if (tabs.firstOrNull { it.id == id }?.commandRunning == true) {
+                    if (tabs.size == 1 || tabs.firstOrNull { it.id == id }?.commandRunning == true) {
                         pendingCloseTabId = id
                     } else {
                         closeTab(id)
@@ -277,7 +302,7 @@ fun InteractiveTerminalPage(
             text = {
                 Text(
                     if (stopsLinux) {
-                        "A command is still running. Stopping Linux will end it."
+                        "Closing the last tab stops Linux, its jobs, apps and any running desktop."
                     } else {
                         "A command is still running in ${tab.title}. Closing the tab will end it."
                     },
@@ -287,7 +312,7 @@ fun InteractiveTerminalPage(
                 Button(
                     onClick = {
                         pendingCloseTabId = null
-                        closeTab(tab.id)
+                        closeTab(tab.id, stopIfLast = stopsLinux)
                     },
                 ) {
                     Text(if (stopsLinux) "Stop Linux" else "Close tab")
@@ -416,7 +441,7 @@ private fun TerminalSessionBar(
             IconButton(onClick = onStop) {
                 Icon(
                     imageVector = Icons.Filled.StopCircle,
-                    contentDescription = "Stop Linux session",
+                    contentDescription = "Stop all sessions",
                     tint = MaterialTheme.colorScheme.error,
                 )
             }

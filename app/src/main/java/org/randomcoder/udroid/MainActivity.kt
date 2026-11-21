@@ -72,6 +72,7 @@ import org.randomcoder.udroid.runtime.RootfsStorageUsage
 import org.randomcoder.udroid.runtime.TerminalProfileStore
 import org.randomcoder.udroid.runtime.TerminalProfiles
 import org.randomcoder.udroid.runtime.VirglServerMode
+import org.randomcoder.udroid.ui.StopSessionsDialog
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDarkCanvas
@@ -86,17 +87,6 @@ import org.randomcoder.udroid.update.AppUpdateScheduler
 import org.randomcoder.udroid.update.AppUpdateState
 import org.randomcoder.udroid.update.UpdateInstallResult
 import java.util.UUID
-
-private data class PendingLinuxApplication(
-    val application: LinuxApplication,
-    val rootfsName: String,
-)
-
-private data class PendingDesktopStart(
-    val rootfsName: String,
-    val environment: DesktopEnvironment,
-    val configuration: DesktopConfiguration,
-)
 
 class MainActivity : ComponentActivity() {
     private val app: UdroidApplication
@@ -132,11 +122,10 @@ class MainActivity : ComponentActivity() {
     private var linuxApplicationsState by
         mutableStateOf<LinuxApplicationsState>(LinuxApplicationsState.Loading)
     private var linuxApplicationMessage by mutableStateOf<String?>(null)
-    private var pendingLinuxApplication: PendingLinuxApplication? = null
+    private var onRuntimeConnected: ((RuntimeSupervisorService) -> Unit)? = null
+    private var confirmStopAll by mutableStateOf(false)
     private var pendingLinuxApplicationId: String? = null
-    private var pendingDesktopStart: PendingDesktopStart? = null
     private var pendingShortcutRootfsName: String? = null
-    private var pendingTerminalRootfsName: String? = null
     private var pendingDebugDesktop: DebugCommand? = null
     private var pendingDebugStopDesktop = false
     private var pendingMicrophoneRootfsName: String? = null
@@ -188,12 +177,14 @@ class MainActivity : ComponentActivity() {
                     pendingDebugStopDesktop = false
                     connectedService?.stopDesktop()
                 }
-                launchPendingLinuxApplication()
-                launchPendingDesktop()
-                if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
+                val requested = onRuntimeConnected
+                onRuntimeConnected = null
+                if (requested != null && connectedService != null) {
+                    requested(connectedService)
+                } else if (snapshot.desiredRunning && connectedService?.currentTerminalSession() == null) {
                     RuntimeSupervisorService.start(
                         this@MainActivity,
-                        app.rootfsRegistry.active()?.name,
+                        snapshot.rootfsName ?: app.rootfsRegistry.active()?.name,
                     )
                 }
             }
@@ -256,12 +247,8 @@ class MainActivity : ComponentActivity() {
                     },
                     onDestinationSelected = ::selectDestination,
                     onPrimaryDestinationSelected = ::selectPrimaryDestination,
-                    onStart = {
-                        ensureNotificationPermission()
-                        RuntimeSupervisorService.start(this, installedRootfsName)
-                        selectDestination(UdroidDestination.TERMINAL)
-                    },
-                    onStop = { RuntimeSupervisorService.stop(this) },
+                    onStart = ::openCurrentTerminal,
+                    onStop = { confirmStopAll = true },
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
                     onPreviewInstall = { selectDistro(it) },
@@ -328,10 +315,22 @@ class MainActivity : ComponentActivity() {
                     onInstallUpdate = { installDownloadedUpdate() },
                     onOpenUpdateRelease = { openUpdateRelease() },
                 )
+                if (confirmStopAll) {
+                    StopSessionsDialog(
+                        tabs = runtimeService?.terminalTabSnapshots().orEmpty(),
+                        desktop = snapshot.desktop,
+                        onDismiss = { confirmStopAll = false },
+                        onConfirm = {
+                            confirmStopAll = false
+                            RuntimeSupervisorService.stop(this)
+                        },
+                    )
+                }
             }
         }
         refreshAll()
         loadCatalogue()
+        handleStopIntent(intent)
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
@@ -341,6 +340,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleStopIntent(intent)
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
         handleShortcutIntent(intent)
@@ -399,7 +399,7 @@ class MainActivity : ComponentActivity() {
         if (destination == UdroidDestination.DISTROS) {
             closeOciRepository()
         }
-        selectDestination(destination)
+        if (destination == UdroidDestination.TERMINAL) openCurrentTerminal() else selectDestination(destination)
     }
 
     private fun applySystemBars(destination: UdroidDestination) {
@@ -490,19 +490,6 @@ class MainActivity : ComponentActivity() {
             applySystemBars(resolvedDestination)
         }
         journalLines = app.journal.tail()
-        pendingTerminalRootfsName?.let { rootfsName ->
-            val session = runtimeService?.currentTerminalSession()
-            if (
-                session?.isRunning != true &&
-                snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.STARTING &&
-                snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.STOPPING
-            ) {
-                pendingTerminalRootfsName = null
-                RuntimeSupervisorService.start(this, rootfsName)
-            }
-        }
-        launchPendingLinuxApplication()
-        launchPendingDesktop()
     }
 
     private fun loadCatalogue() {
@@ -851,6 +838,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        app.rootfsRegistry.maintenanceRootfs = rootfsName
         rootfsMaintenanceName = rootfsName
         rootfsMaintenanceMessage =
             if (resetWork == null) {
@@ -931,9 +919,6 @@ class MainActivity : ComponentActivity() {
                     },
             )
 
-            pendingLinuxApplication = null
-            pendingDesktopStart = null
-            pendingTerminalRootfsName = null
             linuxApplicationsLoadGeneration++
             desktopScanGeneration++
             rootfsMaintenanceName = null
@@ -950,19 +935,18 @@ class MainActivity : ComponentActivity() {
             } else {
                 selectDestination(UdroidDestination.DISTROS)
             }
-        }
+        }.invokeOnCompletion { app.rootfsRegistry.maintenanceRootfs = null }
     }
 
     private fun rootfsMaintenanceBlockReason(rootfsName: String): String? =
         when {
-            rootfsMaintenanceName != null ->
+            app.rootfsRegistry.maintenanceRootfs != null ->
                 "Another filesystem operation is already running"
             installProgress?.cancellable == true ->
                 "Wait for the current Linux installation to stop"
-            runtimeService?.currentTerminalSession()?.let {
-                it.isRunning && it.mSessionName == rootfsName
-            } == true ->
-                "Stop this Linux terminal before changing its filesystem"
+            runtimeService == null -> "Wait for the Linux service to connect"
+            runtimeService?.rootfsInUse(rootfsName) == true ->
+                "Close this system’s terminals and Linux apps before changing its filesystem"
             snapshot.rootfsName == rootfsName &&
                 snapshot.phase in
                 setOf(
@@ -1247,54 +1231,15 @@ class MainActivity : ComponentActivity() {
                 it.id == desktopConfiguration.environmentId
             } ?: desktopEnvironments.firstOrNull()
             ?: return
-        setActiveRootfs(rootfsName)
-        pendingDesktopStart =
-            PendingDesktopStart(
-                rootfsName = rootfsName,
-                environment = environment,
-                configuration =
-                    desktopConfiguration.copy(environmentId = environment.id),
-            )
-        ensureNotificationPermission()
-        val runningRootfs = runtimeService?.currentTerminalSession()?.mSessionName
-        when {
-            snapshot.phase == org.randomcoder.udroid.runtime.RuntimePhase.RUNNING &&
-                runtimeService?.currentTerminalSession()?.isRunning == true &&
-                runningRootfs == rootfsName -> launchPendingDesktop()
-            runningRootfs != null && runningRootfs != rootfsName -> {
-                pendingTerminalRootfsName = rootfsName
-                RuntimeSupervisorService.stop(this)
-            }
-            else -> RuntimeSupervisorService.start(this, rootfsName)
-        }
-    }
-
-    private fun launchPendingDesktop() {
-        val pending = pendingDesktopStart ?: return
-        val service = runtimeService ?: return
-        if (
-            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            service.currentTerminalSession()?.isRunning != true ||
-            service.currentTerminalSession()?.mSessionName != pending.rootfsName
-        ) {
-            return
-        }
-        pendingDesktopStart = null
-        pendingTerminalRootfsName = null
-        service.startDesktop(
-            pending.rootfsName,
-            pending.environment,
-            pending.configuration,
-        )
+        val configuration = desktopConfiguration.copy(environmentId = environment.id)
+        withRootfsTerminal(rootfsName) { service -> service.startDesktop(rootfsName, environment, configuration) }
     }
 
     private fun restartSelectedDesktop() {
         val rootfsName = selectedSystemRootfsName ?: return
-        val environment =
-            desktopEnvironments.firstOrNull {
-                it.id == desktopConfiguration.environmentId
-            } ?: return
-        runtimeService?.restartDesktop(rootfsName, environment, desktopConfiguration)
+        val environment = desktopEnvironments.firstOrNull { it.id == desktopConfiguration.environmentId } ?: return
+        val configuration = desktopConfiguration
+        withRootfsTerminal(rootfsName) { service -> service.restartDesktop(rootfsName, environment, configuration) }
     }
 
     private fun launchLinuxApplication(application: LinuxApplication) {
@@ -1307,25 +1252,7 @@ class MainActivity : ComponentActivity() {
                     linuxApplicationMessage = "Install Linux before launching an app"
                     return
                 }
-        setActiveRootfs(rootfsName)
-        val runningRootfs = runtimeService?.currentTerminalSession()?.mSessionName
-        if (
-            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            runtimeService?.currentTerminalSession()?.isRunning != true ||
-            runningRootfs != rootfsName
-        ) {
-            pendingLinuxApplication = PendingLinuxApplication(application, rootfsName)
-            ensureNotificationPermission()
-            if (runningRootfs != null && runningRootfs != rootfsName) {
-                pendingTerminalRootfsName = rootfsName
-                RuntimeSupervisorService.stop(this)
-            } else {
-                RuntimeSupervisorService.start(this, rootfsName)
-            }
-            linuxApplicationMessage = "Starting Linux for ${application.name}…"
-            return
-        }
-        launchWithRuntime(application, rootfsName)
+        withRootfsTerminal(rootfsName, newTab = application.terminal) { service -> launchWithRuntime(service, application, rootfsName) }
     }
 
     private fun pinLinuxApplication(application: LinuxApplication) {
@@ -1411,28 +1338,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun launchPendingLinuxApplication() {
-        if (
-            snapshot.phase != org.randomcoder.udroid.runtime.RuntimePhase.RUNNING ||
-            runtimeService?.currentTerminalSession()?.isRunning != true
-        ) {
-            return
-        }
-        pendingLinuxApplication?.let { pending ->
-            if (runtimeService?.currentTerminalSession()?.mSessionName != pending.rootfsName) {
-                return
-            }
-            pendingLinuxApplication = null
-            pendingTerminalRootfsName = null
-            launchWithRuntime(pending.application, pending.rootfsName)
-        }
-    }
-
     private fun launchWithRuntime(
+        service: RuntimeSupervisorService,
         application: LinuxApplication,
         rootfsName: String,
     ) {
-        runtimeService?.launchLinuxApplication(application, rootfsName) { result ->
+        service.launchLinuxApplication(application, rootfsName) { result ->
             result.fold(
                 onSuccess = {
                     linuxApplicationMessage = "${application.name} launched"
@@ -1466,18 +1377,40 @@ class MainActivity : ComponentActivity() {
         selectDestination(UdroidDestination.APPS)
     }
 
+    private fun openCurrentTerminal() {
+        val rootfs = runtimeService?.currentTerminalSession()?.mSessionName ?: installedRootfsName
+        if (rootfs != null) openRootfsTerminal(rootfs) else selectDestination(UdroidDestination.DISTROS)
+    }
+
     private fun openRootfsTerminal(rootfsName: String) {
-        setActiveRootfs(rootfsName)
-        ensureNotificationPermission()
-        val runningSession = runtimeService?.currentTerminalSession()
-        if (runningSession?.isRunning == true && runningSession.mSessionName != rootfsName) {
-            pendingTerminalRootfsName = rootfsName
-            RuntimeSupervisorService.stop(this)
-        } else {
-            pendingTerminalRootfsName = null
-            RuntimeSupervisorService.start(this, rootfsName)
-        }
         selectDestination(UdroidDestination.TERMINAL)
+        withRootfsTerminal(rootfsName) {}
+    }
+
+    private fun withRootfsTerminal(
+        rootfsName: String,
+        newTab: Boolean = false,
+        onReady: (RuntimeSupervisorService) -> Unit,
+    ) {
+        ensureNotificationPermission()
+        val open: (RuntimeSupervisorService) -> Unit = { service ->
+            service.openTerminal(rootfsName, newTab) { result ->
+                result.onSuccess {
+                    if (!isDestroyed) {
+                        if (installedRootfsName != rootfsName) setActiveRootfs(rootfsName)
+                        onReady(service)
+                    }
+                }.onFailure { error ->
+                    if (!isDestroyed) {
+                        val message = error.message ?: "Could not open the Linux terminal"
+                        linuxApplicationMessage = message
+                        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+        val service = runtimeService
+        if (service == null) onRuntimeConnected = open else open(service)
     }
 
     private fun ensureNotificationPermission() {
@@ -1490,6 +1423,12 @@ class MainActivity : ComponentActivity() {
                 NOTIFICATION_PERMISSION_REQUEST,
             )
         }
+    }
+
+    private fun handleStopIntent(intent: Intent?) {
+        if (intent?.action != RuntimeSupervisorService.ACTION_CONFIRM_STOP) return
+        intent.action = null
+        confirmStopAll = true
     }
 
     private fun handleUpdateIntent(intent: Intent?) {

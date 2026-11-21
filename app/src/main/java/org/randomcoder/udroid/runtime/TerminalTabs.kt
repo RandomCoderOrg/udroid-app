@@ -47,12 +47,17 @@ internal data class TerminalTab<T>(
     var closeState: TerminalTabCloseState = TerminalTabCloseState.OPEN,
     var closeError: String? = null,
 ) {
+    var hostSessionId = 0
+    var lastSelected = 0L
+
     val title: String
         get() = customTitle ?: shellTitle ?: defaultTitle
 }
 
 internal class TerminalTabRegistry<T> {
     private val tabs = LinkedHashMap<String, TerminalTab<T>>()
+
+    private var selectionOrder = 0L
 
     var activeId: String? = null
         private set
@@ -69,15 +74,21 @@ internal class TerminalTabRegistry<T> {
     fun add(tab: TerminalTab<T>): TerminalTab<T> {
         require(tab.id !in tabs) { "Duplicate terminal tab id ${tab.id}" }
         tabs[tab.id] = tab
-        activeId = tab.id
+        select(tab.id)
         return tab
     }
 
     fun select(id: String): TerminalTab<T>? {
         val tab = tabs[id] ?: return null
         activeId = id
+        tab.lastSelected = ++selectionOrder
         return tab
     }
+
+    fun mostRecent(rootfsName: String, isRunning: (T) -> Boolean): TerminalTab<T>? =
+        tabs.values.filter {
+            it.rootfsName == rootfsName && it.closeState == TerminalTabCloseState.OPEN && isRunning(it.value)
+        }.maxByOrNull { it.lastSelected }
 
     fun rename(
         id: String,
@@ -156,7 +167,8 @@ internal class TerminalTabRegistry<T> {
         val removed = tabs.remove(id) ?: return null
         if (activeId == id) {
             val remaining = tabs.values.toList()
-            activeId = remaining.getOrNull(index.coerceAtMost(remaining.lastIndex))?.id
+            activeId = null
+            remaining.getOrNull(index.coerceAtMost(remaining.lastIndex))?.let { select(it.id) }
         }
         return removed
     }

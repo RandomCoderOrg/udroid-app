@@ -270,6 +270,7 @@ fun UdroidApp(
             compactNavigation = false,
         )
     val activeDestination = requestedJourney.destination
+    val selectedRootfsInUse = (selectedSystemRootfsName ?: installedRootfsName)?.let { runtimeService?.rootfsInUse(it) }
     val navigationDestination =
         when (activeDestination) {
             UdroidDestination.SYSTEM,
@@ -392,6 +393,7 @@ fun UdroidApp(
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
                         resettableRootfsNames = resettableRootfsNames,
+                        selectedRootfsInUse = selectedRootfsInUse,
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
@@ -481,6 +483,7 @@ fun UdroidApp(
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
                         resettableRootfsNames = resettableRootfsNames,
+                        selectedRootfsInUse = selectedRootfsInUse,
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
@@ -586,6 +589,7 @@ private fun ManagementPane(
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
     resettableRootfsNames: Set<String>,
+    selectedRootfsInUse: Boolean?,
     selectedSystemRootfsName: String?,
     rootfsMaintenanceName: String?,
     rootfsMaintenanceMessage: String?,
@@ -718,9 +722,7 @@ private fun ManagementPane(
                             installedCount = installedRootfses.size,
                             capabilities = capabilities,
                             onRefresh = onRefresh,
-                            onOpenTerminal = {
-                                onDestinationSelected(UdroidDestination.TERMINAL)
-                            },
+                            onOpenTerminal = onStart,
                             onOpenLinux = {
                                 onPrimaryDestinationSelected(UdroidDestination.DISTROS)
                             },
@@ -944,6 +946,7 @@ private fun ManagementPane(
                                 }
                             LinuxSystemPage(
                                 rootfs = selectedRootfs,
+                                rootfsInUse = selectedRootfsInUse,
                                 distro = selectedDistro,
                                 active = rootfsName == installedRootfsName,
                                 snapshot = snapshot,
