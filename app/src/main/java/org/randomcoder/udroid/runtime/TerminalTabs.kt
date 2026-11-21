@@ -3,6 +3,7 @@ package org.randomcoder.udroid.runtime
 data class TerminalTabSnapshot(
     val id: String,
     val title: String,
+    val shortTitle: String,
     val hasCustomTitle: Boolean,
     val rootfsName: String,
     val pid: Long?,
@@ -17,7 +18,10 @@ enum class TerminalTabCloseState {
     OPEN,
     CLOSING,
     FORCE_CLOSING,
-    FAILED,
+    FAILED;
+
+    val isClosing: Boolean
+        get() = this == CLOSING || this == FORCE_CLOSING
 }
 
 fun terminalDistroTitle(rawName: String?): String =
@@ -30,6 +34,7 @@ fun terminalDistroTitle(rawName: String?): String =
         else ->
             rawName
                 .removePrefix("udroid-")
+                .removePrefix("proot-")
                 .removeSuffix("-raw")
                 .split('-')
                 .joinToString(" ") { word -> word.replaceFirstChar(Char::titlecase) }
@@ -52,6 +57,9 @@ internal data class TerminalTab<T>(
 
     val title: String
         get() = customTitle ?: shellTitle ?: defaultTitle
+
+    val shortTitle: String
+        get() = customTitle ?: shellTitle ?: defaultTitle.takeUnless { it == terminalDistroTitle(rootfsName) } ?: "Shell"
 }
 
 internal class TerminalTabRegistry<T> {
@@ -67,6 +75,8 @@ internal class TerminalTabRegistry<T> {
     fun active(): TerminalTab<T>? = activeId?.let(tabs::get)
 
     fun get(id: String): TerminalTab<T>? = tabs[id]
+
+    fun acceptsInput(id: String?): Boolean = tabs[id]?.closeState?.isClosing == false
 
     fun findByValue(value: T): TerminalTab<T>? =
         tabs.values.firstOrNull { it.value === value }
@@ -137,11 +147,7 @@ internal class TerminalTabRegistry<T> {
 
     fun beginClose(id: String): TerminalTab<T>? {
         val tab = tabs[id] ?: return null
-        if (tab.closeState == TerminalTabCloseState.CLOSING ||
-            tab.closeState == TerminalTabCloseState.FORCE_CLOSING
-        ) {
-            return null
-        }
+        if (tab.closeState.isClosing) return null
         tab.closeState = TerminalTabCloseState.CLOSING
         tab.closeError = null
         return tab

@@ -92,6 +92,9 @@ class RuntimeSupervisorService : Service() {
 
     private val terminalClient =
         object : TerminalSessionClient {
+            override fun acceptsTerminalInput(session: TerminalSession): Boolean =
+                terminalTabs.acceptsInput(session.mHandle)
+
             override fun onTextChanged(changedSession: TerminalSession) {
                 attachedViews
                     .filter { it.mTermSession === changedSession }
@@ -333,6 +336,7 @@ class RuntimeSupervisorService : Service() {
             TerminalTabSnapshot(
                 id = tab.id,
                 title = tab.title,
+                shortTitle = tab.shortTitle,
                 hasCustomTitle = tab.customTitle != null,
                 rootfsName = tab.rootfsName,
                 pid = tab.value.pid.takeIf { it > 0 }?.toLong(),
@@ -464,11 +468,7 @@ class RuntimeSupervisorService : Service() {
 
     fun selectTerminalTab(id: String): Boolean {
         val requested = terminalTabs.get(id) ?: return false
-        if (requested.closeState == TerminalTabCloseState.CLOSING ||
-            requested.closeState == TerminalTabCloseState.FORCE_CLOSING
-        ) {
-            return false
-        }
+        if (requested.closeState.isClosing) return false
         val tab = terminalTabs.select(id) ?: return false
         attachedViews.forEach { view ->
             if (view.mTermSession !== tab.value) view.attachSession(tab.value)
@@ -709,6 +709,10 @@ class RuntimeSupervisorService : Service() {
             return
         }
         if (application.terminal) {
+            if (!terminalTabs.acceptsInput(terminalTabs.activeId)) {
+                callback(Result.failure(IllegalStateException("This terminal is closing")))
+                return
+            }
             val arguments = listOf(application.executable) + application.arguments
             val command =
                 arguments

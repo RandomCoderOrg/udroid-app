@@ -1,7 +1,9 @@
 package org.randomcoder.udroid.runtime
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalTabRegistryTest {
@@ -65,6 +67,23 @@ class TerminalTabRegistryTest {
 
         registry.followShellTitle("one")
         assertEquals("htop", registry.get("one")?.title)
+    }
+
+    @Test
+    fun `only generated distro titles are shortened on tabs`() {
+        val tab = tab("one", "proot-alpine-3.22").copy(defaultTitle = "Alpine 3.22")
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab)
+        assertEquals("Shell", tab.shortTitle)
+
+        registry.updateShellTitle(tab.id, "Alpine 3.22")
+        assertEquals("Alpine 3.22", tab.shortTitle)
+        registry.rename(tab.id, "Pinned")
+        assertEquals("Pinned", tab.shortTitle)
+        registry.followShellTitle(tab.id)
+        assertEquals("Alpine 3.22", tab.shortTitle)
+        registry.updateShellTitle(tab.id, null)
+        assertEquals("Shell", tab.shortTitle)
     }
 
     @Test
@@ -146,6 +165,22 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `input stays blocked only for the closing session and resumes after a failed close`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+        registry.beginClose("one")
+        assertFalse(registry.acceptsInput("one"))
+        assertTrue(registry.acceptsInput("two"))
+        registry.markForceClosing("one")
+        assertFalse(registry.acceptsInput("one"))
+        registry.markCloseFailed("one", "Still running")
+        assertTrue(registry.acceptsInput("one"))
+        registry.remove("one")
+        assertFalse(registry.acceptsInput("one"))
+    }
+
+    @Test
     fun `command state is isolated per tab and ignores duplicate markers`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))
@@ -173,6 +208,7 @@ class TerminalTabRegistryTest {
     @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
+        assertEquals("Alpine 3.22", terminalDistroTitle("proot-alpine-3.22"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))
     }
 

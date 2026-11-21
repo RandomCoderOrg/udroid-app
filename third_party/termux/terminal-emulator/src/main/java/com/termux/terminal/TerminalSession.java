@@ -175,7 +175,9 @@ public final class TerminalSession extends TerminalOutput {
     /** Write data to the shell process. */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mShellPid > 0) mTerminalToProcessIOQueue.write(data, offset, count);
+        if (mShellPid > 0 && mClient.acceptsTerminalInput(this)) {
+            mTerminalToProcessIOQueue.write(data, offset, count);
+        }
     }
 
     /** Write the Unicode code point to the terminal encoded in UTF-8. */
