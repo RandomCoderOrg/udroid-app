@@ -175,7 +175,7 @@ fun X11SettingsPage(
                         message = importMessage,
                         title = "Keyboard strip",
                         visibilityTitle = "Show keyboard strip",
-                        visibilityDetail = "Keep these rows below the Linux desktop",
+                        visibilityDetail = "Keep these rows below the Linux display",
                         resetLabel = "Reset keyboard strip",
                         bindingLabel = OverlayKeyboard::label,
                         onBack = ::goBack,
@@ -311,7 +311,7 @@ private fun X11SettingsHomePage(
     onBack: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        TerminalSettingsHeader("Desktop settings", onBack)
+        TerminalSettingsHeader("Display settings", onBack)
         LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             item {
                 Text(
@@ -392,7 +392,7 @@ private fun X11SettingsHomePage(
                 SettingsSwitch("Use hardware keyboard layout", "Let Linux manage the physical keyboard layout", settings.preferScancodes) {
                     onSettingsChanged(settings.copy(preferScancodes = it))
                 }
-                SettingsSwitch("Keep desktop above keyboard", "Resize Linux when the Android keyboard opens", settings.avoidSoftKeyboard) {
+                SettingsSwitch("Keep display above keyboard", "Resize Linux when the Android keyboard opens", settings.avoidSoftKeyboard) {
                     onSettingsChanged(settings.copy(avoidSoftKeyboard = it))
                 }
                 SettingsNavigationRow(
@@ -413,10 +413,10 @@ private fun X11SettingsHomePage(
 
                 SettingsDivider()
                 SettingsSectionTitle("Session")
-                SettingsSwitch("Keep screen on", "Prevent sleep while the desktop is open", settings.keepScreenOn) {
+                SettingsSwitch("Keep screen on", "Prevent sleep while Display is open", settings.keepScreenOn) {
                     onSettingsChanged(settings.copy(keepScreenOn = it))
                 }
-                SettingsSwitch("Start with controls collapsed", "Show only the compact handle when the desktop opens", settings.startControlsCollapsed) {
+                SettingsSwitch("Start with controls collapsed", "Keep the Terminal switch visible when Display opens", settings.startControlsCollapsed) {
                     onSettingsChanged(settings.copy(startControlsCollapsed = it))
                 }
             }

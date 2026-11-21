@@ -7,6 +7,27 @@ import org.junit.Test
 
 class WorkspaceJourneyTest {
     @Test
+    fun `Back retraces the last workspace switch then returns to the entry screen`() {
+        val terminal = UdroidDestination.TERMINAL
+        val display = UdroidDestination.DESKTOP
+        for (entry in listOf(UdroidDestination.HOME, UdroidDestination.APPS, UdroidDestination.SYSTEM)) {
+            for ((first, second) in listOf(terminal to display, display to terminal)) {
+                val entered = workspaceHistoryAfter(entry, first, emptyList())
+                assertEquals(listOf(entry), entered)
+                val switched = workspaceHistoryAfter(first, second, entered)
+                assertEquals(listOf(entry, first), switched)
+                assertEquals(switched, workspaceHistoryAfter(second, second, switched))
+                assertEquals(entered, workspaceHistoryAfter(second, first, switched, goingBack = true))
+                assertTrue(workspaceHistoryAfter(first, entry, entered, goingBack = true).isEmpty())
+
+                val switchedAgain = workspaceHistoryAfter(second, first, switched)
+                assertEquals(listOf(entry, second), switchedAgain)
+                assertEquals(entered, workspaceHistoryAfter(first, second, switchedAgain, goingBack = true))
+            }
+        }
+    }
+
+    @Test
     fun `fresh install opens Home and keeps setup destinations available`() {
         val journey =
             workspaceJourney(

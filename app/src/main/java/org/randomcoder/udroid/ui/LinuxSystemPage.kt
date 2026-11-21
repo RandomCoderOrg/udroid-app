@@ -269,7 +269,6 @@ fun LinuxSystemPage(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Rounded.DesktopWindows,
                     label = "Display",
-                    enabled = desktopRunning,
                     onClick = onOpenDisplay,
                 )
             }
@@ -1476,7 +1475,7 @@ private fun distributionFrom(rootfsName: String): LinuxDistribution {
     }
 }
 
-private fun DesktopSessionPhase.isDisplayClaimed(): Boolean =
+internal fun DesktopSessionPhase.isDisplayClaimed(): Boolean =
     this == DesktopSessionPhase.STARTING ||
         this == DesktopSessionPhase.RUNNING ||
         this == DesktopSessionPhase.STOPPING

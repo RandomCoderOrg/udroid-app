@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -82,6 +83,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.doOnLayout
 import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
@@ -151,6 +153,8 @@ fun InteractiveTerminalPage(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onExit: () -> Unit,
+    onOpenDisplay: () -> Unit,
+    scrollbackRows: MutableMap<TerminalSession, Int>,
 ) {
     val context = LocalContext.current
     val tabs = service?.terminalTabSnapshots().orEmpty()
@@ -218,6 +222,7 @@ fun InteractiveTerminalPage(
             activeTab = activeTab,
             stopping = stopping,
             onExit = onExit,
+            onOpenDisplay = onOpenDisplay,
             onChooseDistro = { showDistroPicker = true },
             onShowSettings = { showSettings = true },
             onStop = onStop,
@@ -272,6 +277,7 @@ fun InteractiveTerminalPage(
                 modifier = Modifier.weight(1f),
                 service = service,
                 session = session,
+                scrollbackRows = scrollbackRows,
                 typography = typographyState,
                 extraKeys = extraKeysState,
                 onTypographyChanged = onTypographyChanged,
@@ -346,6 +352,7 @@ private fun TerminalSessionBar(
     stopping: Boolean,
     onExit: () -> Unit,
     onChooseDistro: () -> Unit,
+    onOpenDisplay: () -> Unit,
     onShowSettings: () -> Unit,
     onStop: () -> Unit,
 ) {
@@ -425,6 +432,13 @@ private fun TerminalSessionBar(
                     )
                 }
             }
+        }
+        IconButton(onClick = onOpenDisplay) {
+            Icon(
+                imageVector = Icons.Rounded.DesktopWindows,
+                contentDescription = "Open display",
+                tint = UdroidTerminalGreen,
+            )
         }
         if (stopping) {
             Box(
@@ -929,6 +943,7 @@ private fun LiveTerminal(
     modifier: Modifier = Modifier,
     service: RuntimeSupervisorService,
     session: TerminalSession,
+    scrollbackRows: MutableMap<TerminalSession, Int>,
     typography: TerminalTypographyState,
     extraKeys: TerminalExtraKeysState,
     onTypographyChanged: (TerminalTypographyState) -> Unit,
@@ -983,7 +998,19 @@ private fun LiveTerminal(
 
     DisposableEffect(service, terminalView) {
         service.attachTerminalView(terminalView)
+        terminalView.mTermSession?.let { attached ->
+            scrollbackRows.remove(attached)?.let { row ->
+                terminalView.doOnLayout {
+                    if (terminalView.mTermSession === attached) {
+                        val history = attached.emulator?.screen?.activeTranscriptRows ?: 0
+                        terminalView.topRow = row.coerceIn(-history, 0)
+                        terminalView.invalidate()
+                    }
+                }
+            }
+        }
         onDispose {
+            terminalView.mTermSession?.let { scrollbackRows[it] = terminalView.topRow }
             modifiers.reset()
             client.stopCursorBlinking()
             service.detachTerminalView(terminalView)
@@ -997,8 +1024,8 @@ private fun LiveTerminal(
                 view.setBackgroundColor(terminalBackground)
                 if (view.mTermSession !== session) {
                     view.attachSession(session)
+                    view.onScreenUpdated()
                 }
-                view.onScreenUpdated()
             },
             modifier =
                 Modifier

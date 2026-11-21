@@ -76,6 +76,7 @@ import org.randomcoder.udroid.ui.StopSessionsDialog
 import org.randomcoder.udroid.ui.UdroidApp
 import org.randomcoder.udroid.ui.UdroidCanvas
 import org.randomcoder.udroid.ui.UdroidDarkCanvas
+import org.randomcoder.udroid.ui.workspaceHistoryAfter
 import org.randomcoder.udroid.ui.UdroidDestination
 import org.randomcoder.udroid.ui.UdroidTheme
 import org.randomcoder.udroid.ui.workspaceJourney
@@ -95,6 +96,9 @@ class MainActivity : ComponentActivity() {
     private var snapshot by mutableStateOf(RuntimeSnapshot())
     private var capabilities by mutableStateOf<List<CapabilityResult>>(emptyList())
     private var journalLines by mutableStateOf<List<String>>(emptyList())
+    private var workspaceHistory = emptyList<UdroidDestination>()
+    private var catalogueEntry = UdroidDestination.HOME
+    private var displayRootfsName by mutableStateOf<String?>(null)
     private var selectedDestination by mutableStateOf(UdroidDestination.HOME)
     private var catalogueState by mutableStateOf<DistroCatalogState>(DistroCatalogState.Loading)
     private var ociCatalogueState by
@@ -247,7 +251,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onDestinationSelected = ::selectDestination,
                     onPrimaryDestinationSelected = ::selectPrimaryDestination,
+                    onLeaveCatalogue = { selectDestination(catalogueEntry) },
                     onStart = ::openCurrentTerminal,
+                    onLeaveWorkspace = {
+                        selectDestination(workspaceHistory.lastOrNull() ?: UdroidDestination.HOME, goingBack = true)
+                    },
+                    displayRootfsName = displayRootfsName ?: installedRootfsName,
+                    onStartDisplayLinux = { rootfs -> withRootfsTerminal(rootfs) {} },
                     onStop = { confirmStopAll = true },
                     onRefresh = { refreshAll() },
                     onReloadCatalogue = { loadCatalogue() },
@@ -379,7 +389,7 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    private fun selectDestination(destination: UdroidDestination) {
+    private fun selectDestination(destination: UdroidDestination, goingBack: Boolean = false) {
         val resolvedDestination =
             workspaceJourney(
                 requestedDestination = destination,
@@ -387,6 +397,14 @@ class MainActivity : ComponentActivity() {
                 hasInstallation = installProgress != null,
                 compactNavigation = false,
             ).destination
+        if (resolvedDestination == UdroidDestination.DESKTOP && selectedDestination != resolvedDestination) {
+            displayRootfsName = when (selectedDestination) {
+                UdroidDestination.SYSTEM -> selectedSystemRootfsName
+                UdroidDestination.TERMINAL -> runtimeService?.currentTerminalSession()?.mSessionName
+                else -> installedRootfsName
+            }
+        }
+        workspaceHistory = workspaceHistoryAfter(selectedDestination, resolvedDestination, workspaceHistory, goingBack)
         selectedDestination = resolvedDestination
         applySystemBars(resolvedDestination)
         if (resolvedDestination == UdroidDestination.APPS) loadLinuxApplications()
@@ -397,6 +415,11 @@ class MainActivity : ComponentActivity() {
 
     private fun selectPrimaryDestination(destination: UdroidDestination) {
         if (destination == UdroidDestination.DISTROS) {
+            when (selectedDestination) {
+                UdroidDestination.HOME, UdroidDestination.APPS, UdroidDestination.DEVICE,
+                UdroidDestination.ABOUT -> catalogueEntry = selectedDestination
+                else -> Unit
+            }
             closeOciRepository()
         }
         if (destination == UdroidDestination.TERMINAL) openCurrentTerminal() else selectDestination(destination)

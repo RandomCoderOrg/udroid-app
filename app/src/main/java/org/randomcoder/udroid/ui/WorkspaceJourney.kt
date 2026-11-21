@@ -59,11 +59,27 @@ fun workspaceJourney(
     )
 }
 
+internal fun workspaceHistoryAfter(
+    current: UdroidDestination,
+    next: UdroidDestination,
+    history: List<UdroidDestination>,
+    goingBack: Boolean = false,
+): List<UdroidDestination> = when {
+    !next.isWorkspaceView -> emptyList()
+    current == next -> history
+    goingBack -> history.dropLast(1)
+    !current.isWorkspaceView -> listOf(current)
+    // Keep the entry screen and the last view, even after repeated toolbar switches.
+    else -> history.take(1) + current
+}
+
+private val UdroidDestination.isWorkspaceView: Boolean
+    get() = this == UdroidDestination.TERMINAL || this == UdroidDestination.DESKTOP
+
 val UdroidDestination.requiresInstalledLinux: Boolean
     get() =
-        this == UdroidDestination.TERMINAL ||
+        isWorkspaceView ||
             this == UdroidDestination.MOUNTS ||
             this == UdroidDestination.MOUNT_EDITOR ||
             this == UdroidDestination.ENVIRONMENT ||
-            this == UdroidDestination.APPS ||
-            this == UdroidDestination.DESKTOP
+            this == UdroidDestination.APPS

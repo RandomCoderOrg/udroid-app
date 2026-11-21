@@ -65,7 +65,7 @@ fun LinuxAppsPage(
     onRefresh: () -> Unit,
     onLaunch: (LinuxApplication) -> Unit,
     onPin: (LinuxApplication) -> Unit,
-    onOpenDesktop: () -> Unit,
+    onOpenDisplay: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     Column(
@@ -102,10 +102,10 @@ fun LinuxAppsPage(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            IconButton(onClick = onOpenDesktop) {
+            IconButton(onClick = onOpenDisplay) {
                 Icon(
                     imageVector = Icons.Rounded.DesktopWindows,
-                    contentDescription = "Open desktop",
+                    contentDescription = "Open display",
                     tint = UdroidForest,
                 )
             }

@@ -627,8 +627,20 @@ class RuntimeSupervisorService : Service() {
         }
     }
 
-    fun requestX11RendererConnection(callback: (ParcelFileDescriptor?) -> Unit) {
-        x11Controller.requestRendererConnection(callback)
+    fun requestX11RendererConnection(rootfsName: String, callback: (Result<ParcelFileDescriptor>) -> Unit) {
+        val rootfs = runCatching { app.rootfsRegistry.directoryFor(rootfsName) }.getOrElse {
+            callback(Result.failure(it))
+            return
+        }
+        x11Controller.whenReady(rootfs, app.runtimeState.current().bootId) { socket ->
+            if (socket == null) {
+                callback(Result.failure(IllegalStateException(x11Controller.failureDetail ?: "Display :0 could not start")))
+            } else {
+                x11Controller.requestRendererConnection { descriptor ->
+                    callback(runCatching { requireNotNull(descriptor) { "The display connection was interrupted" } })
+                }
+            }
+        }
     }
 
     fun startDesktop(
