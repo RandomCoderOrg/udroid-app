@@ -1,7 +1,9 @@
 package org.randomcoder.udroid.runtime
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalTabRegistryTest {
@@ -68,6 +70,23 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `only generated distro titles are shortened on tabs`() {
+        val tab = tab("one", "proot-alpine-3.22").copy(defaultTitle = "Alpine 3.22")
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab)
+        assertEquals("Shell", tab.shortTitle)
+
+        registry.updateShellTitle(tab.id, "Alpine 3.22")
+        assertEquals("Alpine 3.22", tab.shortTitle)
+        registry.rename(tab.id, "Pinned")
+        assertEquals("Pinned", tab.shortTitle)
+        registry.followShellTitle(tab.id)
+        assertEquals("Alpine 3.22", tab.shortTitle)
+        registry.updateShellTitle(tab.id, null)
+        assertEquals("Shell", tab.shortTitle)
+    }
+
+    @Test
     fun `empty shell title falls back to default title`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))
@@ -111,6 +130,22 @@ class TerminalTabRegistryTest {
     }
 
     @Test
+    fun `opening a distro resumes its most recently selected available tab`() {
+        val registry = TerminalTabRegistry<Any>()
+        val first = registry.add(tab("one", rootfsName = "debian"))
+        val second = registry.add(tab("two", rootfsName = "debian"))
+        registry.select(first.id)
+        registry.add(tab("three", rootfsName = "alpine"))
+
+        assertEquals(first, registry.mostRecent("debian") { true })
+        registry.beginClose(first.id)
+        assertEquals(second, registry.mostRecent("debian") { true })
+        assertNull(registry.mostRecent("debian") { false })
+        assertNull(registry.mostRecent("ubuntu") { true })
+        assertEquals("three", registry.activeId)
+    }
+
+    @Test
     fun `closing state prevents duplicate close and supports retry after failure`() {
         val registry = TerminalTabRegistry<Any>()
         registry.add(tab("one"))
@@ -127,6 +162,22 @@ class TerminalTabRegistryTest {
         )
         assertEquals(TerminalTabCloseState.CLOSING, registry.beginClose("one")?.closeState)
         assertNull(registry.get("one")?.closeError)
+    }
+
+    @Test
+    fun `input stays blocked only for the closing session and resumes after a failed close`() {
+        val registry = TerminalTabRegistry<Any>()
+        registry.add(tab("one"))
+        registry.add(tab("two"))
+        registry.beginClose("one")
+        assertFalse(registry.acceptsInput("one"))
+        assertTrue(registry.acceptsInput("two"))
+        registry.markForceClosing("one")
+        assertFalse(registry.acceptsInput("one"))
+        registry.markCloseFailed("one", "Still running")
+        assertTrue(registry.acceptsInput("one"))
+        registry.remove("one")
+        assertFalse(registry.acceptsInput("one"))
     }
 
     @Test
@@ -157,6 +208,7 @@ class TerminalTabRegistryTest {
     @Test
     fun `rootfs names become readable distro titles`() {
         assertEquals("Ubuntu Jammy", terminalDistroTitle("udroid-jammy-raw"))
+        assertEquals("Alpine 3.22", terminalDistroTitle("proot-alpine-3.22"))
         assertEquals("Debian Bookworm", terminalDistroTitle("debian-bookworm"))
     }
 

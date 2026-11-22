@@ -5,19 +5,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,33 +22,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.filled.StopCircle
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -66,9 +46,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -78,10 +60,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.doOnLayout
 import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
@@ -101,11 +83,40 @@ import org.randomcoder.udroid.runtime.TerminalTypographyState
 import org.randomcoder.udroid.runtime.TerminalTypographyStore
 import org.randomcoder.udroid.runtime.TerminalTabCloseState
 import org.randomcoder.udroid.runtime.TerminalTabSnapshot
+import org.randomcoder.udroid.runtime.DesktopSessionPhase
+import org.randomcoder.udroid.runtime.DesktopSessionSnapshot
 import org.randomcoder.udroid.runtime.MAX_TERMINAL_TITLE_CHARS
 import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MAX_SP
 import org.randomcoder.udroid.runtime.TERMINAL_TEXT_SIZE_MIN_SP
 import org.randomcoder.udroid.runtime.terminalDistroTitle
 import kotlin.math.roundToInt
+
+@Composable
+internal fun StopSessionsDialog(
+    tabs: List<TerminalTabSnapshot>,
+    desktop: DesktopSessionSnapshot,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val systems = tabs.groupBy { it.rootfsName }.map { (name, sessions) ->
+        "${terminalDistroTitle(name)} (${sessions.size})"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop all sessions?") },
+        text = {
+            Text(buildString {
+                append("All Linux terminals, jobs and apps will stop.")
+                if (systems.isNotEmpty()) append("\n\nOpen tabs: ${systems.joinToString()}")
+                if (desktop.phase in setOf(DesktopSessionPhase.STARTING, DesktopSessionPhase.RUNNING, DesktopSessionPhase.STOPPING)) {
+                    append("\nDesktop: ${desktop.environmentName} in ${desktop.rootfsName}")
+                }
+            })
+        },
+        confirmButton = { Button(onClick = onConfirm) { Text("Stop all sessions") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
 
 @Composable
 fun InteractiveTerminalPage(
@@ -122,21 +133,21 @@ fun InteractiveTerminalPage(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onExit: () -> Unit,
+    onOpenDisplay: () -> Unit,
+    scrollbackRows: MutableMap<TerminalSession, Int>,
 ) {
     val context = LocalContext.current
     val tabs = service?.terminalTabSnapshots().orEmpty()
     val activeTab = tabs.firstOrNull(TerminalTabSnapshot::active)
     val session = service?.currentTerminalSession()
-    var stopRequested by remember(session) { mutableStateOf(false) }
     var tabError by remember { mutableStateOf<String?>(null) }
     var renamingTab by remember { mutableStateOf<TerminalTabSnapshot?>(null) }
     var pendingCloseTabId by remember { mutableStateOf<String?>(null) }
     var creatingTab by remember { mutableStateOf(false) }
-    var showDistroPicker by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val extraKeysStore = remember(context) { TerminalExtraKeysStore(context) }
     var extraKeysState by remember(extraKeysStore) { mutableStateOf(extraKeysStore.load()) }
-    val stopping = stopRequested || snapshot.phase == RuntimePhase.STOPPING
+    val stopping = snapshot.phase == RuntimePhase.STOPPING
 
     fun createTab(rootfsName: String?) {
         val connectedService = service
@@ -146,7 +157,7 @@ fun InteractiveTerminalPage(
             else -> {
                 creatingTab = true
                 tabError = null
-                connectedService.createTerminalTab(rootfsName) { result ->
+                connectedService.openTerminal(rootfsName, newTab = true) { result ->
                     creatingTab = false
                     tabError = result.exceptionOrNull()?.message
                 }
@@ -154,8 +165,8 @@ fun InteractiveTerminalPage(
         }
     }
 
-    fun closeTab(id: String) {
-        if (service?.closeTerminalTab(id) != true) {
+    fun closeTab(id: String, stopIfLast: Boolean = false) {
+        if (service?.closeTerminalTab(id, stopIfLast) != true) {
             tabError = "Could not close terminal"
         }
     }
@@ -184,37 +195,27 @@ fun InteractiveTerminalPage(
                 .fillMaxSize()
                 .background(UdroidTerminal),
     ) {
-        TerminalSessionBar(
-            snapshot = snapshot,
-            session = session,
+        TerminalWorkspaceBar(
+            tabs = tabs,
             activeTab = activeTab,
-            stopping = stopping,
-            onExit = onExit,
-            onChooseDistro = { showDistroPicker = true },
-            onShowSettings = { showSettings = true },
-            onStop = {
-                stopRequested = true
-                onStop()
+            installedRootfses = installedRootfses,
+            creatingTab = creatingTab,
+            canCreate = service != null && installedRootfses.isNotEmpty() && !creatingTab &&
+                !stopping && snapshot.phase != RuntimePhase.STARTING,
+            onNew = { createTab(activeTab?.rootfsName ?: installedRootfses.firstOrNull()?.name) },
+            onNewInDistro = ::createTab,
+            onSelect = { service?.selectTerminalTab(it.id) },
+            onRename = { renamingTab = it },
+            onFollowTitle = { service?.followTerminalShellTitle(it.id) },
+            onClose = { tab ->
+                if (tabs.size == 1 || tab.commandRunning) pendingCloseTabId = tab.id else closeTab(tab.id)
             },
+            onExit = onExit,
+            onOpenDisplay = onOpenDisplay,
+            onShowSettings = { showSettings = true },
+            onStop = onStop,
+            stopping = stopping,
         )
-
-        if (tabs.isNotEmpty()) {
-            TerminalTabsRow(
-                tabs = tabs,
-                onSelect = { id -> service?.selectTerminalTab(id) },
-                onRename = { tab -> renamingTab = tab },
-                onFollowTitle = { id -> service?.followTerminalShellTitle(id) },
-                onClose = { id ->
-                    if (tabs.firstOrNull { it.id == id }?.commandRunning == true) {
-                        pendingCloseTabId = id
-                    } else {
-                        closeTab(id)
-                    }
-                },
-                creatingTab = creatingTab,
-                onClone = { createTab(activeTab?.rootfsName) },
-            )
-        }
 
         val closeError = tabs.firstOrNull { it.closeState == TerminalTabCloseState.FAILED }?.closeError
         (tabError ?: closeError)?.let { message ->
@@ -231,10 +232,16 @@ fun InteractiveTerminalPage(
             )
         }
 
-        if (stopping) {
-            StoppingTerminalState(
+        if (stopping || activeTab?.closeState?.isClosing == true) {
+            val title = when {
+                stopping -> "Stopping Linux…"
+                activeTab?.closeState == TerminalTabCloseState.FORCE_CLOSING -> "Force closing tab…"
+                else -> "Closing tab…"
+            }
+            ClosingTerminalState(
                 modifier = Modifier.weight(1f),
-                snapshot = snapshot,
+                title = title,
+                detail = if (stopping) snapshot.message else activeTab?.shortTitle.orEmpty(),
             )
         } else if (session == null || !session.isRunning) {
             EmptyTerminalState(
@@ -247,6 +254,7 @@ fun InteractiveTerminalPage(
                 modifier = Modifier.weight(1f),
                 service = service,
                 session = session,
+                scrollbackRows = scrollbackRows,
                 typography = typographyState,
                 extraKeys = extraKeysState,
                 onTypographyChanged = onTypographyChanged,
@@ -277,7 +285,7 @@ fun InteractiveTerminalPage(
             text = {
                 Text(
                     if (stopsLinux) {
-                        "A command is still running. Stopping Linux will end it."
+                        "Closing the last tab stops Linux, its jobs, apps and any running desktop."
                     } else {
                         "A command is still running in ${tab.title}. Closing the tab will end it."
                     },
@@ -287,7 +295,7 @@ fun InteractiveTerminalPage(
                 Button(
                     onClick = {
                         pendingCloseTabId = null
-                        closeTab(tab.id)
+                        closeTab(tab.id, stopIfLast = stopsLinux)
                     },
                 ) {
                     Text(if (stopsLinux) "Stop Linux" else "Close tab")
@@ -300,449 +308,6 @@ fun InteractiveTerminalPage(
             },
         )
     }
-
-    if (showDistroPicker) {
-        TerminalDistroPicker(
-            installedRootfses = installedRootfses,
-            activeRootfsName = activeTab?.rootfsName,
-            onDismiss = { showDistroPicker = false },
-            onSelect = { rootfs ->
-                showDistroPicker = false
-                createTab(rootfs.name)
-            },
-        )
-    }
-}
-@Composable
-private fun TerminalSessionBar(
-    snapshot: RuntimeSnapshot,
-    session: TerminalSession?,
-    activeTab: TerminalTabSnapshot?,
-    stopping: Boolean,
-    onExit: () -> Unit,
-    onChooseDistro: () -> Unit,
-    onShowSettings: () -> Unit,
-    onStop: () -> Unit,
-) {
-    val tabClosing =
-        activeTab?.closeState == TerminalTabCloseState.CLOSING ||
-            activeTab?.closeState == TerminalTabCloseState.FORCE_CLOSING
-    val running = session?.isRunning == true && !stopping && !tabClosing
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(58.dp)
-                .background(UdroidTerminalSurface)
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onExit) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "Leave terminal",
-                tint = UdroidTerminalMuted,
-            )
-        }
-        Surface(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .height(46.dp)
-                    .clickable(enabled = running, onClick = onChooseDistro),
-            color = UdroidTerminalRaised,
-            shape = RoundedCornerShape(9.dp),
-            border = BorderStroke(1.dp, UdroidTerminalLine),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Terminal,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
-                    tint = if (running) UdroidTerminalGreen else UdroidTerminalMuted,
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        terminalDistroTitle(activeTab?.rootfsName ?: session?.mSessionName),
-                        color = UdroidTerminalText,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                    )
-                    Text(
-                        when {
-                            stopping -> "Stopping terminal…"
-                            activeTab?.closeState == TerminalTabCloseState.CLOSING ->
-                                "Closing terminal…"
-                            activeTab?.closeState == TerminalTabCloseState.FORCE_CLOSING ->
-                                "Force closing terminal…"
-                            activeTab?.closeState == TerminalTabCloseState.FAILED ->
-                                activeTab.closeError ?: "Could not close terminal"
-                            running ->
-                                "root  •  ${Build.SUPPORTED_ABIS.firstOrNull().orEmpty()}" +
-                                    "  •  PID ${session?.pid}"
-                            else -> snapshot.message
-                        },
-                        color = UdroidTerminalMuted,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                    )
-                }
-                if (running) {
-                    Icon(
-                        imageVector = Icons.Outlined.KeyboardArrowDown,
-                        contentDescription = "Choose installed Linux system",
-                        modifier = Modifier.size(20.dp),
-                        tint = UdroidTerminalMuted,
-                    )
-                }
-            }
-        }
-        if (stopping) {
-            Box(
-                modifier = Modifier.size(48.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = UdroidTerminalGreen,
-                    strokeWidth = 2.dp,
-                )
-            }
-        } else if (running) {
-            IconButton(onClick = onStop) {
-                Icon(
-                    imageVector = Icons.Filled.StopCircle,
-                    contentDescription = "Stop Linux session",
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            }
-        } else {
-            Spacer(Modifier.width(48.dp))
-        }
-        IconButton(onClick = onShowSettings) {
-            Icon(
-                imageVector = Icons.Outlined.Settings,
-                contentDescription = "Terminal settings",
-                tint = UdroidTerminalMuted,
-            )
-        }
-    }
-}
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun TerminalTabsRow(
-    tabs: List<TerminalTabSnapshot>,
-    onSelect: (String) -> Unit,
-    onRename: (TerminalTabSnapshot) -> Unit,
-    onFollowTitle: (String) -> Unit,
-    onClose: (String) -> Unit,
-    creatingTab: Boolean,
-    onClone: () -> Unit,
-) {
-    val activeTabId = tabs.firstOrNull(TerminalTabSnapshot::active)?.id
-    val activeTabRequester = remember(activeTabId) { BringIntoViewRequester() }
-    val tabsScrollState = rememberScrollState()
-    LaunchedEffect(activeTabId, tabs.size) {
-        if (activeTabId != null) {
-            withFrameNanos { }
-            activeTabRequester.bringIntoView()
-        }
-    }
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .background(UdroidTerminalSurface),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .height(52.dp)
-                    .horizontalScroll(tabsScrollState)
-                    .padding(start = 8.dp, top = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            tabs.forEach { tab ->
-                TerminalTabChip(
-                    modifier =
-                        if (tab.id == activeTabId) {
-                            Modifier.bringIntoViewRequester(activeTabRequester)
-                        } else {
-                            Modifier
-                        },
-                    tab = tab,
-                    onSelect = { onSelect(tab.id) },
-                    onRename = { onRename(tab) },
-                    onFollowTitle = { onFollowTitle(tab.id) },
-                    onClose = { onClose(tab.id) },
-                    stopsLinux = tabs.size == 1,
-                )
-            }
-        }
-        Spacer(Modifier.width(6.dp))
-        Surface(
-            modifier =
-                Modifier
-                    .width(54.dp)
-                    .height(46.dp)
-                    .clickable(enabled = !creatingTab, onClick = onClone),
-            color = UdroidTerminalRaised,
-            shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                if (creatingTab) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = UdroidTerminalGreen,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = "Clone current Linux terminal",
-                        modifier = Modifier.size(28.dp),
-                        tint = UdroidTerminalText,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-    }
-}
-
-@Composable
-private fun TerminalTabChip(
-    modifier: Modifier = Modifier,
-    tab: TerminalTabSnapshot,
-    onSelect: () -> Unit,
-    onRename: () -> Unit,
-    onFollowTitle: () -> Unit,
-    onClose: () -> Unit,
-    stopsLinux: Boolean,
-) {
-    var menuExpanded by remember { mutableStateOf(false) }
-    val closing =
-        tab.closeState == TerminalTabCloseState.CLOSING ||
-            tab.closeState == TerminalTabCloseState.FORCE_CLOSING
-    Surface(
-        modifier =
-            modifier
-                .width(144.dp)
-                .height(46.dp)
-                .clickable(enabled = !closing, onClick = onSelect),
-        color = if (tab.active) UdroidTerminal else UdroidTerminalRaised,
-        shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
-        border =
-            if (tab.active) {
-                null
-            } else {
-                BorderStroke(1.dp, UdroidTerminalLine)
-            },
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 10.dp, end = 1.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (closing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    color = UdroidTerminalGreen,
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Outlined.Terminal,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint =
-                        if (tab.closeState == TerminalTabCloseState.FAILED) {
-                            MaterialTheme.colorScheme.error
-                        } else if (tab.active) {
-                            UdroidTerminalGreen
-                        } else {
-                            UdroidTerminalMuted
-                        },
-                )
-            }
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text =
-                    when (tab.closeState) {
-                        TerminalTabCloseState.CLOSING -> "${tab.title} · closing"
-                        TerminalTabCloseState.FORCE_CLOSING -> "${tab.title} · force closing"
-                        TerminalTabCloseState.FAILED -> "${tab.title} · close failed"
-                        TerminalTabCloseState.OPEN -> tab.title
-                    },
-                modifier = Modifier.weight(1f),
-                color = if (tab.active) UdroidTerminalText else UdroidTerminalMuted,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!closing) {
-                Box {
-                    IconButton(
-                        modifier = Modifier.size(36.dp),
-                        onClick = { menuExpanded = true },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.MoreVert,
-                            contentDescription = "${tab.title} settings",
-                            modifier = Modifier.size(18.dp),
-                            tint = UdroidTerminalMuted,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            onClick = {
-                                menuExpanded = false
-                                onRename()
-                            },
-                        )
-                        if (tab.hasCustomTitle) {
-                            DropdownMenuItem(
-                                text = { Text("Follow shell title") },
-                                onClick = {
-                                    menuExpanded = false
-                                    onFollowTitle()
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    when {
-                                        tab.closeState == TerminalTabCloseState.FAILED -> "Retry close"
-                                        stopsLinux -> "Stop Linux"
-                                        else -> "Close tab"
-                                    },
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    if (stopsLinux) Icons.Filled.StopCircle else Icons.Outlined.Close,
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onClose()
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TerminalDistroPicker(
-    installedRootfses: List<InstalledRootfs>,
-    activeRootfsName: String?,
-    onDismiss: () -> Unit,
-    onSelect: (InstalledRootfs) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Open a Linux terminal") },
-        text = {
-            if (installedRootfses.isEmpty()) {
-                Text("Install a Linux system before opening another terminal.")
-            } else {
-                LazyColumn(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 380.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(
-                        items = installedRootfses,
-                        key = InstalledRootfs::name,
-                    ) { rootfs ->
-                        val distribution = terminalDistribution(rootfs.name)
-                        Surface(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelect(rootfs) },
-                            color = UdroidTerminalRaised,
-                            shape = RoundedCornerShape(11.dp),
-                            border = BorderStroke(1.dp, UdroidTerminalLine),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (distribution != null) {
-                                    DistroMark(
-                                        distribution = distribution,
-                                        size = 38,
-                                    )
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.size(38.dp),
-                                        color = UdroidTerminal,
-                                        shape = RoundedCornerShape(9.dp),
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Terminal,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(19.dp),
-                                                tint = UdroidTerminalGreen,
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = terminalDistroTitle(rootfs.name),
-                                        color = UdroidTerminalText,
-                                        fontWeight = FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text =
-                                            if (rootfs.name == activeRootfsName) {
-                                                "Current distro · ${rootfs.name}"
-                                            } else {
-                                                rootfs.name
-                                            },
-                                        color = UdroidTerminalMuted,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
 }
 
 @Composable
@@ -781,36 +346,40 @@ private fun RenameTerminalDialog(
 }
 
 @Composable
-private fun StoppingTerminalState(
-    modifier: Modifier = Modifier,
-    snapshot: RuntimeSnapshot,
+private fun ClosingTerminalState(
+    modifier: Modifier,
+    title: String,
+    detail: String,
 ) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
-                .background(UdroidTerminal),
+                .background(UdroidTerminal)
+                .focusRequester(focus)
+                .focusable(),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(38.dp),
+            LinearProgressIndicator(
+                modifier = Modifier.width(128.dp),
                 color = UdroidTerminalGreen,
-                strokeWidth = 3.dp,
+                trackColor = UdroidTerminalRaised,
             )
             Spacer(Modifier.height(18.dp))
             Text(
-                "Stopping terminal…",
+                title,
                 color = UdroidTerminalText,
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(7.dp))
             Text(
-                snapshot.message.takeIf { snapshot.phase == RuntimePhase.STOPPING }
-                    ?: "Waiting for the supervised Linux process to exit.",
+                detail,
                 color = UdroidTerminalMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -818,7 +387,7 @@ private fun StoppingTerminalState(
     }
 }
 
-private fun terminalDistribution(rootfsName: String): LinuxDistribution? {
+internal fun terminalDistribution(rootfsName: String): LinuxDistribution? {
     val normalized = rootfsName.lowercase()
     return when {
         listOf("focal", "jammy", "noble", "oracular", "plucky", "questing", "resolute", "ubuntu")
@@ -904,6 +473,7 @@ private fun LiveTerminal(
     modifier: Modifier = Modifier,
     service: RuntimeSupervisorService,
     session: TerminalSession,
+    scrollbackRows: MutableMap<TerminalSession, Int>,
     typography: TerminalTypographyState,
     extraKeys: TerminalExtraKeysState,
     onTypographyChanged: (TerminalTypographyState) -> Unit,
@@ -958,7 +528,19 @@ private fun LiveTerminal(
 
     DisposableEffect(service, terminalView) {
         service.attachTerminalView(terminalView)
+        terminalView.mTermSession?.let { attached ->
+            scrollbackRows.remove(attached)?.let { row ->
+                terminalView.doOnLayout {
+                    if (terminalView.mTermSession === attached) {
+                        val history = attached.emulator?.screen?.activeTranscriptRows ?: 0
+                        terminalView.topRow = row.coerceIn(-history, 0)
+                        terminalView.invalidate()
+                    }
+                }
+            }
+        }
         onDispose {
+            terminalView.mTermSession?.let { scrollbackRows[it] = terminalView.topRow }
             modifiers.reset()
             client.stopCursorBlinking()
             service.detachTerminalView(terminalView)
@@ -972,13 +554,14 @@ private fun LiveTerminal(
                 view.setBackgroundColor(terminalBackground)
                 if (view.mTermSession !== session) {
                     view.attachSession(session)
+                    view.onScreenUpdated()
                 }
-                view.onScreenUpdated()
             },
             modifier =
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clipToBounds(),
         )
         if (extraKeys.visible) {
             TerminalExtraKeysRail(

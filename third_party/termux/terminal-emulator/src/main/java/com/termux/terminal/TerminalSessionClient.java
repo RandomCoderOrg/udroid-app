@@ -7,6 +7,8 @@ package com.termux.terminal;
  */
 public interface TerminalSessionClient {
 
+    default boolean acceptsTerminalInput(TerminalSession session) { return true; }
+
     void onTextChanged(TerminalSession changedSession);
 
     void onTitleChanged(TerminalSession changedSession);

@@ -35,6 +35,8 @@ class X11ServerController(
     private var rendererCallback: ((ParcelFileDescriptor?) -> Unit)? = null
     private val readyCallbacks = mutableListOf<(File?) -> Unit>()
     private var rendererRequestInFlight = false
+    var failureDetail: String? = null
+        private set
     private var ready = false
 
     private val connection =
@@ -49,6 +51,7 @@ class X11ServerController(
 
             override fun onServiceDisconnected(name: ComponentName) {
                 server = null
+                ready = false
                 rendererRequestInFlight = false
                 rendererCallback?.invoke(null)
                 rendererCallback = null
@@ -65,6 +68,7 @@ class X11ServerController(
 
             override fun onBindingDied(name: ComponentName) {
                 onServiceDisconnected(name)
+                stop(pendingStart?.bootId)
             }
         }
 
@@ -79,6 +83,7 @@ class X11ServerController(
         }
         val xkbRoot = File(rootfs, "usr/share/X11/xkb")
         val request = StartRequest(runtimeDirectory, xkbRoot, bootId)
+        failureDetail = null
         pendingStart = request
 
         journal.append(
@@ -146,6 +151,16 @@ class X11ServerController(
             ?.takeIf { ready }
             ?.let { X11RuntimePaths.socketDirectory(context) }
             ?.takeIf(File::isDirectory)
+
+    fun whenReady(rootfs: File, bootId: String?, callback: (File?) -> Unit) {
+        // A terminal-only distro may have failed to supply XKB data for the shared display.
+        if (pendingStart == null && (bootId == null || runCatching { start(rootfs, bootId) }.isFailure)) {
+            pendingStart = null
+            callback(null)
+            return
+        }
+        whenReady(callback)
+    }
 
     fun whenReady(callback: (File?) -> Unit) {
         val socketDirectory = activeSocketDirectory()
@@ -226,6 +241,7 @@ class X11ServerController(
             }
         }
         if (state == X11ServerProtocol.STATE_FAILED) {
+            failureDetail = detail
             ready = false
             rendererRequestInFlight = false
             rendererCallback?.invoke(null)
@@ -272,7 +288,7 @@ class X11ServerController(
             )
         val callback = rendererCallback
         rendererCallback = null
-        callback?.invoke(descriptor)
+        if (callback != null) callback(descriptor) else descriptor?.close()
         journal.append(
             component = "x11",
             severity = if (descriptor == null) "error" else "info",

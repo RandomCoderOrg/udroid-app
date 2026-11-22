@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -88,6 +89,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import com.termux.terminal.TerminalSession
+import java.util.WeakHashMap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,7 +147,7 @@ enum class UdroidDestination(
     MOUNT_EDITOR("Mounts", Icons.Rounded.Tune, Icons.Rounded.Tune),
     TERMINAL("Terminal", Icons.Rounded.Terminal, Icons.Rounded.Terminal),
     APPS("Apps", Icons.Rounded.Apps, Icons.Rounded.Apps),
-    DESKTOP("Desktop", Icons.Rounded.DesktopWindows, Icons.Rounded.DesktopWindows),
+    DESKTOP("Display", Icons.Rounded.DesktopWindows, Icons.Rounded.DesktopWindows),
     DEVICE("Device", Icons.Rounded.Memory, Icons.Rounded.Memory),
     ABOUT("About", Icons.Rounded.Info, Icons.Rounded.Info),
 }
@@ -208,6 +214,10 @@ fun UdroidApp(
     showInstallTerminal: Boolean,
     runtimeService: RuntimeSupervisorService?,
     onTerminalAppearanceChanged: () -> Unit,
+    onLeaveWorkspace: () -> Unit,
+    onLeaveCatalogue: () -> Unit,
+    displayRootfsName: String?,
+    onStartDisplayLinux: (String) -> Unit,
     onDestinationSelected: (UdroidDestination) -> Unit,
     onPrimaryDestinationSelected: (UdroidDestination) -> Unit,
     onStart: () -> Unit,
@@ -270,6 +280,7 @@ fun UdroidApp(
             compactNavigation = false,
         )
     val activeDestination = requestedJourney.destination
+    val selectedRootfsInUse = (selectedSystemRootfsName ?: installedRootfsName)?.let { runtimeService?.rootfsInUse(it) }
     val navigationDestination =
         when (activeDestination) {
             UdroidDestination.SYSTEM,
@@ -281,12 +292,31 @@ fun UdroidApp(
             else -> activeDestination
         }
 
+    val scrollbackRows = remember { WeakHashMap<TerminalSession, Int>() }
+    val displayState = rememberSaveableStateHolder()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    BackHandler(enabled = activeDestination == UdroidDestination.DISTROS && selectedOciRepository == null) {
+        if (imeVisible) keyboard?.hide() else onLeaveCatalogue()
+    }
     if (activeDestination == UdroidDestination.DESKTOP) {
-        DesktopPage(
-            snapshot = snapshot,
-            service = runtimeService,
-            onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
-        )
+        displayState.SaveableStateProvider("display") {
+            DesktopPage(
+                snapshot = snapshot,
+                service = runtimeService,
+                rootfsName = displayRootfsName,
+                onExit = onLeaveWorkspace,
+                onOpenTerminal = {
+                    keyboard?.hide()
+                    if (runtimeService?.currentTerminalSession()?.isRunning == true || snapshot.phase == RuntimePhase.STARTING) {
+                        onDestinationSelected(UdroidDestination.TERMINAL)
+                    } else {
+                        (displayRootfsName ?: installedRootfsName)?.let(onOpenRootfsTerminal)
+                    }
+                },
+                onStartLinux = { displayRootfsName?.let(onStartDisplayLinux) },
+            )
+        }
         return
     }
 
@@ -305,7 +335,7 @@ fun UdroidApp(
         }
         UdroidTerminalTheme(terminalProfileState.selectedProfile) {
             BackHandler {
-                onDestinationSelected(UdroidDestination.SYSTEM)
+                if (imeVisible) keyboard?.hide() else onLeaveWorkspace()
             }
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -346,7 +376,12 @@ fun UdroidApp(
                     onTypographyChanged = ::applyTerminalTypography,
                     onStart = onStart,
                     onStop = onStop,
-                    onExit = { onDestinationSelected(UdroidDestination.SYSTEM) },
+                    onExit = onLeaveWorkspace,
+                    scrollbackRows = scrollbackRows,
+                    onOpenDisplay = {
+                        keyboard?.hide()
+                        onDestinationSelected(UdroidDestination.DESKTOP)
+                    },
                 )
             }
         }
@@ -392,6 +427,7 @@ fun UdroidApp(
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
                         resettableRootfsNames = resettableRootfsNames,
+                        selectedRootfsInUse = selectedRootfsInUse,
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
@@ -481,6 +517,7 @@ fun UdroidApp(
                         installedRootfsName = installedRootfsName,
                         installedRootfses = installedRootfses,
                         resettableRootfsNames = resettableRootfsNames,
+                        selectedRootfsInUse = selectedRootfsInUse,
                         selectedSystemRootfsName = selectedSystemRootfsName,
                         rootfsMaintenanceName = rootfsMaintenanceName,
                         rootfsMaintenanceMessage = rootfsMaintenanceMessage,
@@ -586,6 +623,7 @@ private fun ManagementPane(
     installedRootfsName: String?,
     installedRootfses: List<InstalledRootfs>,
     resettableRootfsNames: Set<String>,
+    selectedRootfsInUse: Boolean?,
     selectedSystemRootfsName: String?,
     rootfsMaintenanceName: String?,
     rootfsMaintenanceMessage: String?,
@@ -718,9 +756,7 @@ private fun ManagementPane(
                             installedCount = installedRootfses.size,
                             capabilities = capabilities,
                             onRefresh = onRefresh,
-                            onOpenTerminal = {
-                                onDestinationSelected(UdroidDestination.TERMINAL)
-                            },
+                            onOpenTerminal = onStart,
                             onOpenLinux = {
                                 onPrimaryDestinationSelected(UdroidDestination.DISTROS)
                             },
@@ -730,7 +766,7 @@ private fun ManagementPane(
                             onOpenApps = {
                                 onDestinationSelected(UdroidDestination.APPS)
                             },
-                            onOpenDesktop = {
+                            onOpenDisplay = {
                                 onDestinationSelected(UdroidDestination.DESKTOP)
                             },
                             onOpenAbout = {
@@ -944,6 +980,7 @@ private fun ManagementPane(
                                 }
                             LinuxSystemPage(
                                 rootfs = selectedRootfs,
+                                rootfsInUse = selectedRootfsInUse,
                                 distro = selectedDistro,
                                 active = rootfsName == installedRootfsName,
                                 snapshot = snapshot,
@@ -1033,7 +1070,7 @@ private fun ManagementPane(
                             onRefresh = onRefreshLinuxApplications,
                             onLaunch = onLaunchLinuxApplication,
                             onPin = onPinLinuxApplication,
-                            onOpenDesktop = {
+                            onOpenDisplay = {
                                 onDestinationSelected(UdroidDestination.DESKTOP)
                             },
                         )
@@ -1120,7 +1157,7 @@ private fun WorkspacePage(
     onOpenLinux: () -> Unit,
     onOpenDevice: () -> Unit,
     onOpenApps: () -> Unit,
-    onOpenDesktop: () -> Unit,
+    onOpenDisplay: () -> Unit,
     onOpenAbout: () -> Unit,
 ) {
     val hasInstalledLinux = rootfsName != null
@@ -1158,66 +1195,39 @@ private fun WorkspacePage(
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
             )
         }
+        if (rootfsName != null) {
+            item {
+                UdroidToolRow(
+                    icon = Icons.Rounded.Terminal,
+                    title = "Open terminal",
+                    subtitle = distro?.releaseName ?: installedSystemTitle(rootfsName),
+                    trailingText = if (snapshot.phase == RuntimePhase.RUNNING) "Live" else null,
+                    onClick = onOpenTerminal,
+                )
+            }
+            item {
+                UdroidToolRow(
+                    icon = Icons.Rounded.DesktopWindows,
+                    title = "Display",
+                    subtitle = "View graphical apps on display :0",
+                    onClick = onOpenDisplay,
+                )
+            }
+            item {
+                UdroidToolRow(
+                    icon = Icons.Rounded.Apps,
+                    title = "Linux apps",
+                    subtitle = "Find and launch installed applications",
+                    onClick = onOpenApps,
+                )
+            }
+        }
         item {
             UdroidToolRow(
                 icon = Icons.Rounded.Storage,
-                title = "Linux systems",
-                subtitle =
-                    distro?.releaseName
-                        ?: rootfsName?.let(::installedSystemTitle)
-                        ?: "Choose a Linux distribution",
-                trailingText =
-                    when {
-                        installedCount > 1 -> "$installedCount installed"
-                        hasInstalledLinux -> "Installed"
-                        else -> "Set up"
-                    },
+                title = if (hasInstalledLinux) "Linux systems" else "Install Linux",
+                subtitle = if (hasInstalledLinux) "$installedCount installed" else "Choose a Linux distribution",
                 onClick = onOpenLinux,
-            )
-        }
-        item {
-            UdroidToolRow(
-                icon = Icons.Rounded.Terminal,
-                title = "Terminal",
-                subtitle =
-                    if (hasInstalledLinux) {
-                        "Open a shell in the installed Linux system"
-                    } else {
-                        "Install Linux to use the terminal"
-                    },
-                trailingText =
-                    when {
-                        !hasInstalledLinux -> "Needs Linux"
-                        snapshot.phase == RuntimePhase.RUNNING -> "Live"
-                        else -> null
-                    },
-                onClick = onOpenTerminal,
-            )
-        }
-        item {
-            UdroidToolRow(
-                icon = Icons.Rounded.Apps,
-                title = "Linux apps",
-                subtitle =
-                    if (hasInstalledLinux) {
-                        "Find and launch installed applications"
-                    } else {
-                        "Install Linux to discover apps"
-                    },
-                onClick = onOpenApps,
-            )
-        }
-        item {
-            UdroidToolRow(
-                icon = Icons.Rounded.DesktopWindows,
-                title = "Desktop",
-                subtitle =
-                    if (hasInstalledLinux) {
-                        "Open the graphical Linux desktop"
-                    } else {
-                        "Install Linux to use a desktop"
-                    },
-                onClick = onOpenDesktop,
             )
         }
         item {

@@ -156,24 +156,21 @@ fun DistroMark(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.medium,
     ) {
-        Image(
-            painter =
-                painterResource(
-                    when (distribution) {
-                        LinuxDistribution.UNKNOWN -> R.drawable.distro_unknown
-                        LinuxDistribution.UBUNTU -> R.drawable.distro_ubuntu
-                        LinuxDistribution.DEBIAN -> R.drawable.distro_debian
-                        LinuxDistribution.ARCH -> R.drawable.distro_arch
-                        LinuxDistribution.ALPINE -> R.drawable.distro_alpine
-                        LinuxDistribution.VOID -> R.drawable.distro_void
-                    },
-                ),
-            contentDescription = null,
-            modifier =
-                Modifier
-                    .padding((size * 0.20f).dp),
-        )
+        DistroLogo(distribution, Modifier.padding((size * 0.20f).dp))
     }
+}
+
+@Composable
+internal fun DistroLogo(distribution: LinuxDistribution, modifier: Modifier = Modifier) {
+    val icon = when (distribution) {
+        LinuxDistribution.UNKNOWN -> R.drawable.distro_unknown
+        LinuxDistribution.UBUNTU -> R.drawable.distro_ubuntu
+        LinuxDistribution.DEBIAN -> R.drawable.distro_debian
+        LinuxDistribution.ARCH -> R.drawable.distro_arch
+        LinuxDistribution.ALPINE -> R.drawable.distro_alpine
+        LinuxDistribution.VOID -> R.drawable.distro_void
+    }
+    Image(painterResource(icon), contentDescription = null, modifier = modifier)
 }
 
 @Composable

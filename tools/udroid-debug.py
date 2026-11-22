@@ -148,6 +148,8 @@ def collapse_desktop_controls(package, serial, timeout):
         adb(["shell", "uiautomator", "dump", remote], serial=serial, check=False)
         result = adb(["exec-out", "cat", remote], serial=serial, check=False)
         if result.returncode == 0:
+            if accessibility_node_center(result.stdout, "Show desktop controls", package):
+                return
             center = accessibility_node_center(
                 result.stdout,
                 "Collapse desktop controls",

@@ -3,6 +3,8 @@ package org.randomcoder.udroid.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,8 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Mouse
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,10 +44,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
+import org.randomcoder.udroid.runtime.terminalDistroTitle
 import org.randomcoder.udroid.runtime.RuntimePhase
 import org.randomcoder.udroid.runtime.RuntimeSnapshot
 import org.randomcoder.udroid.runtime.RuntimeSupervisorService
@@ -55,12 +62,15 @@ import org.randomcoder.udroid.x11.X11SettingsStore
 fun DesktopPage(
     snapshot: RuntimeSnapshot,
     service: RuntimeSupervisorService?,
+    rootfsName: String?,
     onExit: () -> Unit,
+    onOpenTerminal: () -> Unit,
+    onStartLinux: () -> Unit,
 ) {
     val context = LocalContext.current
     val settingsStore = remember(context) { X11SettingsStore(context) }
     var settings by remember { mutableStateOf(settingsStore.load()) }
-    var controlsExpanded by remember {
+    var controlsExpanded by rememberSaveable {
         mutableStateOf(!settings.startControlsCollapsed)
     }
     var inputPaletteVisible by rememberSaveable { mutableStateOf(false) }
@@ -68,9 +78,12 @@ fun DesktopPage(
     var arrangingDisplayKeys by rememberSaveable { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var displayView by remember { mutableStateOf<X11DisplayView?>(null) }
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     BackHandler {
         if (showSettings) {
             showSettings = false
+        } else if (imeVisible) {
+            displayView?.hideKeyboard()
         } else if (inputPaletteVisible) {
             inputPaletteVisible = false
         } else if (arrangingDisplayKeys) {
@@ -81,7 +94,9 @@ fun DesktopPage(
             onExit()
         }
     }
-    var status by remember { mutableStateOf("Waiting for the supervised X11 renderer") }
+    var attempt by remember { mutableStateOf(0) }
+    var attached by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val updateSettings: (X11Settings) -> Unit = { updated ->
         if (updated.displayKeys.size > settings.displayKeys.size) displayKeysVisible = true
         settings = settingsStore.save(updated)
@@ -96,33 +111,44 @@ fun DesktopPage(
         }
     }
 
-    DisposableEffect(service, displayView, snapshot.bootId) {
+    DisposableEffect(service, displayView, snapshot.phase, snapshot.bootId, rootfsName, attempt) {
         val view = displayView
-        if (
-            snapshot.phase == RuntimePhase.RUNNING &&
-            service != null &&
-            view != null &&
-            !view.isRendererAttached
-        ) {
-            status = "Connecting Android surface to display :0"
-            service.requestX11RendererConnection { descriptor ->
-                when {
-                    descriptor == null -> status = "X11 renderer connection is not ready"
-                    !view.isAttachedToWindow -> {
+        var current = true
+        attached = false
+        error = null
+        if (snapshot.phase == RuntimePhase.RUNNING && service != null && view != null && rootfsName != null) {
+            service.requestX11RendererConnection(rootfsName) { result ->
+                result.onSuccess { descriptor ->
+                    if (current && view.isAttachedToWindow) {
+                        view.attachRenderer(descriptor)
+                        attached = true
+                        error = null
+                    } else {
                         descriptor.close()
                     }
-                    else -> {
-                        view.attachRenderer(descriptor)
-                        status = "Display :0 attached"
-                    }
+                }.onFailure { if (current) error = it.message ?: "Display :0 could not connect" }
+            }
+        }
+        onDispose {
+            current = false
+            view?.detachRenderer()
+        }
+    }
+
+    LaunchedEffect(snapshot.phase, snapshot.bootId, service, attached, attempt) {
+        if (snapshot.phase != RuntimePhase.RUNNING) return@LaunchedEffect
+        if (attached) {
+            while (true) {
+                delay(1500)
+                if (displayView?.isRendererAttached != true) {
+                    attached = false
+                    error = "The renderer disconnected."
+                    break
                 }
             }
-        } else if (snapshot.phase != RuntimePhase.RUNNING) {
-            status = "Start the Linux runtime before opening Desktop"
-        }
-
-        onDispose {
-            view?.detachRenderer()
+        } else {
+            delay(12000)
+            if (error == null) error = "Timed out connecting to display :0."
         }
     }
 
@@ -145,7 +171,8 @@ fun DesktopPage(
         ) {
             if (controlsExpanded) {
                 DesktopControlBar(
-                    status = status,
+                    onOpenTerminal = onOpenTerminal,
+                    attached = attached,
                     inputPaletteVisible = inputPaletteVisible,
                     displayKeysVisible = displayKeysVisible,
                     arrangingDisplayKeys = arrangingDisplayKeys,
@@ -162,9 +189,25 @@ fun DesktopPage(
                 )
             } else {
                 CollapsedDesktopControlBar(
-                    attached = displayView?.isRendererAttached == true,
+                    attached = attached,
+                    onOpenTerminal = onOpenTerminal,
                     onExpand = { controlsExpanded = true },
                 )
+            }
+            if (attached && controlsExpanded) {
+                val desktop = snapshot.desktop
+                val owner = desktop.rootfsName?.takeIf { desktop.phase.isDisplayClaimed() }
+                val detail = if (arrangingDisplayKeys) "Drag keys to move them" else owner?.let {
+                    "Display :0 · ${desktop.environmentName ?: "Desktop"} · ${terminalDistroTitle(it)}"
+                }
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        color = UdroidTerminalText,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                }
             }
             Box(
                 modifier =
@@ -184,11 +227,11 @@ fun DesktopPage(
                         it.onDisplayKeysMoved = { moved ->
                             updateSettings(settings.copy(displayKeys = moved))
                         }
-                        it.setPaletteVisible(inputPaletteVisible)
+                        it.setPaletteVisible(attached && inputPaletteVisible)
                         it.setKeyboardBindings(settings.overlayKeyRows)
-                        it.setKeyboardStripVisible(settings.showKeyboardStrip)
+                        it.setKeyboardStripVisible(attached && settings.showKeyboardStrip)
                         it.setDisplayKeys(settings.displayKeys)
-                        it.setDisplayKeysVisible(displayKeysVisible)
+                        it.setDisplayKeysVisible(attached && displayKeysVisible)
                         it.setDisplayKeysArranging(arrangingDisplayKeys)
                         it.setPaletteColors(
                             primaryContainer = palettePrimary,
@@ -201,6 +244,34 @@ fun DesktopPage(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (!attached) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center).background(Color.Black).padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        val stopped = snapshot.phase == RuntimePhase.STOPPED || snapshot.phase == RuntimePhase.CRASHED
+                        val message = when (snapshot.phase) {
+                            RuntimePhase.STOPPED -> "Start Linux to use display :0"
+                            RuntimePhase.CRASHED -> snapshot.message
+                            RuntimePhase.STARTING -> "Starting Linux…"
+                            RuntimePhase.STOPPING -> "Stopping Linux…"
+                            RuntimePhase.RUNNING -> if (error?.startsWith("XKB data is missing") == true) {
+                                "Display :0 needs XKB keyboard data."
+                            } else {
+                                error ?: "Connecting to display :0…"
+                            }
+                        }
+                        Text(message, color = UdroidTerminalText, style = MaterialTheme.typography.bodyMedium)
+                        if (error?.contains("XKB", ignoreCase = true) == true) {
+                            Text("Install XKB keyboard data in this distro, then retry.", color = UdroidTerminalMuted)
+                        }
+                        if (stopped) {
+                            Button(onClick = onStartLinux) { Text("Start Linux") }
+                        } else if (error != null && snapshot.phase == RuntimePhase.RUNNING) {
+                            Button(onClick = { attempt++ }) { Text("Retry display") }
+                        }
+                    }
+                }
             }
         }
     }
@@ -222,7 +293,8 @@ fun DesktopPage(
 
 @Composable
 private fun DesktopControlBar(
-    status: String,
+    onOpenTerminal: () -> Unit,
+    attached: Boolean,
     inputPaletteVisible: Boolean,
     displayKeysVisible: Boolean,
     arrangingDisplayKeys: Boolean,
@@ -244,36 +316,20 @@ private fun DesktopControlBar(
         IconButton(onClick = onExit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "Close desktop",
+                contentDescription = "Leave display",
                 tint = UdroidTerminalText,
             )
         }
-        Column(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .padding(horizontal = UdroidSpacing.compact.dp),
-        ) {
-            Text(
-                text = "DISPLAY :0",
-                color = UdroidTerminalGreen,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Text(
-                text = if (arrangingDisplayKeys) "Drag buttons to move" else status.removePrefix("Display :0 "),
-                color = UdroidTerminalText,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-            )
-        }
-        IconButton(onClick = onKeyboard) {
+        TextButton(onClick = onOpenTerminal) { Text("Terminal", color = UdroidTerminalGreen) }
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onKeyboard, enabled = attached) {
             Icon(
                 imageVector = Icons.Rounded.Keyboard,
                 contentDescription = "Show keyboard",
                 tint = UdroidTerminalText,
             )
         }
-        IconButton(onClick = onInputPalette) {
+        IconButton(onClick = onInputPalette, enabled = attached) {
             Icon(
                 imageVector = Icons.Rounded.Mouse,
                 contentDescription =
@@ -292,6 +348,7 @@ private fun DesktopControlBar(
         }
         IconButton(
             onClick = onKeyboardPalette,
+            enabled = attached,
             modifier = Modifier.semantics {
                 contentDescription =
                     if (arrangingDisplayKeys) "Done arranging display keys"
@@ -307,7 +364,7 @@ private fun DesktopControlBar(
         IconButton(onClick = onSettings) {
             Icon(
                 imageVector = Icons.Rounded.Settings,
-                contentDescription = "Desktop settings",
+                contentDescription = "Display settings",
                 tint = UdroidTerminalText,
             )
         }
@@ -324,6 +381,7 @@ private fun DesktopControlBar(
 @Composable
 private fun CollapsedDesktopControlBar(
     attached: Boolean,
+    onOpenTerminal: () -> Unit,
     onExpand: () -> Unit,
 ) {
     Row(
@@ -331,7 +389,7 @@ private fun CollapsedDesktopControlBar(
             Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(32.dp)
+                .height(48.dp)
                 .background(Color.Black),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -341,10 +399,11 @@ private fun CollapsedDesktopControlBar(
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(start = UdroidSpacing.content.dp),
         )
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(onClick = onOpenTerminal) { Text("Terminal", color = UdroidTerminalGreen) }
         IconButton(
             onClick = onExpand,
-            modifier = Modifier.height(32.dp),
+            modifier = Modifier.height(48.dp),
         ) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardArrowDown,
