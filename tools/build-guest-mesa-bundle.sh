@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source_dir="${1:?usage: build-guest-mesa-deb.sh <mesa-source> <output-dir>}"
-output_dir="${2:?usage: build-guest-mesa-deb.sh <mesa-source> <output-dir>}"
+source_dir="${1:?usage: build-guest-mesa-bundle.sh <mesa-source> <output-dir>}"
+output_dir="${2:?usage: build-guest-mesa-bundle.sh <mesa-source> <output-dir>}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 commit=7c8f8371df1c9e359becf9e902ba23b450b739c6
 version=26.1.5+git7c8f8371-1
@@ -28,6 +28,7 @@ meson setup "$work/zink" "$source_dir" \
     -Dopengl=true -Dglx=dri -Degl=enabled -Dgbm=enabled \
     -Dglvnd=enabled -Dllvm=disabled -Dvideo-codecs= -Dtools=zink
 meson compile -C "$work/zink"
+DESTDIR="$work/install" meson install -C "$work/zink"
 
 meson setup "$work/virtio" "$source_dir" \
     --buildtype=debugoptimized \
@@ -36,15 +37,16 @@ meson setup "$work/virtio" "$source_dir" \
     -Dllvm=disabled -Dvideo-codecs=
 meson compile -C "$work/virtio"
 
-package="$work/package"
-bundle="$package/opt/udroid/venus-mesa"
-mkdir -p "$bundle/bin" "$bundle/lib/dri" "$bundle/share/doc" "$package/DEBIAN"
+bundle="$work/stage/venus-mesa"
+mkdir -p "$bundle/bin" "$bundle/lib/dri" "$bundle/share/doc"
 cp -a "$root/app/src/main/assets/runtime/arm64-v8a/venus-mesa/share/". "$bundle/share/"
 install -m 644 "$source_dir/docs/license.rst" "$bundle/share/doc/license.rst"
 
 install -m 755 "$work/zink/src/gallium/drivers/zink/check_requirements/zink_check_requirements" "$bundle/bin/"
 install -m 755 "$work/zink/src/gallium/targets/dri/libgallium-26.1.5.so" "$bundle/lib/"
-install -m 755 "$work/zink/src/gallium/targets/dri/zink_dri.so" "$bundle/lib/dri/"
+dri_driver="$(find "$work/install" -name zink_dri.so -print -quit)"
+[[ -n "$dri_driver" ]] || { echo 'Mesa did not install zink_dri.so' >&2; exit 1; }
+install -m 755 "$dri_driver" "$bundle/lib/dri/zink_dri.so"
 install -m 755 "$work/zink/src/egl/libEGL_mesa.so.0" "$bundle/lib/"
 install -m 755 "$work/zink/src/glx/libGLX_mesa.so.0" "$bundle/lib/"
 install -m 755 "$work/virtio/src/virtio/vulkan/libvulkan_virtio.so" "$bundle/lib/"
@@ -59,13 +61,13 @@ for binary in "$bundle/bin/zink_check_requirements" "$bundle/lib/"*.so* "$bundle
 done
 
 manifest="$bundle/MANIFEST.properties"
-printf 'format=1\nruntime=%s\nabi=arm64-v8a\nsource_package=mesa\nmesa_commit=%s\n' "$version" "$commit" > "$manifest"
+printf 'format=1\nruntime=%s\narch=aarch64\nlibc=glibc\nglibc_min=2.34\nsource_package=mesa\nmesa_commit=%s\n' "$version" "$commit" > "$manifest"
 while IFS= read -r file; do
     relative="${file#"$bundle"/}"
     printf '%s.sha256=%s\n' "$relative" "$(sha256sum "$file" | cut -d ' ' -f 1)" >> "$manifest"
 done < <(find "$bundle" -type f ! -name MANIFEST.properties | LC_ALL=C sort)
 
-printf 'Package: udroid-mesa-venus\nVersion: %s\nArchitecture: arm64\nMaintainer: RandomCoderOrg\nDepends: libc6 (>= 2.34), libdrm2, libx11-6, libxcb1, libvulkan1\nDescription: uDroid private Mesa Venus and Zink guest runtime\n Installs under /opt/udroid without replacing distribution Mesa.\n' "$version" > "$package/DEBIAN/control"
-archive="$output_dir/udroid-mesa-venus_${version}_arm64.deb"
-dpkg-deb --build --root-owner-group "$package" "$archive"
-sha256sum "$archive" > "$output_dir/SHA256SUMS"
+archive="$output_dir/udroid-mesa-venus_${version}_linux-arm64-glibc2.34.tar.gz"
+tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+    -C "$work/stage" -czf "$archive" venus-mesa
+(cd "$output_dir" && sha256sum "$(basename "$archive")" > SHA256SUMS)

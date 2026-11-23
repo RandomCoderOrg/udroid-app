@@ -21,13 +21,13 @@ jobs:
           ref: 7c8f8371df1c9e359becf9e902ba23b450b739c6
           path: mesa
           persist-credentials: false
-      - name: Cache source-built Mesa package
+      - name: Cache source-built Mesa bundle
         id: mesa-cache
         uses: actions/cache@v6
         with:
           path: mesa-artifacts
-          key: guest-mesa-jammy-arm64-v1-7c8f8371df1c9e359becf9e902ba23b450b739c6-${{ hashFiles('tools/build-guest-mesa-deb.sh', '.github/workflows/mesa-guest.yml', 'app/src/main/assets/runtime/arm64-v8a/venus-mesa/share/**') }}
-      - name: Build Mesa package
+          key: guest-mesa-jammy-arm64-v1-7c8f8371df1c9e359becf9e902ba23b450b739c6-${{ hashFiles('tools/build-guest-mesa-bundle.sh', '.github/workflows/mesa-guest.yml', 'app/src/main/assets/runtime/arm64-v8a/venus-mesa/share/**') }}
+      - name: Build Mesa bundle
         if: steps.mesa-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
@@ -41,14 +41,13 @@ jobs:
             libexpat1-dev x11proto-dev zlib1g-dev libzstd-dev
           python3 -m pip install --user 'meson==1.7.2'
           export PATH="$HOME/.local/bin:$PATH"
-          bash tools/build-guest-mesa-deb.sh mesa mesa-artifacts
-      - name: Verify Mesa package
+          bash tools/build-guest-mesa-bundle.sh mesa mesa-artifacts
+      - name: Verify Mesa bundle
         run: |
           cd mesa-artifacts
           sha256sum --check --strict SHA256SUMS
-          deb=(udroid-mesa-venus_*.deb)
-          test "${#deb[@]}" -eq 1
-          test "$(dpkg-deb --field "${deb[0]}" Architecture)" = arm64
+          archives=(udroid-mesa-venus_*.tar.gz)
+          test "${#archives[@]}" -eq 1
           for path in \
             bin/zink_check_requirements \
             lib/libEGL_mesa.so.0 \
@@ -56,8 +55,9 @@ jobs:
             lib/libgallium-26.1.5.so \
             lib/libvulkan_virtio.so \
             lib/dri/zink_dri.so; do
-            dpkg-deb --contents "${deb[0]}" | grep -F "/opt/udroid/venus-mesa/$path"
+            tar -tzf "${archives[0]}" | grep -Fx "venus-mesa/$path"
           done
+          tar -xOzf "${archives[0]}" venus-mesa/MANIFEST.properties | grep -Fx 'glibc_min=2.34'
       - uses: actions/upload-artifact@v7
         with:
           name: udroid-mesa-venus-jammy-arm64
