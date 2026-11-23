@@ -24,7 +24,7 @@ fetch_checked() {
     local url="$1"
     local output="$2"
     local expected="$3"
-    curl --fail --location --silent --show-error "$url" --output "$output"
+    curl --fail --location --silent --show-error --retry 3 --connect-timeout 10 --max-time 60 "$url" --output "$output"
     local actual
     actual="$(shasum -a 256 "$output" | cut -d ' ' -f 1)"
     if [[ "$actual" != "$expected" ]]; then
@@ -40,7 +40,7 @@ fetch_checked \
     "$WORK/proot.zip" \
     "$PROOT_SHA256"
 fetch_checked \
-    "https://www.samba.org/ftp/talloc/talloc-${TALLOC_VERSION}.tar.gz" \
+    "https://mse.uk.distfiles.macports.org/talloc/talloc-${TALLOC_VERSION}.tar.gz" \
     "$WORK/talloc.tar.gz" \
     "$TALLOC_SHA256"
 
