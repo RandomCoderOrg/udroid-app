@@ -27,6 +27,11 @@ VirGL, ANGLE, and Venus graphics bundles remain checked-in binaries, and
 PulseAudio is not yet built from source. A passing Android CI run must not be
 presented as proof that every bundled binary was built from source.
 
+The separate `Guest Mesa build` workflow compiles pinned Venus/Zink Mesa source
+on an Ubuntu 22.04 ARM runner and publishes an `arm64` `.deb` for QA. It
+installs under `/opt/udroid` without replacing Ubuntu's Mesa. The app still
+bundles its existing Mesa assets until this package is tested on device.
+
 The published `v0.0.2` APK predates stable update signing and retains its
 original debug asset name:
 

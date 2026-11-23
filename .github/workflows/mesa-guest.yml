@@ -1,0 +1,62 @@
+name: Guest Mesa build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: RandomCoderOrg/mesa-gfxstream
+          ref: 7c8f8371df1c9e359becf9e902ba23b450b739c6
+          path: mesa
+          persist-credentials: false
+      - name: Cache source-built Mesa package
+        id: mesa-cache
+        uses: actions/cache@v6
+        with:
+          path: mesa-artifacts
+          key: guest-mesa-jammy-arm64-v1-7c8f8371df1c9e359becf9e902ba23b450b739c6-${{ hashFiles('tools/build-guest-mesa-deb.sh', '.github/workflows/mesa-guest.yml', 'app/src/main/assets/runtime/arm64-v8a/venus-mesa/share/**') }}
+      - name: Build Mesa package
+        if: steps.mesa-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config python3-pip python3-mako \
+            python3-yaml python3-ply python3-jinja2 python3-packaging \
+            libdrm-dev libx11-dev libxext-dev libxfixes-dev libxshmfence-dev \
+            libxxf86vm-dev libxcb1-dev libxcb-dri2-0-dev libxcb-dri3-dev \
+            libxcb-present-dev libxcb-sync-dev libxcb-randr0-dev \
+            libxcb-xfixes0-dev libxcb-shm0-dev libvulkan-dev libglvnd-dev \
+            libexpat1-dev zlib1g-dev libzstd-dev
+          python3 -m pip install --user 'meson==1.7.2'
+          export PATH="$HOME/.local/bin:$PATH"
+          bash tools/build-guest-mesa-deb.sh mesa mesa-artifacts
+      - name: Verify Mesa package
+        run: |
+          cd mesa-artifacts
+          sha256sum --check --strict SHA256SUMS
+          deb=(udroid-mesa-venus_*.deb)
+          test "${#deb[@]}" -eq 1
+          test "$(dpkg-deb --field "${deb[0]}" Architecture)" = arm64
+          for path in \
+            bin/zink_check_requirements \
+            lib/libEGL_mesa.so.0 \
+            lib/libGLX_mesa.so.0 \
+            lib/libgallium-26.1.5.so \
+            lib/libvulkan_virtio.so \
+            lib/dri/zink_dri.so; do
+            dpkg-deb --contents "${deb[0]}" | grep -F "/opt/udroid/venus-mesa/$path"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: udroid-mesa-venus-jammy-arm64
+          path: mesa-artifacts/*
+          if-no-files-found: error
