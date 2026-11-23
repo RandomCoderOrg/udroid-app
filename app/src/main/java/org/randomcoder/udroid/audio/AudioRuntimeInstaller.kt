@@ -14,7 +14,7 @@ data class AudioRuntime(
 )
 
 object AudioRuntimeInstaller {
-    private const val RUNTIME_VERSION = "17.0-3-2"
+    private const val RUNTIME_VERSION = "17.0-5-1"
     private const val VERSION_ENTRY = "VERSION"
     private val supportedAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
     private val expectedEntries =
@@ -126,5 +126,5 @@ object AudioRuntimeInstaller {
 
     private fun isComplete(directory: File): Boolean =
         expectedEntries.all { File(directory, it).isFile } &&
-            File(directory, VERSION_ENTRY).readText().trim() == "17.0-3"
+            File(directory, VERSION_ENTRY).readText().trim() == "17.0-5"
 }

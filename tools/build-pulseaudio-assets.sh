@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPOSITORY_URL="https://packages.termux.dev/apt/termux-main"
 PACKAGE_MANIFEST="$ROOT/tools/pulseaudio-packages.tsv"
-PULSEAUDIO_VERSION="17.0-3"
+PULSEAUDIO_VERSION="17.0-5"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/udroid-pulseaudio.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
