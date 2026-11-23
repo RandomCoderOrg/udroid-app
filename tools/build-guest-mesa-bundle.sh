@@ -62,7 +62,7 @@ for binary in "$bundle/bin/zink_check_requirements" "$bundle/lib/"*.so* "$bundle
 done
 
 manifest="$bundle/MANIFEST.properties"
-printf 'format=1\nruntime=%s\narch=aarch64\nlibc=glibc\nglibc_min=2.34\nsource_package=mesa\nmesa_commit=%s\n' "$version" "$commit" > "$manifest"
+printf 'format=1\nruntime=26.1.5-jammy\nabi=arm64-v8a\narch=aarch64\nlibc=glibc\nglibc_min=2.34\nsource_package=mesa\nmesa_commit=%s\n' "$commit" > "$manifest"
 while IFS= read -r file; do
     relative="${file#"$bundle"/}"
     printf '%s.sha256=%s\n' "$relative" "$(sha256sum "$file" | cut -d ' ' -f 1)" >> "$manifest"

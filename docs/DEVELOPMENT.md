@@ -23,15 +23,17 @@ packages before assembling either APK variant. It removes their checked-in
 outputs on a cache miss, and verifies the exact-key Actions cache against a
 SHA-256 manifest on a hit, so a failed build cannot silently package an old
 copy. Gradle builds the embedded Termux:X11 module from its vendored source. The
-VirGL, ANGLE, and Venus graphics bundles remain checked-in binaries, and
+VirGL and ANGLE graphics bundles remain checked-in binaries, and
 PulseAudio is not yet built from source. A passing Android CI run must not be
 presented as proof that every bundled binary was built from source.
 
 The separate `Guest Mesa build` workflow compiles pinned Venus/Zink Mesa source
 on an Ubuntu 22.04 ARM runner and publishes a libc- and architecture-labelled
 library archive for QA. It does not depend on a guest package manager or replace
-distribution Mesa. The app still bundles its existing Mesa assets until this
-archive is tested on device. Other libc families need separate compatible builds.
+distribution Mesa. Android CI replaces the checked-in Mesa asset with this
+verified archive before building the APK; local builds retain the checked-in
+asset. The source-built APK still needs device QA before release. Other libc
+families need separate compatible builds.
 
 The published `v0.0.2` APK predates stable update signing and retains its
 original debug asset name:
