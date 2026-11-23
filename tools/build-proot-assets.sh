@@ -6,8 +6,9 @@ NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/28.2.136
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
 API=26
 
-PROOT_VERSION=5.1.107.101
-PROOT_SHA256=a66743f50c7b0bac1913b83bf55e139d679c80a0ca2808eec76432a65640017f
+PROOT_VERSION=5.1.107.102-17-g7cbed09
+PROOT_COMMIT=7cbed09235d18cdb4be8eed456038608c10a29a0
+PROOT_SHA256=7eb180832597a2a949a5491fee7a829ef3cb5ae787403349d0c32c568f5b43f9
 TALLOC_VERSION=2.4.3
 TALLOC_SHA256=dc46c40b9f46bb34dd97fe41f548b0e8b247b77a918576733c528e83abd854dd
 
@@ -30,7 +31,7 @@ fetch_checked() {
 }
 
 fetch_checked \
-    "https://github.com/termux/proot/archive/v${PROOT_VERSION}.zip" \
+    "https://github.com/termux/proot/archive/${PROOT_COMMIT}.zip" \
     "$WORK/proot.zip" \
     "$PROOT_SHA256"
 fetch_checked \
@@ -58,7 +59,7 @@ build_abi() {
     unzip -q "$WORK/proot.zip" -d "$abi_work/proot-source"
     tar -xzf "$WORK/talloc.tar.gz" -C "$abi_work/talloc" --strip-components=1
     for patch_file in "$ROOT"/patches/proot/*.patch; do
-        patch -d "$abi_work/proot-source/proot-${PROOT_VERSION}" -p1 < "$patch_file"
+        patch -d "$abi_work/proot-source/proot-${PROOT_COMMIT}" -p1 < "$patch_file"
     done
 
     (
@@ -75,7 +76,7 @@ build_abi() {
         install -m 644 talloc.h "$prefix/include/talloc.h"
     )
 
-    local proot_source="$abi_work/proot-source/proot-${PROOT_VERSION}"
+    local proot_source="$abi_work/proot-source/proot-${PROOT_COMMIT}"
     (
         cd "$proot_source"
         PATH="$wrappers:$PATH" make \

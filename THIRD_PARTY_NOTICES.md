@@ -6,9 +6,9 @@ third-party components.
 ## PRoot
 
 - Project: <https://github.com/termux/proot>
-- Version: `5.1.107.101`
+- Version: `5.1.107.102-17-g7cbed09` (commit `7cbed09235d18cdb4be8eed456038608c10a29a0`)
 - Source archive SHA-256:
-  `a66743f50c7b0bac1913b83bf55e139d679c80a0ca2808eec76432a65640017f`
+  `7eb180832597a2a949a5491fee7a829ef3cb5ae787403349d0c32c568f5b43f9`
 - License: GNU General Public License version 2
 - Local patch set: `patches/proot`
 
