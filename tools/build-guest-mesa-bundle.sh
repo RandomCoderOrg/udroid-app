@@ -52,6 +52,7 @@ install -m 755 "$work/zink/src/glx/libGLX_mesa.so.0" "$bundle/lib/"
 install -m 755 "$work/virtio/src/virtio/vulkan/libvulkan_virtio.so" "$bundle/lib/"
 
 for binary in "$bundle/bin/zink_check_requirements" "$bundle/lib/"*.so* "$bundle/lib/dri/"*.so; do
+    strip --strip-unneeded "$binary"
     readelf -h "$binary" | grep -q 'Machine:.*AArch64'
     max_glibc="$(readelf --version-info "$binary" | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1 || true)"
     if [[ -n "$max_glibc" && "$(printf '%s\n' GLIBC_2.34 "$max_glibc" | sort -V | tail -1)" != GLIBC_2.34 ]]; then

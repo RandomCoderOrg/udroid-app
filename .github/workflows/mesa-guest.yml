@@ -57,7 +57,17 @@ jobs:
             lib/dri/zink_dri.so; do
             tar -tzf "${archives[0]}" | grep -Fx "venus-mesa/$path"
           done
-          tar -xOzf "${archives[0]}" venus-mesa/MANIFEST.properties | grep -Fx 'glibc_min=2.34'
+          extracted="$(mktemp -d)"
+          trap 'rm -rf "$extracted"' EXIT
+          tar -xzf "${archives[0]}" -C "$extracted"
+          manifest="$extracted/venus-mesa/MANIFEST.properties"
+          grep -Fx 'glibc_min=2.34' "$manifest"
+          while IFS='=' read -r key expected; do
+            if [[ "$key" == *.sha256 ]]; then
+              printf '%s  %s\n' "$expected" "$extracted/venus-mesa/${key%.sha256}" \
+                | sha256sum --check --strict -
+            fi
+          done < "$manifest"
       - uses: actions/upload-artifact@v7
         with:
           name: udroid-mesa-venus-jammy-arm64
