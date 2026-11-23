@@ -75,8 +75,6 @@ object GraphicsProfileCompatibilityProbe {
                     device.hardwareBuffer to "This device cannot allocate GPU hardware buffers",
                     guest.venus to "A compatible Mesa Venus driver is not available in Linux",
                 ),
-            DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL to
-                require(GFXSTREAM_PROFILE_ENABLED, "gfxstream is not enabled in this build"),
         )
 
     private fun deviceSupport(context: Context): GraphicsDeviceSupport {

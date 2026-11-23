@@ -1,47 +1,15 @@
-package org.randomcoder.udroid.gfxstream
+package org.randomcoder.udroid.virgl
 
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.Properties
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class GfxstreamGuestRuntimeTest {
-    @Test
-    fun `profile binds an immutable runtime and private gpu socket`() {
-        val root = Files.createTempDirectory("udroid-gfxstream-profile").toFile()
-        val launcher = root.resolve("bin/udroid-gfxstream-run")
-        requireNotNull(launcher.parentFile).mkdirs()
-        launcher.writeText("#!/bin/sh\n")
-        launcher.setExecutable(true)
-        val socket = Files.createTempFile("udroid-kumquat", ".sock").toFile()
-        val profile =
-            GfxstreamProotLaunchProfile(
-                runtime = GfxstreamGuestRuntime(root, launcher, "test"),
-                gpuSocket = socket,
-            )
-        val arguments = mutableListOf<String>()
-
-        profile.addBindings(arguments)
-
-        assertEquals(
-            listOf(
-                "-b",
-                "${root.absolutePath}:/opt/udroid/gfxstream",
-                "-b",
-                "${socket.absolutePath}:/tmp/kumquat-gpu-0",
-            ),
-            arguments,
-        )
-        assertEquals(
-            listOf("/opt/udroid/gfxstream/bin/udroid-gfxstream-run", "vulkaninfo", "--summary"),
-            profile.wrapGuestCommand(listOf("vulkaninfo", "--summary")),
-        )
-    }
-
+class VerifiedRuntimeAssetInstallerTest {
     @Test
     fun `verified runtime rejects a missing digest`() {
         val bundle =
@@ -89,14 +57,10 @@ class GfxstreamGuestRuntimeTest {
             manifest.store(output, null)
         }
 
-        assertTrue(
-            VerifiedRuntimeAssetInstaller.isComplete(root, bundle, "arm64-v8a", manifest),
-        )
+        assertTrue(VerifiedRuntimeAssetInstaller.isComplete(root, bundle, "arm64-v8a", manifest))
         entry.writeText("altered-runtime")
         assertEquals("trusted-runtime".length, entry.length().toInt())
-        assertFalse(
-            VerifiedRuntimeAssetInstaller.isComplete(root, bundle, "arm64-v8a", manifest),
-        )
+        assertFalse(VerifiedRuntimeAssetInstaller.isComplete(root, bundle, "arm64-v8a", manifest))
     }
 
     private fun sha256(bytes: ByteArray): String =

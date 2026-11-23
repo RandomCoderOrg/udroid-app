@@ -247,7 +247,7 @@ backend for uDroid's non-root PRoot product:
   not PRoot.
 - Its GUI sends an Android `Surface` to crosvm's display service and forwards
   input through `VirtualMachine` APIs.
-- VirGL and gfxstream accelerate `virtio-gpu` commands from a VM guest. PRoot
+- VirGL accelerates `virtio-gpu` commands from a VM guest. PRoot
   applications do not speak that protocol.
 - The app is built with platform APIs, is privileged, and requests
   `MANAGE_VIRTUAL_MACHINE` and `USE_CUSTOM_VIRTUAL_MACHINE`. A normal uDroid

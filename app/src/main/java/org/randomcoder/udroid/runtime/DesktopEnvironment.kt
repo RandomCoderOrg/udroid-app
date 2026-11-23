@@ -31,8 +31,6 @@ data class DesktopEnvironment(
     val kind: DesktopEnvironmentKind,
 )
 
-internal const val GFXSTREAM_PROFILE_ENABLED = false
-
 enum class DesktopGraphicsProfile(
     val storageValue: String,
 ) {
@@ -42,15 +40,11 @@ enum class DesktopGraphicsProfile(
     VIRGL("virgl"),
     VIRGL_ANGLE("virgl-angle"),
     VENUS_EXPERIMENTAL("venus-experimental"),
-    GFXSTREAM_EXPERIMENTAL("gfxstream-experimental"),
     ;
 
     companion object {
         fun fromStorage(value: String?): DesktopGraphicsProfile =
-            entries.firstOrNull {
-                it.storageValue == value &&
-                    (it != GFXSTREAM_EXPERIMENTAL || GFXSTREAM_PROFILE_ENABLED)
-            } ?: STANDARD
+            entries.firstOrNull { it.storageValue == value } ?: STANDARD
     }
 }
 

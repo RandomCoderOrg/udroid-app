@@ -129,11 +129,11 @@ class DesktopEnvironmentScannerTest {
         val profile =
             object : ProotLaunchProfile {
                 override fun addBindings(arguments: MutableList<String>) {
-                    arguments += listOf("-b", "/data/gfxstream:/opt/udroid/gfxstream")
+                    arguments += listOf("-b", "/data/graphics:/opt/graphics")
                 }
 
                 override fun wrapGuestCommand(command: List<String>): List<String> =
-                    listOf("/opt/udroid/gfxstream/bin/udroid-gfxstream-run") + command
+                    listOf("/opt/graphics/bin/graphics-run") + command
             }
 
         val arguments =
@@ -148,23 +148,23 @@ class DesktopEnvironmentScannerTest {
                         environmentId = desktop.id,
                         compositingEnabled = false,
                         touchScaleEnabled = false,
-                        graphicsProfile = DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
+                        graphicsProfile = DesktopGraphicsProfile.STANDARD,
                     ),
                 hasDbusRunSession = true,
                 launchProfile = profile,
             )
 
-        assertTrue(arguments.contains("/data/gfxstream:/opt/udroid/gfxstream"))
+        assertTrue(arguments.contains("/data/graphics:/opt/graphics"))
         assertEquals(
             listOf(
-                "/opt/udroid/gfxstream/bin/udroid-gfxstream-run",
+                "/opt/graphics/bin/graphics-run",
                 "/usr/bin/dbus-run-session",
                 "--",
                 "/bin/sh",
             ),
             arguments.subList(
-                arguments.indexOf("/opt/udroid/gfxstream/bin/udroid-gfxstream-run"),
-                arguments.indexOf("/opt/udroid/gfxstream/bin/udroid-gfxstream-run") + 4,
+                arguments.indexOf("/opt/graphics/bin/graphics-run"),
+                arguments.indexOf("/opt/graphics/bin/graphics-run") + 4,
             ),
         )
         assertEquals("startxfce4", arguments.last())
@@ -306,11 +306,11 @@ class DesktopEnvironmentScannerTest {
     }
 
     @Test
-    fun `inactive gfxstream profile safely falls back to standard`() {
+    fun `removed graphics profile safely falls back to standard`() {
         assertEquals(
             DesktopGraphicsProfile.STANDARD,
             DesktopGraphicsProfile.fromStorage(
-                DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL.storageValue,
+                "gfxstream-experimental",
             ),
         )
     }

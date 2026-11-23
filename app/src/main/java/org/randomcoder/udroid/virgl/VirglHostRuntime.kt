@@ -2,8 +2,6 @@ package org.randomcoder.udroid.virgl
 
 import android.content.Context
 import java.io.File
-import org.randomcoder.udroid.gfxstream.VerifiedRuntimeAssetBundle
-import org.randomcoder.udroid.gfxstream.VerifiedRuntimeAssetInstaller
 
 internal data class VirglHostRuntime(
     val executable: File,

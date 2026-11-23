@@ -5,10 +5,5 @@
             android:name=".DebugCommandReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
-        <activity
-            android:name=".gfxstream.GfxstreamPresenterProbeActivity"
-            android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize"
-            android:exported="true"
-            android:screenOrientation="fullSensor" />
     </application>
 </manifest>

@@ -57,11 +57,6 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++17", "-Wall", "-Wextra", "-Werror")
-            }
-        }
     }
 
     signingConfigs {
@@ -123,12 +118,6 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-    }
-
 }
 
 dependencies {
@@ -165,55 +154,22 @@ dependencies {
 val verifyGraphicsRuntimeAssets by
     tasks.registering {
         val runtimeRoot = file("src/main/assets/runtime/arm64-v8a")
-        inputs.dir(runtimeRoot.resolve("gfxstream-host"))
-        inputs.dir(runtimeRoot.resolve("gfxstream-guest"))
         inputs.dir(runtimeRoot.resolve("virgl-host"))
         inputs.dir(runtimeRoot.resolve("virgl-angle-vulkan"))
         inputs.dir(runtimeRoot.resolve("venus-mesa"))
 
         doLast {
-            fun ByteArray.containsSequence(needle: ByteArray): Boolean {
-                if (needle.isEmpty() || needle.size > size) return false
-                for (start in 0..size - needle.size) {
-                    var matched = true
-                    for (offset in needle.indices) {
-                        if (this[start + offset] != needle[offset]) {
-                            matched = false
-                            break
-                        }
-                    }
-                    if (matched) return true
-                }
-                return false
-            }
-
             val bundleNames =
                 listOf(
-                    "gfxstream-host",
-                    "gfxstream-guest",
                     "virgl-host",
                     "virgl-angle-vulkan",
                     "venus-mesa",
                 )
-            val manifests =
-                bundleNames.associateWith { bundleName ->
-                    val bundle = runtimeRoot.resolve(bundleName)
-                    Properties().apply {
-                        bundle.resolve("MANIFEST.properties").inputStream().use(::load)
-                    }
-                }
-            val hostProtocolGeneration = manifests.getValue("gfxstream-host").getProperty("protocol_generation")
-            val guestProtocolGeneration = manifests.getValue("gfxstream-guest").getProperty("protocol_generation")
-            check(hostProtocolGeneration == "2") {
-                "gfxstream host protocol_generation must be 2"
-            }
-            check(guestProtocolGeneration == hostProtocolGeneration) {
-                "gfxstream host/guest protocol_generation mismatch"
-            }
-
             bundleNames.forEach { bundleName ->
                 val bundle = runtimeRoot.resolve(bundleName)
-                val manifest = manifests.getValue(bundleName)
+                val manifest = Properties().apply {
+                    bundle.resolve("MANIFEST.properties").inputStream().use(::load)
+                }
                 manifest.stringPropertyNames()
                     .filter { it.endsWith(".sha256") }
                     .forEach { digestProperty ->
@@ -234,15 +190,6 @@ val verifyGraphicsRuntimeAssets by
                             "$bundleName digest mismatch for $entry"
                         }
                     }
-
-                if (bundleName == "gfxstream-guest") {
-                    val expectedRevision = manifest.getProperty("mesa_commit").take(10)
-                    val embeddedRevision = "git-$expectedRevision".encodeToByteArray()
-                    val bytes = bundle.resolve("lib/libvulkan_gfxstream.so").readBytes()
-                    check(bytes.containsSequence(embeddedRevision)) {
-                        "gfxstream guest binary does not identify Mesa $expectedRevision"
-                    }
-                }
             }
         }
     }

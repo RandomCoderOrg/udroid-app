@@ -1,7 +1,0 @@
-{
-  "file_format_version": "1.0.0",
-  "ICD": {
-    "library_path": "/opt/udroid/gfxstream/lib/libvulkan_gfxstream.so",
-    "api_version": "1.4.0"
-  }
-}

@@ -3,7 +3,7 @@
 Status: evidence baseline, 2026-10-20
 
 This is the local decision record for uDroid graphics presentation. Read it
-before changing the Panfrost, SPHAL/Zink, gfxstream, or embedded Termux:X11
+before changing the Panfrost, SPHAL/Zink, or embedded Termux:X11
 paths. It records what the specifications require, what this repository
 implements, what device tests observed, and what remains unknown.
 
@@ -42,14 +42,13 @@ allocate every AHardwareBuffer.
 
 A custom broker-owned AHardwareBuffer transport is valid when it carries
 authoritative allocation metadata and implements the complete synchronization
-and lifetime protocol. uDroid has such a protocol in the gfxstream presenter,
-and `SaicharanKandukuri/tensor-g1-proot-gpu` already implements the Panfrost
-AHB broker and private DRI3 transport. Therefore:
+and lifetime protocol. `SaicharanKandukuri/tensor-g1-proot-gpu` implements the
+Panfrost AHB broker and private DRI3 transport. Therefore:
 
 - do **not** invert allocation merely because BufferQueue normally does;
 - do **not** treat `AHardwareBuffer_sendHandleToUnixSocket()` as a complete
   presentation protocol;
-- reuse the existing resource/generation/frame and fence semantics before
+- define resource identity, frame ordering, and fence ownership before
   designing another allocator or transport;
 - change allocation ownership only if an isolated import/layout test proves it
   necessary.
@@ -60,46 +59,9 @@ AHB broker and private DRI3 transport. Therefore:
 | --- | --- | --- | --- | --- |
 | Raw Panfrost DMA-BUF in Lorie | One FD through private DRI3 marker `1274`; Lorie mmaps and uploads with `glTexSubImage2D` | `DMA_BUF_IOCTL_SYNC` protects CPU access; X Present orders pixmap use | **Implemented** CPU fallback; not GPU-native import | Retain as synchronized fallback and control |
 | Panfrost AHardwareBuffer in Lorie | Tensor G1 broker allocates the AHB; Panfrost imports its DMA-BUF; private DRI3 marker `1255` lets Lorie recover the native handle | Mesa blocks for producer completion; its three-slot ring retains each resource until X Present `IdleNotify`; no explicit cross-process fence or correlated teardown trace | **Verified** by broker probes, 33-width lifecycle runs, and full Plasma runs in `tensor-g1-proot-gpu`; desktop qualification remains incomplete | Extend and trace the existing route; do not rebuild it |
-| SPHAL/Zink AHardwareBuffer in Lorie | Private DRI3 markers `1255`/`1257`; Lorie receives an AHB and imports an `EGLImage` | Relies on Vulkan external queue ownership, implicit DMA-BUF synchronization, and X Present ordering; no explicit per-frame acquire/release/reuse/retire protocol | **Observed** Pixel runs offloaded Present copies; desktop damage has also been observed | Instrument and adopt the validated lifecycle contract before qualification |
-| Gfxstream app presenter v4 | Public AHB socket helpers plus `(resource, generation, frame)` packets | Producer fence, presentation signal, release signal, reuse-ready, retirement, and Surface generation | **Verified** by local validators and retained Pixel stress results | Reference implementation for lifecycle semantics |
+| SPHAL/Zink AHardwareBuffer in Lorie | Private DRI3 markers `1255`/`1257`; Lorie receives an AHB and imports an `EGLImage` | Relies on Vulkan external queue ownership, implicit DMA-BUF synchronization, and X Present ordering; no explicit per-frame acquire/release/reuse/retire protocol | **Observed** Pixel runs offloaded Present copies; desktop damage has also been observed | Instrument the lifecycle before qualification |
 | Direct app EGL DMA-BUF import | FourCC plus plane FD/offset/pitch/modifier through `EGL_EXT_image_dma_buf_import` | Needs an explicit acquire/release design in addition to EGLImage lifetime | **Verified unavailable** on the tested Pixel META-EGL display | Capability-gated only; not the Pixel implementation |
 | Direct vendor/SPHAL EGL DMA-BUF import | Independent vendor EGL display/context and queried formats/modifiers | Unknown until an isolated vendor-display probe proves it | **Unknown** | Device-specific research route, never mix with META-EGL objects |
-
-## Existing validated lifecycle protocol
-
-The packet ABI is in `app/src/main/cpp/ahb_transport_protocol.h`. Protocol v4
-uses the following identity:
-
-```text
-(connection epoch, resource id, resource generation, frame id)
-```
-
-Its lifecycle is:
-
-```text
-register AHB generation
-  -> acquire frame with producer-completion FD
-  -> consumer waits and presents
-  -> presentation-completion and buffer-release signals
-  -> producer reports reuse-ready
-  -> retire generation after all users drain
-```
-
-The presenter implementation is
-`app/src/main/cpp/ahb_surface_presenter.cpp`. It rejects unknown or stale
-generations, non-monotonic frames, premature reuse, and retirement while a
-resource is in flight. It also tracks Android Surface generations.
-
-The protocol validators are:
-
-- `tools/graphics/winsys_trace_validator.py`: validates one lifecycle trace;
-- `tools/graphics/winsys_dual_trace_validator.py`: correlates producer and
-  presenter traces;
-- `tools/graphics/test_winsys_trace_validator.py` and
-  `tools/graphics/test_winsys_dual_trace_validator.py`: rejection fixtures.
-
-This protocol is a semantic reference, not proof that its exact socket ABI can
-be copied unchanged into X Present.
 
 ## What the specifications settle
 
@@ -147,15 +109,6 @@ The Panfrost AHB producer is implemented in the companion repository
 - `third_party/termux-x11/lorie/src/main/cpp/xserver/present/`: X Present
   completion and idle machinery.
 
-### App-native reference presenter
-
-- `app/src/main/cpp/ahb_transport_protocol.h`: packet ABI and FD order.
-- `app/src/main/cpp/ahb_surface_presenter.cpp`: resource registry, fence
-  handling, SurfaceControl callbacks, reuse, retirement, and trace events.
-- `docs/graphics/GFXSTREAM_WINSYS_CONTRACT.md`: protocol invariants and gates.
-- `docs/graphics/gfxstream-surface-presenter.md`: retained device results and
-  presentation history.
-
 ## Evidence status
 
 | Claim | Status | Evidence or missing proof |
@@ -163,8 +116,8 @@ The Panfrost AHB producer is implemented in the companion repository
 | Pixel META-EGL can import raw DMA-BUF with `EGL_LINUX_DMA_BUF_EXT` | **Verified false** for the tested display | G0 reports no `EGL_EXT_image_dma_buf_import` or modifiers extension. |
 | Pixel META-EGL can import AHardwareBuffer as EGLImage | **Verified** | G0 extensions plus existing Lorie AHB route. |
 | AHB handles alone prevent damage | **Verified false** | Old private Lorie transport used AHB yet desktop damage was observed. |
-| Consumer-owned allocation is required by the relevant APIs | **Not specified** | It is BufferQueue architecture; the validated custom presenter accepts registered producer resources. Allocation direction remains a route-specific design choice. |
-| Explicit identity and lifecycle are required for deterministic validation | **Specified and implemented** | Existing contract and validators reject stale/reused/in-flight resources. |
+| Consumer-owned allocation is required by the relevant APIs | **Not specified** | It is BufferQueue architecture. Allocation direction remains a route-specific design choice. |
+| Explicit identity and lifecycle are required for deterministic validation | **Specified** | A route-specific control still needs to reject stale, reused, and in-flight resources. |
 | Implicit synchronization is the cause of current desktop damage | **Unknown** | Successful and damaged runs exist; no paired trace has isolated synchronization from damage/Present ordering. |
 | AHB format number determines sampled channel order | **Verified false** | The `1255`/`1257` SuperTuxKart correction required content-semantics testing. |
 | Client FPS equals displayed FPS | **Verified false** | Async producer throughput can exceed Android presentation cadence. Use FrameTimeline and frame IDs. |

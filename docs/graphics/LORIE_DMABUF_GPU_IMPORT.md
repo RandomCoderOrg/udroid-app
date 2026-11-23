@@ -169,10 +169,9 @@ Present `IdleNotify`. The next work is correlated tracing and abnormal teardown
 validation, not another one-buffer transport.
 
 uDroid already has Lorie handle transport markers `1255`, `1256`, and `1257`
-and the receiving/import code. The Tensor route does not yet carry the
-gfxstream presenter's explicit cross-process fences and generation retirement,
-so keep those protocols separate and add only behavior proven necessary by a
-failing lifecycle control.
+and the receiving/import code. The Tensor route does not yet carry explicit
+cross-process fences and generation retirement. Add only behavior proven
+necessary by a failing lifecycle control.
 
 Do not fabricate an AHardwareBuffer by placing an arbitrary DMA-heap FD in a
 `native_handle_t`. `AHardwareBuffer_createFromHandle()` is a VNDK API that

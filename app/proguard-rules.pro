@@ -13,6 +13,3 @@
 -keep class org.randomcoder.udroid.x11.X11NativeBridge {
     native <methods>;
 }
-
-# The optional gfxstream presenter is entered through exact JNI names.
--keep class org.randomcoder.udroid.gfxstream.AhbSurfacePresenterView { *; }

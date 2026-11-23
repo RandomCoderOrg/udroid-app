@@ -36,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.PROOT_DEFAULT_MOUNTS
 import org.randomcoder.udroid.runtime.ProotCustomMount
 import org.randomcoder.udroid.runtime.ProotMountProfile
@@ -163,11 +162,7 @@ fun ProotMountProfileDialog(
                         style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        if (GFXSTREAM_PROFILE_ENABLED) {
-                            "Display, audio, and acceleration add these only while active"
-                        } else {
-                            "Display and audio add these only while active"
-                        },
+                        "Display and audio add these only while active",
                         color = UdroidMuted,
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     )

@@ -36,9 +36,6 @@ import org.randomcoder.udroid.audio.AudioConfiguration
 import org.randomcoder.udroid.audio.AudioConfigurationStore
 import org.randomcoder.udroid.audio.AudioServerController
 import org.randomcoder.udroid.audio.AudioSessionSnapshot
-import org.randomcoder.udroid.gfxstream.GfxstreamHostController
-import org.randomcoder.udroid.gfxstream.GfxstreamHostSnapshot
-import org.randomcoder.udroid.gfxstream.GfxstreamProotLaunchProfile
 import org.randomcoder.udroid.install.ProotRuntimeInstaller
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.virgl.VirglHostController
@@ -69,7 +66,6 @@ class RuntimeSupervisorService : Service() {
     private var terminalTabsRefreshPending = false
     private var terminalCursorStyle = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
     private val ownedDesktop = AtomicReference<OwnedDesktopProcess?>(null)
-    private val ownedGfxstreamHost = AtomicReference<GfxstreamHostController?>(null)
     private val ownedVirglHosts = ConcurrentHashMap<VirglHostBackend, VirglHostController>()
     private val virglApplicationBackends = ConcurrentHashMap<Pair<String, String>, VirglHostBackend>()
     private val virglHostLock = Any()
@@ -312,7 +308,6 @@ class RuntimeSupervisorService : Service() {
         pendingDesktopRestart.set(null)
         desktopLaunchToken.set(null)
         ownedDesktop.getAndSet(null)?.let { terminateDesktopProcess(it, OsConstants.SIGKILL) }
-        closeGfxstreamHost()
         closeVirglHost()
         stopApplicationProcesses()
         audioController.stop(app.runtimeState.current().bootId)
@@ -943,7 +938,6 @@ class RuntimeSupervisorService : Service() {
                 return@whenReady
             }
             applicationExecutor.execute {
-                var startingGfxstreamHost: GfxstreamHostController? = null
                 runCatching {
                     if (desktopLaunchToken.get() != launchToken) return@runCatching null
                     val launchProfile =
@@ -963,30 +957,6 @@ class RuntimeSupervisorService : Service() {
                                     request.configuration.virglServerMode,
                                     rootfs,
                                 )
-                            DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> {
-                                lateinit var host: GfxstreamHostController
-                                host =
-                                    GfxstreamHostController(
-                                        this,
-                                        app.journal,
-                                        runtime.bootId,
-                                    ) { failure ->
-                                        handleGfxstreamHostExit(host, failure)
-                                    }
-                                check(ownedGfxstreamHost.compareAndSet(null, host)) {
-                                    host.close()
-                                    "Another gfxstream host is already active"
-                                }
-                                startingGfxstreamHost = host
-                                val session = host.start()
-                                check(desktopLaunchToken.get() == launchToken) {
-                                    "The desktop start was cancelled while gfxstream was starting"
-                                }
-                                GfxstreamProotLaunchProfile(
-                                    runtime = session.guestRuntime,
-                                    gpuSocket = session.gpuSocket,
-                                )
-                            }
                         }
                     if (request.configuration.graphicsProfile ==
                         DesktopGraphicsProfile.VENUS_EXPERIMENTAL
@@ -1052,7 +1022,6 @@ class RuntimeSupervisorService : Service() {
                     if (desktopLaunchToken.get() != launchToken) {
                         runCatching { Os.kill(-hostPid, OsConstants.SIGKILL) }
                         pidFile.delete()
-                        releaseGfxstreamHost(startingGfxstreamHost)
                         return@runCatching null
                     }
                     val owned =
@@ -1062,7 +1031,6 @@ class RuntimeSupervisorService : Service() {
                             pidFile = pidFile,
                             rootfsName = request.rootfsName,
                             environment = request.environment,
-                            gfxstreamHost = startingGfxstreamHost,
                             graphicsProfile = request.configuration.graphicsProfile,
                             mounts = launch.mounts,
                         )
@@ -1075,7 +1043,6 @@ class RuntimeSupervisorService : Service() {
                     if (!desktopLaunchToken.compareAndSet(launchToken, null)) {
                         ownedDesktop.compareAndSet(owned, null)
                         terminateDesktopProcess(owned, OsConstants.SIGKILL)
-                        releaseGfxstreamHost(owned.gfxstreamHost)
                         return@onSuccess
                     }
                     publishState(
@@ -1113,7 +1080,6 @@ class RuntimeSupervisorService : Service() {
                     )
                     monitorDesktop(owned)
                 }.onFailure { error ->
-                    releaseGfxstreamHost(startingGfxstreamHost)
                     if (desktopLaunchToken.compareAndSet(launchToken, null)) {
                         publishDesktopFailure(
                             request,
@@ -1130,7 +1096,6 @@ class RuntimeSupervisorService : Service() {
         val current = ownedDesktop.get()
         if (current == null || !current.process.isAlive) {
             ownedDesktop.compareAndSet(current, null)
-            closeGfxstreamHost()
             publishState(
                 app.runtimeState.update {
                     it.copy(
@@ -1224,7 +1189,6 @@ class RuntimeSupervisorService : Service() {
     ) {
         if (!ownedDesktop.compareAndSet(owned, null)) return
         owned.pidFile.delete()
-        releaseGfxstreamHost(owned.gfxstreamHost)
         val previous = app.runtimeState.current().desktop
         val expected =
             previous.phase == DesktopSessionPhase.STOPPING ||
@@ -1264,16 +1228,6 @@ class RuntimeSupervisorService : Service() {
                 ),
         )
         pendingDesktopRestart.getAndSet(null)?.let(::startDesktopInternal)
-    }
-
-    private fun releaseGfxstreamHost(host: GfxstreamHostController?) {
-        if (host != null && ownedGfxstreamHost.compareAndSet(host, null)) {
-            host.close()
-        }
-    }
-
-    private fun closeGfxstreamHost() {
-        ownedGfxstreamHost.getAndSet(null)?.close()
     }
 
     private fun virglLaunchProfile(
@@ -1336,7 +1290,6 @@ class RuntimeSupervisorService : Service() {
             DesktopGraphicsProfile.VIRGL_ANGLE,
             DesktopGraphicsProfile.VENUS_EXPERIMENTAL,
             -> virglLaunchProfile(profile, virglServerMode, rootfs)
-            DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> null
             else -> EnvironmentProotLaunchProfile.from(profile)
         }
     }
@@ -1454,45 +1407,6 @@ class RuntimeSupervisorService : Service() {
                     }
                 }
             host.close()
-        }
-    }
-
-    private fun handleGfxstreamHostExit(
-        host: GfxstreamHostController,
-        failure: GfxstreamHostSnapshot,
-    ) {
-        app.journal.append(
-            component = "gfxstream",
-            severity = "error",
-            event = "host_process_lost",
-            message = failure.detail,
-            bootId = app.runtimeState.current().bootId,
-        )
-        mainHandler.post {
-            if (ownedGfxstreamHost.get() !== host) return@post
-            val desktop = ownedDesktop.get()
-            if (desktop?.gfxstreamHost === host && desktop.process.isAlive) {
-                terminateDesktopProcess(desktop, OsConstants.SIGTERM)
-                mainHandler.postDelayed(
-                    {
-                        if (ownedDesktop.get() === desktop && desktop.process.isAlive) {
-                            app.journal.append(
-                                component = "desktop",
-                                severity = "warning",
-                                event = "desktop_force_stop",
-                                message =
-                                    "${desktop.environment.name} did not exit after gfxstream host loss",
-                                bootId = app.runtimeState.current().bootId,
-                                fields = mapOf("rootfs" to desktop.rootfsName),
-                            )
-                            terminateDesktopProcess(desktop, OsConstants.SIGKILL)
-                        }
-                    },
-                    GRACEFUL_STOP_TIMEOUT_MS,
-                )
-            } else {
-                releaseGfxstreamHost(host)
-            }
         }
     }
 
@@ -2334,7 +2248,6 @@ class RuntimeSupervisorService : Service() {
         val pidFile: File,
         val rootfsName: String,
         val environment: DesktopEnvironment,
-        val gfxstreamHost: GfxstreamHostController?,
         val graphicsProfile: DesktopGraphicsProfile,
         val mounts: List<ResolvedProotMount>,
     )

@@ -67,9 +67,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.randomcoder.udroid.audio.AudioEndpoint
 import org.randomcoder.udroid.catalog.LinuxDistribution
-import org.randomcoder.udroid.gfxstream.GfxstreamGuestRuntime
 import org.randomcoder.udroid.install.InstallProgress
-import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.AndroidStorageMounts
 import org.randomcoder.udroid.runtime.AndroidStorageVolume
 import org.randomcoder.udroid.runtime.InstalledRootfs
@@ -94,15 +92,11 @@ private data class AutomaticMountInfo(
 )
 
 private val AUTOMATIC_SESSION_MOUNTS =
-    buildList {
-        add(AutomaticMountInfo("/tmp/.X11-unix", "X11 socket", "Display"))
-        add(AutomaticMountInfo("/tmp/.X0-lock", "X11 display lock", "Display"))
-        add(AutomaticMountInfo(AudioEndpoint.GUEST_AUTH_DIRECTORY, "PulseAudio authentication", "Audio"))
-        if (GFXSTREAM_PROFILE_ENABLED) {
-            add(AutomaticMountInfo(GfxstreamGuestRuntime.GUEST_DIRECTORY, "Graphics runtime", "Acceleration"))
-            add(AutomaticMountInfo(GfxstreamGuestRuntime.GUEST_GPU_SOCKET, "Graphics socket", "Acceleration"))
-        }
-    }
+    listOf(
+        AutomaticMountInfo("/tmp/.X11-unix", "X11 socket", "Display"),
+        AutomaticMountInfo("/tmp/.X0-lock", "X11 display lock", "Display"),
+        AutomaticMountInfo(AudioEndpoint.GUEST_AUTH_DIRECTORY, "PulseAudio authentication", "Audio"),
+    )
 
 @Composable
 fun ProotMountConfigurationsPage(

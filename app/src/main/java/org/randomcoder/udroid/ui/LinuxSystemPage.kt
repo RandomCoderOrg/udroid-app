@@ -66,7 +66,6 @@ import org.randomcoder.udroid.runtime.DesktopConfiguration
 import org.randomcoder.udroid.runtime.DesktopEnvironment
 import org.randomcoder.udroid.runtime.DesktopGraphicsProfile
 import org.randomcoder.udroid.runtime.DesktopSessionPhase
-import org.randomcoder.udroid.runtime.GFXSTREAM_PROFILE_ENABLED
 import org.randomcoder.udroid.runtime.GraphicsProfileCompatibilityProbe
 import org.randomcoder.udroid.runtime.GraphicsProfileSupport
 import org.randomcoder.udroid.runtime.InstalledRootfs
@@ -1318,16 +1317,6 @@ private fun GraphicsProfileSelector(
                 selected = virglServerMode == VirglServerMode.MULTI_CLIENT,
                 enabled = true,
                 onClick = { onVirglServerModeSelected(VirglServerMode.MULTI_CLIENT) },
-            )
-        }
-        if (GFXSTREAM_PROFILE_ENABLED) {
-            GraphicsProfileOption(
-                profile = DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL,
-                title = "gfxstream (experimental)",
-                detail = "Use Android’s Vulkan driver.",
-                selected = selected,
-                support = support,
-                onSelected = onSelected,
             )
         }
     }

@@ -7,13 +7,7 @@ from results produced by another.
 | --- | --- |
 | Why does an AHardwareBuffer or DMA-BUF path damage, repeat, or reorder frames? | [`PRESENTATION_CONTRACT_REFERENCE.md`](PRESENTATION_CONTRACT_REFERENCE.md) |
 | What must the next Lorie GPU-import patch prove? | [`LORIE_DMABUF_GPU_IMPORT.md`](LORIE_DMABUF_GPU_IMPORT.md) |
-| What is the gfxstream resource/fence/reuse contract? | [`GFXSTREAM_WINSYS_CONTRACT.md`](GFXSTREAM_WINSYS_CONTRACT.md) |
-| What did the app-native AHB presenter prove? | [`gfxstream-surface-presenter.md`](gfxstream-surface-presenter.md) |
-| How is the remaining gfxstream work staged? | [`GFXSTREAM_SHIPPING_TODO.md`](GFXSTREAM_SHIPPING_TODO.md) |
-| How should Venus/gfxstream frame latency be captured? | [`VENUS_PERFETTO_PROFILING.md`](VENUS_PERFETTO_PROFILING.md) |
-| Which Android Linux Terminal implementation details are reusable? | [`AOSP_TERMINAL_REFERENCE.md`](AOSP_TERMINAL_REFERENCE.md) |
-| What did the semaphore and ownership investigation establish? | [`2026-09-06-semaphore-lifecycle.md`](2026-09-06-semaphore-lifecycle.md) |
-| What did the barrier/reuse investigation establish? | [`2026-09-10-barrier-route.md`](2026-09-10-barrier-route.md) |
+| How should Venus frame latency be captured? | [`VENUS_PERFETTO_PROFILING.md`](VENUS_PERFETTO_PROFILING.md) |
 | Where was the GNOME/Venus investigation paused? | [`GNOME_VENUS_CHECKPOINT_2026-10-04.md`](GNOME_VENUS_CHECKPOINT_2026-10-04.md) |
 
 Evidence retained under `docs/graphics/evidence/` belongs to its named

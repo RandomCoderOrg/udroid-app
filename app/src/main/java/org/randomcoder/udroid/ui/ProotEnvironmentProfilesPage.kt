@@ -594,7 +594,6 @@ private fun automaticManagedEnvironmentValues(
         DesktopGraphicsProfile.VENUS_EXPERIMENTAL -> {
             set("VN_DEBUG", "vtest")
         }
-        DesktopGraphicsProfile.GFXSTREAM_EXPERIMENTAL -> Unit
     }
     return values
 }

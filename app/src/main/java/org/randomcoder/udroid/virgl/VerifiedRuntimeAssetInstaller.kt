@@ -1,4 +1,4 @@
-package org.randomcoder.udroid.gfxstream
+package org.randomcoder.udroid.virgl
 
 import android.content.Context
 import android.os.Build
