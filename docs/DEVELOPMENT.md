@@ -17,6 +17,16 @@ artifacts include the pull request number and head commit, for example
 `udroid-pr-24-cf9c1ed-dev.apk`. These artifacts cannot update the official app
 or a debug build signed on another machine.
 
+The Android CI job builds PRoot, its loader, GNU tar, and the runtime probes
+from pinned source, then repacks PulseAudio from checksum-pinned Termux
+packages before assembling either APK variant. It removes their checked-in
+outputs on a cache miss, and verifies the exact-key Actions cache against a
+SHA-256 manifest on a hit, so a failed build cannot silently package an old
+copy. Gradle builds the embedded Termux:X11 module from its vendored source. The
+VirGL, ANGLE, and Venus graphics bundles remain checked-in binaries, and
+PulseAudio is not yet built from source. A passing Android CI run must not be
+presented as proof that every bundled binary was built from source.
+
 The published `v0.0.2` APK predates stable update signing and retains its
 original debug asset name:
 
@@ -35,13 +45,13 @@ The first stable-signed build cannot replace an older ephemeral-debug-signed
 APK. Testers must reinstall once; later builds signed with the same key can use
 the in-app updater.
 
-## Build locally
+## Optional local build
 
 Requirements:
 
 - JDK 17 or newer
 - Android SDK platform 36
-- Android NDK 28.2 (runtime probes also build with NDK 26 or newer)
+- Android NDK 28.2 and 26.1 (GNU tar needs 26.1)
 
 ```sh
 export ANDROID_HOME="$HOME/Library/Android/sdk"

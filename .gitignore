@@ -1,4 +1,5 @@
 .gradle/
+.ci-native-runtime/
 .idea/
 build/
 **/build/

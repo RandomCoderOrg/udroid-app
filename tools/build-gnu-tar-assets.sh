@@ -7,7 +7,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # incorrectly assumes the API 35 time-zone functions are also available.
 # NDK 26.1 provides the same API 26 ABI without that misleading declaration.
 NDK="${UDROID_TAR_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/26.1.10909125}"
-TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+case "$(uname -s)" in
+    Darwin) build_host=darwin-x86_64 ;;
+    Linux) build_host=linux-x86_64 ;;
+    *) echo "Unsupported build host: $(uname -s)" >&2; exit 2 ;;
+esac
+TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$build_host/bin"
 API=26
 
 TAR_VERSION=1.35

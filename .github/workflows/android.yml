@@ -22,7 +22,7 @@ jobs:
   build:
     name: Test and build APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Check out source
@@ -47,7 +47,53 @@ jobs:
           sdkmanager \
             "platforms;android-36" \
             "build-tools;36.0.0" \
+            "ndk;26.1.10909125" \
             "ndk;28.2.13676358"
+
+      - name: Cache Actions-built native runtimes
+        id: native-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/src/main/assets/runtime/*/proot
+            app/src/main/assets/runtime/*/tar
+            app/src/main/assets/runtime/*/runtime_probe
+            app/src/main/assets/runtime/*/pulseaudio-runtime.zip
+            app/src/main/jniLibs/*/libproot-loader.so
+            .ci-native-runtime/SHA256SUMS
+          key: native-runtimes-v1-${{ runner.os }}-ndk26.1-28.2-${{ hashFiles('.github/workflows/android.yml', 'tools/build-proot-assets.sh', 'tools/build-gnu-tar-assets.sh', 'tools/build-pulseaudio-assets.sh', 'tools/proot-cross-answers.txt', 'tools/pulseaudio-packages.tsv', 'patches/proot/**', 'app/src/main/cpp/build-runtime-probe.sh', 'app/src/main/cpp/runtime_probe.c') }}
+
+      - name: Prepare bundled native runtimes
+        shell: bash
+        run: |
+          assets=()
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            assets+=(
+              "app/src/main/assets/runtime/$abi/proot"
+              "app/src/main/assets/runtime/$abi/tar"
+              "app/src/main/assets/runtime/$abi/runtime_probe"
+              "app/src/main/assets/runtime/$abi/pulseaudio-runtime.zip"
+              "app/src/main/jniLibs/$abi/libproot-loader.so"
+            )
+          done
+          if [[ "${{ steps.native-cache.outputs.cache-hit }}" != "true" ]]; then
+            export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/28.2.13676358"
+            export UDROID_TAR_NDK_HOME="${ANDROID_HOME}/ndk/26.1.10909125"
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends \
+              libarchive-tools patch unzip xz-utils zip
+            rm -f "${assets[@]}"
+            tools/build-proot-assets.sh
+            tools/build-gnu-tar-assets.sh
+            app/src/main/cpp/build-runtime-probe.sh
+            tools/build-pulseaudio-assets.sh
+            mkdir -p .ci-native-runtime
+            sha256sum "${assets[@]}" > .ci-native-runtime/SHA256SUMS
+          fi
+          sha256sum --check --strict .ci-native-runtime/SHA256SUMS
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -tq "app/src/main/assets/runtime/$abi/pulseaudio-runtime.zip"
+          done
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -145,6 +191,30 @@ jobs:
 
       - name: Verify embedded X11 release JNI contract
         run: tools/verify-release-jni-contract.sh "${{ steps.apk.outputs.apk_path }}"
+
+      - name: Verify bundled runtimes in APK
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+        run: |
+          while read -r expected path; do
+            entry="${path#app/src/main/}"
+            if [[ "$entry" == jniLibs/* ]]; then
+              entry="lib/${entry#jniLibs/}"
+            fi
+            actual="$(unzip -p "$APK_PATH" "$entry" | sha256sum | cut -d ' ' -f 1)"
+            test "$actual" = "$expected" || {
+              echo "Bundled runtime mismatch: $entry" >&2
+              exit 1
+            }
+          done < .ci-native-runtime/SHA256SUMS
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            unzip -Z1 "$APK_PATH" | grep -Fx "lib/$abi/libXlorie.so"
+          done
+          if unzip -Z1 "$APK_PATH" | grep -Eiq 'gfxstream|kumquat|udroid_ahb_presenter'; then
+            echo "Removed gfxstream runtime is still bundled" >&2
+            exit 1
+          fi
 
       - name: Package release assets
         shell: bash

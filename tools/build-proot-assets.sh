@@ -3,7 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/ndk/28.2.13676358}"
-TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+case "$(uname -s)" in
+    Darwin) host=darwin-x86_64 ;;
+    Linux) host=linux-x86_64 ;;
+    *) echo "Unsupported build host: $(uname -s)" >&2; exit 2 ;;
+esac
+TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$host/bin"
 API=26
 
 PROOT_VERSION=5.1.107.102-17-g7cbed09

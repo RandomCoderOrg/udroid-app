@@ -7,7 +7,12 @@ if [ -z "${ANDROID_NDK_HOME:-}" ]; then
 fi
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+case "$(uname -s)" in
+    Darwin) host=darwin-x86_64 ;;
+    Linux) host=linux-x86_64 ;;
+    *) echo "Unsupported build host: $(uname -s)" >&2; exit 2 ;;
+esac
+toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$host/bin"
 
 build_probe() {
     abi=$1
