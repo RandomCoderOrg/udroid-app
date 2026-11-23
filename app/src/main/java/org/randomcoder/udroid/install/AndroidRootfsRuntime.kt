@@ -592,7 +592,8 @@ private class RootfsWriter(rootfs: Path) {
 
     fun makeExecutableIfRegular(relative: String) {
         val target = resolveExistingFile(relative) ?: return
-        check(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(target)) {
+        if (Files.isSymbolicLink(target)) return
+        check(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
             "Rootfs path is not a regular file: $target"
         }
         Files.setPosixFilePermissions(

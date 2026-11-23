@@ -165,6 +165,31 @@ class RootfsPipelineTest {
     }
 
     @Test
+    fun `sudo configuration preserves guest symlink and enables regular binary`() {
+        val rootfs = Files.createTempDirectory("udroid-sudo-configurator").toFile()
+        try {
+            val sudo = File(rootfs, "usr/bin/sudo")
+            sudo.parentFile!!.mkdirs()
+            sudo.writeText("fixture")
+            sudo.setExecutable(false)
+
+            AndroidRootfsConfigurator().configure(rootfs)
+
+            assertTrue(sudo.canExecute())
+            Files.delete(sudo.toPath())
+            val guestTarget = File("/etc/alternatives/sudo").toPath()
+            Files.createSymbolicLink(sudo.toPath(), guestTarget)
+
+            AndroidRootfsConfigurator().configure(rootfs)
+
+            assertTrue(Files.isSymbolicLink(sudo.toPath()))
+            assertEquals(guestTarget, Files.readSymbolicLink(sudo.toPath()))
+        } finally {
+            rootfs.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `available shells receive native command lifecycle hooks`() {
         val rootfs = Files.createTempDirectory("udroid-shell-configurator-test").toFile()
         File(rootfs, "usr/bin").mkdirs()
