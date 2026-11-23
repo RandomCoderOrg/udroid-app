@@ -1,6 +1,9 @@
 name: Guest Mesa build
 
 on:
+  push:
+    branches:
+      - chore/move-lib-builds-to-public-and-remove-gfxstream
   workflow_dispatch:
 
 permissions:
