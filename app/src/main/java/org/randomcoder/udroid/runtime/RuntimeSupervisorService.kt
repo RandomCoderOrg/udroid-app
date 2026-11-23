@@ -258,6 +258,22 @@ class RuntimeSupervisorService : Service() {
         return when {
             action == ACTION_START_RUNTIME -> {
                 val rootfsName = intent.getStringExtra(EXTRA_ROOTFS_NAME)
+                val checkpoint = app.checkpointState.current()
+                if (
+                    checkpoint?.stage?.running == true &&
+                    (rootfsName == null || checkpoint.rootfsName == rootfsName)
+                ) {
+                    app.journal.append(
+                        component = "supervisor",
+                        severity = "warning",
+                        event = "runtime_start_blocked",
+                        message = "Linux cannot start while its rootfs backup or restore is running",
+                        bootId = persisted.bootId,
+                        fields = mapOf("installation" to checkpoint.rootfsName),
+                    )
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
                 val configuration = effectiveAudioConfiguration(rootfsName, allowMicrophone = true)
                 startRuntimeForeground("Starting Linux terminal…", configuration)
                 startRuntime(rootfsName, configuration)

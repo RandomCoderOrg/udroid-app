@@ -71,6 +71,13 @@
             android:stopWithTask="false" />
 
         <service
+            android:name=".install.RootfsCheckpointService"
+            android:description="@string/checkpoint_service_description"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <service
             android:name=".update.AppUpdateDownloadService"
             android:description="@string/update_service_description"
             android:exported="false"

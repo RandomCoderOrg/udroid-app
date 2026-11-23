@@ -233,6 +233,8 @@ fun UdroidApp(
     onOpenInstallation: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
+    onBackupRootfs: (String) -> Unit,
+    onRestoreRootfs: (String) -> Unit,
     onResetRootfs: (String, DistroVariant?) -> Unit,
     onCreateRootfsVariation: (String, DistroVariant?, ProotMountProfile) -> Unit,
     onDeleteRootfs: (String) -> Unit,
@@ -459,6 +461,8 @@ fun UdroidApp(
                         onOpenInstallation = onOpenInstallation,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onBackupRootfs = onBackupRootfs,
+                        onRestoreRootfs = onRestoreRootfs,
                         onSelectMountProfile = { systemId ->
                             mountConfigurationSourceSystemId = systemId
                             selectedMountProfileSystemId = null
@@ -549,6 +553,8 @@ fun UdroidApp(
                         onOpenInstallation = onOpenInstallation,
                         onOpenRootfsTerminal = onOpenRootfsTerminal,
                         onOpenRootfsApps = onOpenRootfsApps,
+                        onBackupRootfs = onBackupRootfs,
+                        onRestoreRootfs = onRestoreRootfs,
                         onSelectMountProfile = { systemId ->
                             mountConfigurationSourceSystemId = systemId
                             selectedMountProfileSystemId = null
@@ -655,6 +661,8 @@ private fun ManagementPane(
     onOpenInstallation: (String) -> Unit,
     onOpenRootfsTerminal: (String) -> Unit,
     onOpenRootfsApps: (String) -> Unit,
+    onBackupRootfs: (String) -> Unit,
+    onRestoreRootfs: (String) -> Unit,
     onSelectMountProfile: (String) -> Unit,
     onCreateMountProfile: () -> Unit,
     onEditMountProfile: (String) -> Unit,
@@ -1036,6 +1044,12 @@ private fun ManagementPane(
                                 },
                                 onConfigureEnvironment = {
                                     onDestinationSelected(UdroidDestination.ENVIRONMENT)
+                                },
+                                onBackupFilesystem = {
+                                    onBackupRootfs(selectedRootfs.name)
+                                },
+                                onRestoreFilesystem = {
+                                    onRestoreRootfs(selectedRootfs.name)
                                 },
                                 onResetFilesystem = {
                                     onResetRootfs(selectedRootfs.name, selectedDistro)

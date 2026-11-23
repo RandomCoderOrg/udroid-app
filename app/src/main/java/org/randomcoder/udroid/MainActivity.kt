@@ -40,6 +40,9 @@ import org.randomcoder.udroid.install.InstallerService
 import org.randomcoder.udroid.install.InstallerWorkRequest
 import org.randomcoder.udroid.install.OciInstallationSelection
 import org.randomcoder.udroid.install.ResetInstallationSelection
+import org.randomcoder.udroid.install.RootfsCheckpointOperation
+import org.randomcoder.udroid.install.RootfsCheckpointService
+import org.randomcoder.udroid.install.RootfsCheckpointStage
 import org.randomcoder.udroid.linuxapps.DesktopApplicationScanner
 import org.randomcoder.udroid.linuxapps.LinuxApplication
 import org.randomcoder.udroid.linuxapps.LinuxApplicationShortcutContract
@@ -87,6 +90,9 @@ import org.randomcoder.udroid.update.AppUpdatePhase
 import org.randomcoder.udroid.update.AppUpdateScheduler
 import org.randomcoder.udroid.update.AppUpdateState
 import org.randomcoder.udroid.update.UpdateInstallResult
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -116,6 +122,8 @@ class MainActivity : ComponentActivity() {
     private var rootfsOccupiedBytes by mutableStateOf<Long?>(null)
     private var rootfsStorageLoading by mutableStateOf(false)
     private var rootfsStorageName: String? = null
+    private var pendingCheckpointRootfsName: String? = null
+    private var activeCheckpointOperationId: String? = null
     private var desktopEnvironments by mutableStateOf<List<DesktopEnvironment>>(emptyList())
     private var desktopConfiguration by
         mutableStateOf(DesktopConfiguration(null, compositingEnabled = false, touchScaleEnabled = true))
@@ -164,6 +172,36 @@ class MainActivity : ComponentActivity() {
                     audioConfigurationMessage =
                         "Microphone access was not granted. Linux input remains off."
                 }
+            }
+        }
+
+    private val backupDocumentLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/x-xz")) { uri ->
+            val rootfsName = pendingCheckpointRootfsName
+            pendingCheckpointRootfsName = null
+            if (uri != null && rootfsName != null) {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                startRootfsBackup(rootfsName, uri)
+            }
+        }
+
+    private val restoreDocumentLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val rootfsName = pendingCheckpointRootfsName
+            pendingCheckpointRootfsName = null
+            if (uri != null && rootfsName != null) {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+                startRootfsRestore(rootfsName, uri)
             }
         }
 
@@ -274,6 +312,8 @@ class MainActivity : ComponentActivity() {
                     onOpenInstallation = { openInstallationDetails(it) },
                     onOpenRootfsTerminal = { openRootfsTerminal(it) },
                     onOpenRootfsApps = { openRootfsApps(it) },
+                    onBackupRootfs = { chooseRootfsBackupDestination(it) },
+                    onRestoreRootfs = { chooseRootfsBackupToRestore(it) },
                     onResetRootfs = { rootfsName, fallback ->
                         resetRootfs(rootfsName, fallback)
                     },
@@ -343,6 +383,7 @@ class MainActivity : ComponentActivity() {
         handleStopIntent(intent)
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
+        handleCheckpointIntent(intent)
         if (!handleShortcutIntent(intent)) loadLinuxApplications()
         handleDebugCommand()
     }
@@ -353,6 +394,7 @@ class MainActivity : ComponentActivity() {
         handleStopIntent(intent)
         handleUpdateIntent(intent)
         handleInstallerIntent(intent)
+        handleCheckpointIntent(intent)
         handleShortcutIntent(intent)
         handleDebugCommand()
     }
@@ -366,6 +408,7 @@ class MainActivity : ComponentActivity() {
                 addAction(RuntimeSupervisorService.ACTION_STATE_CHANGED)
                 addAction(RuntimeSupervisorService.ACTION_TERMINAL_TABS_CHANGED)
                 addAction(InstallerService.ACTION_STATE_CHANGED)
+                addAction(RootfsCheckpointService.ACTION_STATE_CHANGED)
                 addAction(AppUpdateContract.ACTION_STATE_CHANGED)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
@@ -470,6 +513,7 @@ class MainActivity : ComponentActivity() {
         snapshot = app.runtimeState.current()
         installProgress = app.installState.current()
         updateState = app.updateState.current()
+        refreshCheckpointState()
         installedRootfses = app.rootfsRegistry.all()
         installedRootfsName = app.rootfsRegistry.active()?.name
         resettableRootfsNames =
@@ -706,6 +750,106 @@ class MainActivity : ComponentActivity() {
 
     private fun deleteRootfs(rootfsName: String) {
         maintainRootfs(rootfsName, resetWork = null)
+    }
+
+    private fun chooseRootfsBackupDestination(rootfsName: String) {
+        rootfsMaintenanceBlockReason(rootfsName)?.let {
+            rootfsMaintenanceMessage = it
+            return
+        }
+        if (installedRootfses.none { it.name == rootfsName }) {
+            rootfsMaintenanceMessage = "Linux system $rootfsName is no longer installed"
+            return
+        }
+        pendingCheckpointRootfsName = rootfsName
+        val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+        backupDocumentLauncher.launch("$rootfsName-$timestamp.tar.xz")
+    }
+
+    private fun chooseRootfsBackupToRestore(rootfsName: String) {
+        rootfsMaintenanceBlockReason(rootfsName)?.let {
+            rootfsMaintenanceMessage = it
+            return
+        }
+        if (installedRootfses.none { it.name == rootfsName }) {
+            rootfsMaintenanceMessage = "Linux system $rootfsName is no longer installed"
+            return
+        }
+        pendingCheckpointRootfsName = rootfsName
+        restoreDocumentLauncher.launch(arrayOf("application/x-xz", "application/octet-stream"))
+    }
+
+    private fun startRootfsBackup(
+        rootfsName: String,
+        destination: Uri,
+    ) {
+        rootfsMaintenanceBlockReason(rootfsName)?.let {
+            rootfsMaintenanceMessage = it
+            runCatching { contentResolver.delete(destination, null, null) }
+            return
+        }
+        rootfsMaintenanceName = rootfsName
+        rootfsMaintenanceMessage = "Preparing the rootfs backup"
+        ensureNotificationPermission()
+        runCatching { RootfsCheckpointService.backup(this, rootfsName, destination) }
+            .onSuccess { activeCheckpointOperationId = it }
+            .onFailure {
+                rootfsMaintenanceName = null
+                rootfsMaintenanceMessage = it.message ?: "Could not start the rootfs backup"
+                runCatching { contentResolver.delete(destination, null, null) }
+            }
+    }
+
+    private fun startRootfsRestore(
+        rootfsName: String,
+        source: Uri,
+    ) {
+        rootfsMaintenanceBlockReason(rootfsName)?.let {
+            rootfsMaintenanceMessage = it
+            return
+        }
+        rootfsMaintenanceName = rootfsName
+        rootfsMaintenanceMessage = "Preparing to restore the rootfs"
+        ensureNotificationPermission()
+        runCatching { RootfsCheckpointService.restore(this, rootfsName, source) }
+            .onSuccess { activeCheckpointOperationId = it }
+            .onFailure {
+                rootfsMaintenanceName = null
+                rootfsMaintenanceMessage = it.message ?: "Could not start the rootfs restore"
+            }
+    }
+
+    private fun refreshCheckpointState() {
+        val checkpoint = app.checkpointState.current() ?: return
+        if (checkpoint.stage.running) {
+            activeCheckpointOperationId = checkpoint.operationId
+            rootfsMaintenanceName = checkpoint.rootfsName
+            rootfsMaintenanceMessage =
+                checkpoint.progress?.let { "${checkpoint.detail} · $it%" } ?: checkpoint.detail
+            return
+        }
+        if (activeCheckpointOperationId == checkpoint.operationId) {
+            activeCheckpointOperationId = null
+            rootfsMaintenanceName = null
+            rootfsMaintenanceMessage =
+                checkpoint.detail.takeIf { checkpoint.stage == RootfsCheckpointStage.FAILED }
+            if (
+                checkpoint.operation == RootfsCheckpointOperation.RESTORE &&
+                checkpoint.stage == RootfsCheckpointStage.COMPLETE
+            ) {
+                rootfsStorageName = null
+                rootfsOccupiedBytes = null
+                linuxApplicationsLoadGeneration++
+                desktopScanGeneration++
+                loadDesktopEnvironments(checkpoint.rootfsName)
+            }
+        } else if (
+            rootfsMaintenanceName == null &&
+            checkpoint.stage == RootfsCheckpointStage.FAILED &&
+            selectedSystemRootfsName == checkpoint.rootfsName
+        ) {
+            rootfsMaintenanceMessage = checkpoint.detail
+        }
     }
 
     private fun resetRootfs(
@@ -1466,6 +1610,16 @@ class MainActivity : ComponentActivity() {
         selectedSystemRootfsName =
             intent.getStringExtra(InstallerService.EXTRA_INSTALLATION_NAME)
                 ?: app.installState.current()?.installationName
+        intent.action = null
+        refreshFromDisk()
+        selectDestination(UdroidDestination.SYSTEM)
+    }
+
+    private fun handleCheckpointIntent(intent: Intent?) {
+        if (intent?.action != RootfsCheckpointService.ACTION_SHOW_CHECKPOINT) return
+        selectedSystemRootfsName =
+            intent.getStringExtra(RootfsCheckpointService.EXTRA_ROOTFS_NAME)
+                ?: app.checkpointState.current()?.rootfsName
         intent.action = null
         refreshFromDisk()
         selectDestination(UdroidDestination.SYSTEM)
