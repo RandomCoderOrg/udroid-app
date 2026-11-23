@@ -19,12 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
@@ -120,6 +122,8 @@ fun LinuxSystemPage(
     onRestartDesktop: () -> Unit,
     onConfigureMounts: () -> Unit,
     onConfigureEnvironment: () -> Unit,
+    onBackupFilesystem: () -> Unit,
+    onRestoreFilesystem: () -> Unit,
     onResetFilesystem: () -> Unit,
     onDeleteFilesystem: () -> Unit,
 ) {
@@ -577,12 +581,13 @@ fun LinuxSystemPage(
                                 maintenanceMessage ?: "Changing the Linux system…"
                             rootfsInUse == null -> "Connecting to the Linux service…"
                             runtimeBlocksMaintenance || desktopBlocksMaintenance ->
-                                "Close this system’s terminals, apps and desktop before resetting or deleting it"
+                                "Close this system’s terminals, apps and desktop before backing up, " +
+                                    "restoring, resetting or deleting it"
                             !resetAvailable ->
                                 "Reset isn’t available because the original image source is missing. " +
-                                    "You can still delete this system."
+                                    "Backup, restore, and delete are still available."
                             else ->
-                                "Reset installs a fresh copy. Delete removes this Linux system."
+                                "Backup exports the rootfs. Restore replaces it after validation."
                         },
                         modifier = Modifier.padding(top = 4.dp),
                         color = UdroidMuted,
@@ -639,10 +644,31 @@ fun LinuxSystemPage(
                         }
                     } else {
                         Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = maintenanceEnabled,
+                                onClick = onBackupFilesystem,
+                            ) {
+                                Icon(Icons.Rounded.Backup, contentDescription = null)
+                                Text("Backup", modifier = Modifier.padding(start = 6.dp))
+                            }
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                enabled = maintenanceEnabled,
+                                onClick = { confirmation = FilesystemConfirmation.RESTORE },
+                            ) {
+                                Icon(Icons.Rounded.Restore, contentDescription = null)
+                                Text("Restore", modifier = Modifier.padding(start = 6.dp))
+                            }
+                        }
+                        Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 12.dp),
+                                    .padding(top = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             OutlinedButton(
@@ -693,21 +719,25 @@ fun LinuxSystemPage(
             onDismissRequest = { confirmation = null },
             title = {
                 Text(
-                    if (action == FilesystemConfirmation.RESET) {
-                        "Reset this Linux system?"
-                    } else {
-                        "Delete this Linux system?"
+                    when (action) {
+                        FilesystemConfirmation.RESTORE -> "Restore this Linux system?"
+                        FilesystemConfirmation.RESET -> "Reset this Linux system?"
+                        FilesystemConfirmation.DELETE -> "Delete this Linux system?"
                     },
                 )
             },
             text = {
                 Text(
-                    if (action == FilesystemConfirmation.RESET) {
-                        "Reset permanently removes the packages, settings, and files you added. " +
-                            "uDroid then installs a fresh copy of the original image."
-                    } else {
-                        "Delete permanently removes ${rootfs.name}, including its packages, " +
-                            "settings, and files. You can’t undo this."
+                    when (action) {
+                        FilesystemConfirmation.RESTORE ->
+                            "Restore replaces this rootfs with the selected backup after it passes " +
+                                "a health check. The current mount profile is preserved."
+                        FilesystemConfirmation.RESET ->
+                            "Reset permanently removes the packages, settings, and files you added. " +
+                                "uDroid then installs a fresh copy of the original image."
+                        FilesystemConfirmation.DELETE ->
+                            "Delete permanently removes ${rootfs.name}, including its packages, " +
+                                "settings, and files. You can’t undo this."
                     },
                 )
             },
@@ -724,18 +754,18 @@ fun LinuxSystemPage(
                         ),
                     onClick = {
                         confirmation = null
-                        if (action == FilesystemConfirmation.RESET) {
-                            onResetFilesystem()
-                        } else {
-                            onDeleteFilesystem()
+                        when (action) {
+                            FilesystemConfirmation.RESTORE -> onRestoreFilesystem()
+                            FilesystemConfirmation.RESET -> onResetFilesystem()
+                            FilesystemConfirmation.DELETE -> onDeleteFilesystem()
                         }
                     },
                 ) {
                     Text(
-                        if (action == FilesystemConfirmation.RESET) {
-                            "Erase and reinstall"
-                        } else {
-                            "Delete permanently"
+                        when (action) {
+                            FilesystemConfirmation.RESTORE -> "Choose backup"
+                            FilesystemConfirmation.RESET -> "Erase and reinstall"
+                            FilesystemConfirmation.DELETE -> "Delete permanently"
                         },
                     )
                 }
@@ -825,6 +855,7 @@ private fun EnvironmentProfilePanel(
 }
 
 private enum class FilesystemConfirmation {
+    RESTORE,
     RESET,
     DELETE,
 }

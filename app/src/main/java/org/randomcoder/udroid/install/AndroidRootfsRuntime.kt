@@ -300,6 +300,8 @@ class ProotTarExtractor(
                     add("--exclude=${path.removePrefix("/")}")
                 }
                 add("--exclude=$RUNTIME_MOUNT_DIRECTORY")
+                add("--exclude=${RootfsInstallationPipeline.READY_MARKER}")
+                add("--exclude=${RootfsInstallationPipeline.INSTALLING_MARKER}")
                 if (excludeOciWhiteouts) {
                     add("--wildcards")
                     add("--exclude=.wh.*")

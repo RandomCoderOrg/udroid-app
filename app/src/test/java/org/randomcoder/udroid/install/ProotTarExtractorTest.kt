@@ -28,6 +28,8 @@ class ProotTarExtractorTest {
             assertTrue("Extraction bind $path must precede the guest command", bindIndex < guestCommandIndex)
             assertTrue("--exclude=${path.removePrefix("/")}" in arguments)
         }
+        assertTrue("--exclude=.udroid-ready" in arguments)
+        assertTrue("--exclude=.udroid-installing" in arguments)
         assertTrue(
             arguments.windowed(2).contains(
                 listOf(

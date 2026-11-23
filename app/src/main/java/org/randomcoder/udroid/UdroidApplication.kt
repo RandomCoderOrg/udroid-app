@@ -1,10 +1,15 @@
 package org.randomcoder.udroid
 
 import android.app.Application
+import android.net.Uri
 import android.os.Build
 import org.randomcoder.udroid.install.InstallStage
 import org.randomcoder.udroid.install.InstallStateStore
 import org.randomcoder.udroid.install.InstalledRootfsSourceStore
+import org.randomcoder.udroid.install.RootfsCheckpointOperation
+import org.randomcoder.udroid.install.RootfsCheckpointStage
+import org.randomcoder.udroid.install.RootfsCheckpointStateStore
+import org.randomcoder.udroid.install.RootfsCheckpointSwap
 import org.randomcoder.udroid.runtime.EventJournal
 import org.randomcoder.udroid.runtime.InstalledRootfsRegistry
 import org.randomcoder.udroid.runtime.ProotMountProfileStore
@@ -27,6 +32,9 @@ class UdroidApplication : Application() {
     lateinit var rootfsInstallSources: InstalledRootfsSourceStore
         private set
 
+    lateinit var checkpointState: RootfsCheckpointStateStore
+        private set
+
     lateinit var updateState: AppUpdateStateStore
         private set
 
@@ -42,10 +50,48 @@ class UdroidApplication : Application() {
         journal = EventJournal(this)
         installState = InstallStateStore(this)
         rootfsInstallSources = InstalledRootfsSourceStore(this)
+        checkpointState = RootfsCheckpointStateStore(this)
         updateState = AppUpdateStateStore(this)
         rootfsRegistry = InstalledRootfsRegistry(this)
         mountProfiles = ProotMountProfileStore(this)
         if (!isMainProcess()) return
+
+        checkpointState.current()?.let { checkpoint ->
+            val recoveryFailure =
+                if (checkpoint.operation == RootfsCheckpointOperation.RESTORE) {
+                    runCatching {
+                        RootfsCheckpointSwap.recover(
+                            RootfsCheckpointSwap.paths(
+                                File(filesDir, "rootfs"),
+                                checkpoint.rootfsName,
+                                checkpoint.operationId,
+                            ),
+                        )
+                        val checkpointDirectory = File(filesDir, "checkpoints")
+                        File(checkpointDirectory, "restore-${checkpoint.operationId}.tar.xz.part").delete()
+                        File(checkpointDirectory, "restore-${checkpoint.operationId}.tar.xz").delete()
+                    }.exceptionOrNull()
+                } else {
+                    null
+                }
+            if (checkpoint.stage.running || recoveryFailure != null) {
+                if (checkpoint.operation == RootfsCheckpointOperation.BACKUP) {
+                    checkpoint.documentUri?.let(Uri::parse)?.let { uri ->
+                        runCatching { contentResolver.delete(uri, null, null) }
+                    }
+                }
+                checkpointState.save(
+                    checkpoint.copy(
+                        stage = RootfsCheckpointStage.FAILED,
+                        detail =
+                            recoveryFailure?.message
+                                ?: "Previous checkpoint operation was interrupted",
+                        progress = null,
+                        documentUri = null,
+                    ),
+                )
+            }
+        }
 
         updateState.reconcileInstalledVersion(BuildConfig.VERSION_NAME)
         AppUpdateScheduler.ensureScheduled(this)
